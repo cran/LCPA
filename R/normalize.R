@@ -1,0 +1,119 @@
+#' @title Column-wise Z-Score Standardization
+#'
+#' @description
+#' Standardizes each column of a numeric matrix or data frame to have mean zero and
+#' standard deviation one. This transformation is essential for many multivariate
+#' techniques that assume standardized inputs. The function preserves all dimension
+#' names and returns a pure numeric matrix with attributes storing original column means and standard deviations.
+#'
+#' @param response A numeric matrix or data frame of dimension \eqn{N \times I}, where:
+#' \itemize{
+#'   \item \eqn{N} = number of observations (rows)
+#'   \item \eqn{I} = number of variables (columns)
+#' }
+#' Non-numeric columns will be coerced to numeric with a warning. Missing values are not allowed
+#' and will cause the function to fail. Constant columns (zero variance) will produce \code{NaN} values.
+#'
+#' @return A standardized numeric matrix of dimension \eqn{N \times I} with attributes:
+#' \itemize{
+#'   \item \code{scaled:center}: Vector of original column means (\eqn{\mu_i})
+#'   \item \code{scaled:scale}: Vector of original column standard deviations (\eqn{\sigma_i})
+#'   \item Row names: Preserved from original input's row names or row indices
+#'   \item Column names: Preserved from original input's column names
+#'   \item Values: Z-scores calculated as \eqn{z_{ni} = \frac{x_{ni} - \mu_i}{\sigma_i}}
+#' }
+#' where:
+#' \itemize{
+#'   \item \eqn{x_{ni}} = original value for observation \eqn{n} and variable \eqn{i}
+#'   \item \eqn{\mu_i} = sample mean of variable \eqn{i}: \eqn{\mu_i = \frac{1}{N}\sum_{n=1}^{N}x_{ni}}
+#'   \item \eqn{\sigma_i} = sample standard deviation of variable \eqn{i}:
+#'         \eqn{\sigma_i = \sqrt{\frac{1}{N-1}\sum_{n=1}^{N}(x_{ni} - \mu_i)^2}}
+#' }
+#' The denominator \eqn{N-1} provides an unbiased estimator of population variance.
+#'
+#' @section Mathematical Details:
+#' For each column \eqn{i} in the input matrix \eqn{X}, the standardization is performed as:
+#' \deqn{Z_{\cdot i} = \frac{X_{\cdot i} - \bar{X}_{\cdot i}}{S_{X_{\cdot i}}}}
+#' where:
+#' \itemize{
+#'   \item \eqn{X_{\cdot i}} is the \eqn{i}-th column vector of \eqn{X}
+#'   \item \eqn{\bar{X}_{\cdot i}} is the sample mean of column \eqn{i}
+#'   \item \eqn{S_{X_{\cdot i}}} is the sample standard deviation of column \eqn{i}
+#' }
+#' The resulting matrix \eqn{Z} has the properties:
+#' \deqn{\frac{1}{N}\sum_{n=1}^{N}z_{ni} = 0 \quad \text{and} \quad \sqrt{\frac{1}{N-1}\sum_{n=1}^{N}z_{ni}^2} = 1}
+#' for all \eqn{i = 1, \ldots, I}.
+#'
+#' @examples
+#' # Basic usage with matrix
+#' set.seed(123)
+#' mat <- matrix(rnorm(30, mean = 5:7, sd = 1:3), ncol = 3,
+#'               dimnames = list(paste0("Obs", 1:10), paste0("Var", 1:3)))
+#' norm_mat <- normalize(mat)
+#'
+#' # Verify attributes
+#' attr(norm_mat, "scaled:center")  # Original column means
+#' attr(norm_mat, "scaled:scale")   # Original column standard deviations
+#'
+#' # Verify properties
+#' apply(norm_mat, 2, mean)  # Should be near zero
+#' apply(norm_mat, 2, sd)    # Should be exactly 1
+#'
+#' # With data frame input
+#' df <- as.data.frame(mat)
+#' norm_df <- normalize(df)
+#' all.equal(norm_mat, norm_df, check.attributes = FALSE)  # Should be identical
+#'
+#' # Handling constant columns (produces NaN)
+#' const_mat <- cbind(mat, Constant = rep(4.2, 10))
+#' normalize(const_mat)
+#'
+#' @importFrom stats sd
+#' @export
+normalize <- function(response) {
+  # Validate input type
+  if (!is.data.frame(response) && !is.matrix(response)) {
+    stop("Input must be a matrix or data frame", call. = FALSE)
+  }
+
+  # Handle data frame input: coerce non-numeric columns
+  if (is.data.frame(response)) {
+    non_numeric_cols <- !sapply(response, is.numeric)
+    if (any(non_numeric_cols)) {
+      col_names <- names(response)[non_numeric_cols]
+      warning(
+        sprintf("Non-numeric columns coerced to numeric: %s",
+                paste(col_names, collapse = ", ")),
+        call. = FALSE
+      )
+      response[non_numeric_cols] <- lapply(response[non_numeric_cols], as.numeric)
+    }
+    mat <- as.matrix(response)
+  } else {  # Matrix input
+    if (!is.numeric(response)) {
+      stop("Input matrix must contain only numeric values", call. = FALSE)
+    }
+    mat <- response
+  }
+
+  # Check for missing values
+  if (anyNA(mat)) {
+    stop("Missing values (NA) are not allowed in input", call. = FALSE)
+  }
+
+  # Perform standardization using scale
+  normalized_mat <- scale(mat)
+
+  # Ensure result is a matrix (scale may return matrix with attributes)
+  normalized_mat <- as.matrix(normalized_mat)
+
+  # Verify attributes exist (scale always adds these when center=TRUE and scale=TRUE)
+  if (!("scaled:center" %in% names(attributes(normalized_mat)))) {
+    attr(normalized_mat, "scaled:center") <- colMeans(mat)
+  }
+  if (!("scaled:scale" %in% names(attributes(normalized_mat)))) {
+    attr(normalized_mat, "scaled:scale") <- apply(mat, 2, sd)
+  }
+
+  return(normalized_mat)
+}
