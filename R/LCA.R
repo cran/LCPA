@@ -50,8 +50,9 @@
 #'   }
 #' @param control.NNE List of control parameters for NNE algorithm:
 #'   \describe{
-#'     \item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(12,12)}).}
+#'     \item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
 #'     \item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
+#'     \item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
 #'     \item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
 #'     \item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
 #'     \item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
@@ -290,8 +291,9 @@ LCA <- function(response,
   default_control.EM <- list(maxiter=2000, tol=1e-4)
   default_control.Mplus <- list(maxiter=2000, tol=1e-4, files.path = NULL, files.clean = TRUE)
   default_control.NNE <- list(
-    hidden.layers = c(12, 12),
+    hidden.layers = c(16, 16),
     activation.function = "tanh",
+    use.attention=TRUE,
     d.model = 8,
     nhead = 2,
     dim.feedforward = 16,
@@ -313,14 +315,13 @@ LCA <- function(response,
 
   merge_and_clean_control <- function(user_control, default_control) {
     if (is.null(user_control)) return(default_control)
-
-    merged_control <- modifyList(default_control, user_control)
-
-    merged_control <- merged_control[names(default_control)]
-
-    for (param_name in names(default_control)) {
-      if (is.null(merged_control[[param_name]])) {
-        merged_control[[param_name]] <- default_control[[param_name]]
+    valid_names <- intersect(names(user_control), names(default_control))
+    cleaned_user_control <- user_control[valid_names]
+    merged_control <- default_control
+    for (param_name in names(cleaned_user_control)) {
+      user_value <- cleaned_user_control[[param_name]]
+      if (!is.null(user_value)) {
+        merged_control[[param_name]] <- user_value
       }
     }
     return(merged_control)
@@ -353,6 +354,7 @@ LCA <- function(response,
                   eps=control.NNE$eps,
                   Lambda=control.NNE$lambda,
                   activation_function=control.NNE$activation.function,
+                  use_attention=control.NNE$use.attention,
                   initial_temperature=control.NNE$initial.temperature,
                   cooling_rate=control.NNE$cooling.rate,
                   maxiter_sa=control.NNE$maxiter.sa,
@@ -428,7 +430,8 @@ LCA <- function(response,
   }
   res$probability <- probability
 
-  dimnames(res$params$par) <- list(rownames(probability[[1]]), names(probability), colnames(probability[[1]]))
+  dimnames(res$params$par) <- list(rownames(probability[[1]]), names(probability),
+                                   paste0("category.", 1:poly.max))
 
   colnames(res$P.Z.Xn) <- names(res$P.Z) <- names(res$params$P.Z) <- paste0("Class.", 1:L)
 

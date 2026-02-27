@@ -180,8 +180,9 @@ specify a custom \code{files.path}.}
 
 \item{control.NNE}{List of control parameters for NNE algorithm:
 \describe{
-\item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(12,12)}).}
+\item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
 \item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
+\item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
 \item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
 \item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
 \item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}

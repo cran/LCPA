@@ -1,8 +1,8 @@
 Package: LCPA
 Type: Package
 Title: A General Framework for Latent Classify and Profile Analysis
-Version: 1.0.0
-Date: 2026-01-10
+Version: 1.0.1
+Date: 2026-02-28
 Author: Haijiang Qin [aut, cre, cph] (ORCID:
     <https://orcid.org/0009-0000-6721-5653>),
   Lei Guo [aut, cph] (ORCID: <https://orcid.org/0000-0002-8273-3587>)
@@ -40,5 +40,5 @@ Collate: 'adjust.response.R' 'check.response.R' 'compare.model.R'
         'S3update.R' 'sim.correlation.R' 'sim.LCA.R' 'sim.LPA.R'
         'sim.LTA.R' 'tools.R' 'utils.R' 'logpdf_component.R' 'zzz.R'
 Repository: CRAN
-Packaged: 2026-01-17 09:40:24 UTC; Haiji
-Date/Publication: 2026-01-22 09:40:08 UTC
+Packaged: 2026-02-27 06:06:35 UTC; Haijiang
+Date/Publication: 2026-02-27 06:20:02 UTC

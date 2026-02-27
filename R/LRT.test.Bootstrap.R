@@ -130,7 +130,7 @@ LRT.test.Bootstrap <- function(object1, object2, n.Bootstrap=100, vis=TRUE) {
   }
   LRT.Bootstrap <- -2 * (LogLik[, 1] - LogLik[, 2])
 
-  p.value <- (sum(LRT.Bootstrap >= LRT.statistic) + 1e-8) / (n.Bootstrap +  1e-8)
+  p.value <- mean(LRT.Bootstrap >= LRT.statistic)
 
   res <- list(
     statistic = c(`LRT` = LRT.statistic),

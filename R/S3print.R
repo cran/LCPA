@@ -184,7 +184,7 @@ print.summary.LCA <- function(x, ...) {
       cat(sprintf("  Converged after %d iterations\n", conv$iterations))
     }
     if(!is.null(conv$note)){
-      cat(sprintf("  Note\n", conv$note))
+      cat(sprintf("  Note: %s\n", conv$note))
     }
     if (!is.null(conv$tolerance)) {
       cat(sprintf("  Convergence tolerance: %.1e\n", conv$tolerance))

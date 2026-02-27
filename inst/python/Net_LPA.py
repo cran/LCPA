@@ -18,7 +18,7 @@ import random
 
 class LPAnet(nn.Module):
     def __init__(self, response, L=5, par_ini=None, constraint="VV",
-                 hidden_layers=[32, 32], activation_function='tanh', 
+                 hidden_layers=[32, 32], activation_function='tanh', use_attention=True, 
                  d_model=None, nhead=None, dim_feedforward=None, eps=1e-8):
         super(LPAnet, self).__init__()
         self.L = L
@@ -28,6 +28,7 @@ class LPAnet(nn.Module):
         self.constraint = constraint
         self.npar = self._compute_npar()
         self.eps = eps
+        self.use_attention = use_attention
         self.shared_mask = None
         
         self._init_shared_mask()
@@ -113,44 +114,21 @@ class LPAnet(nn.Module):
         layers.append(final_layer)
         self.network = nn.Sequential(*layers)
 
-        if d_model is None: 
-            d_model = max(8, int(max(1, np.floor(np.log10(max(2, self.N))) *
-                                        np.floor(np.log2(max(2, self.L))))))
-        if nhead is None: 
-            nhead = min(2, max(1, d_model // 4))
-        if d_model % nhead != 0:
-            d_model += (nhead - d_model % nhead)
-        if dim_feedforward is None: 
-            dim_feedforward = max(d_model, 16)
-        
-        self.embed_proj = nn.Linear(self.L, d_model, dtype=torch.float32)
-        encoder_layer = TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
-            batch_first=True,
-            dtype=torch.float32
-        )
-        num_attn_layers = min(2, max(1, nhead))
-        self.attn_layer = TransformerEncoder(encoder_layer, num_layers=num_attn_layers)
-        self.output_proj = nn.Linear(d_model, self.L, dtype=torch.float32)
+        if self.use_attention:
+            if d_model is None: 
+                d_model = 8
+            if nhead is None: 
+                nhead = 2
+            if d_model % nhead != 0:
+                d_model += (nhead - d_model % nhead)
+            if dim_feedforward is None: 
+                dim_feedforward = max(d_model, 16)
 
-        for layer in self.network:
-            if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
-                nn.init.zeros_(layer.bias)
-        
-        nn.init.kaiming_normal_(self.embed_proj.weight, nonlinearity='relu')
-        nn.init.zeros_(self.embed_proj.bias)
-        nn.init.kaiming_normal_(self.output_proj.weight, nonlinearity='relu')
-        nn.init.zeros_(self.output_proj.bias)
-
-        with torch.no_grad():
-            pz = torch.clamp(self.P_Z_init, min=self.eps)
-            pz = pz / pz.sum()
-            logits_init = torch.log(pz + self.eps)
-            if logits_init.numel() == self.L:
-                self.output_proj.bias.copy_(logits_init)
+            self.embed_proj = nn.Linear(self.L, d_model)
+            encoder_layer = TransformerEncoderLayer(d_model=d_model, nhead=nhead,
+                                                    dim_feedforward=dim_feedforward, batch_first=True)
+            self.attn_layer = TransformerEncoder(encoder_layer, num_layers=1, enable_nested_tensor=False)
+            self.output_proj = nn.Linear(d_model, self.L)
         
         self.to(self.device)
     
@@ -746,11 +724,15 @@ class LPAnet(nn.Module):
             x_feat = x.to(self.device)
 
         logits = self.network(x_feat)
-        logits_embed = self.embed_proj(logits)
-        logits_embed = logits_embed.unsqueeze(1)
-        logits_attn = self.attn_layer(logits_embed)
-        logits_attn = logits_attn.squeeze(1)
-        logits_mapped = self.output_proj(logits_attn)
+        
+        if self.use_attention:
+            logits_embed = self.embed_proj(logits)
+            logits_embed = logits_embed.unsqueeze(1)
+            logits_attn = self.attn_layer(logits_embed)
+            logits_attn = logits_attn.squeeze(1)
+            logits_mapped = self.output_proj(logits_attn)
+        else:
+            logits_mapped = logits
 
         P_Z_Xn = F.softmax(logits_mapped, dim=1)
         P_Z = torch.sum(P_Z_Xn, dim=0) + self.eps
@@ -857,7 +839,7 @@ def NN_LPA(response,
            maxiter_wa=20, 
            vis=True,
            hidden_layers=[32],
-           activation_function='tanh', 
+           activation_function='tanh', use_attention=True, 
            d_model=None, nhead=None, dim_feedforward=None, eps=1e-8, Lambda=1e-5, 
            initial_temperature=2000,
            cooling_rate=0.95,
@@ -933,6 +915,7 @@ def NN_LPA(response,
                                   constraint=constraint,
                                   hidden_layers=hidden_layers,
                                   activation_function=activation_function, 
+                                  use_attention=use_attention, 
                                   d_model=d_model, nhead=nhead, 
                                   dim_feedforward=dim_feedforward, eps=eps)
             LPAnet_warmup.to(device)
@@ -980,7 +963,7 @@ def NN_LPA(response,
     else:
         best_models = []
     
-    if starts > 0:
+    if starts > 0 and vis:
         print("\n")
 
     if nrep <= 5:
@@ -1040,6 +1023,7 @@ def NN_LPA(response,
                              constraint=constraint,
                              hidden_layers=hidden_layers,
                              activation_function=activation_function, 
+                             use_attention=use_attention, 
                              d_model=d_model, nhead=nhead, 
                              dim_feedforward=dim_feedforward, eps=eps)
         LPAnet_model.to(device)

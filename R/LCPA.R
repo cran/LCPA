@@ -115,8 +115,9 @@
 #'   }
 #' @param control.NNE List of control parameters for NNE algorithm:
 #'   \describe{
-#'     \item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(12,12)}).}
+#'     \item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
 #'     \item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
+#'     \item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
 #'     \item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
 #'     \item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
 #'     \item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
@@ -347,8 +348,9 @@ LCPA <- function(response, L = 2,
   default_control.EM <- list(maxiter = 2000, tol = 1e-4)
   default_control.Mplus <- list(maxiter = 2000, tol = 1e-4, files.path = NULL, files.clean = TRUE)
   default_control.NNE <- list(
-    hidden.layers = c(12, 12),
+    hidden.layers = c(16, 16),
     activation.function = "tanh",
+    use.attention=TRUE,
     d.model = 8,
     nhead = 2,
     dim.feedforward = 16,

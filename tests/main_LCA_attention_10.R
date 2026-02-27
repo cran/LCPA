@@ -2,15 +2,15 @@
 # setwd(here())
 #
 # library(LCPA)
-# set.seed(13549)
+# set.seed(1237894)
 #
 # ################################################# data conditions ###################################################
 # distribution <- c("random")
-# L <- c(3)
-# I <- c(10, 50, 100)
+# L <- c(10)
+# I <- c(100)
 # IQ <- c(0.8)
-# length.poly <- c(2, 5)
-# N <- c(100, 200, 500, 1000)
+# length.poly <- c(5)
+# N <- c(200, 1000)
 #
 # ################### NNE ###################
 # activation.function <- "tanh"
@@ -18,7 +18,7 @@
 # maxiter.early <- 100
 # maxcycle <- 20
 # get.SE <- FALSE
-# vis <- FALSE
+# vis <- TRUE
 # initial.temperature <- 1000
 # cooling.rate <- 0.5
 # maxiter.sa <- 1000
@@ -34,21 +34,24 @@
 # maxiter.wa <- 20
 # device <- "CPU"
 #
+# files.path <- "inst"
+# files.clean <- TRUE
+#
 # trials.length <- length(distribution) * length(L) * length(IQ) * length(length.poly) * length(I) * length(N)
 # trial.list <- list(distribution=distribution, L=L, IQ=IQ, poly=length.poly, I=I, N=N)
 # condition.names <- c("distribution", "L", "IQ", "poly", "I", "N")
-# methods.names <- c("Mplus", "NNE")
-# results.names <- c(c("MSE", "acc"), "time")
+# methods.names <- c("NNE.Att", "NNE.noAtt")
+# results.names <- c("MSE", "acc", "conv", "time")
 #
 # times <- 200
-# times.interval <- 20
+# times.interval <- 1
 # round.n <- 4
 # results.pre <- matrix(0, trials.length, length(methods.names)*length(results.names)+1)
 # conditions <- matrix(0, trials.length, length(trial.list))
 #
 # ######################## load or create result file ########################
-# names.file <- paste0("res_LCA_", L, "_", IQ)
-# res.path <- paste0("results/", names.file, ".rds")
+# names.file <- paste0("res_LCA_", L, "_", IQ, "_att")
+# res.path <- paste0("tests/results/", names.file, ".rds")
 # dimnames.this <- list(paste0("distribution=", distribution), paste0("L=", L), paste0("IQ=", IQ),
 #                       paste0("poly=", length.poly), paste0("I=", I), paste0("N=", N),
 #                       results.names, methods.names, paste0("times=", 1:times))
@@ -79,7 +82,7 @@
 #   N.cur <- N[runs.cur[6]]
 #
 #   time.sum <- results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur), paste0("poly=", length.poly.cur),
-#                       paste0("I=", I.cur), paste0("N=", N.cur), 1, "Mplus", ]
+#                       paste0("I=", I.cur), paste0("N=", N.cur), 1, "NNE.Att", ]
 #   if(any(is.na(time.sum))){
 #     t.start <- min(which(is.na(time.sum)))
 #     break
@@ -91,10 +94,10 @@
 #   conditions[posi.start, ] <- c(distribution.cur, L.cur, IQ.cur, length.poly.cur, I.cur, N.cur)
 #   results.pre[posi.start, ] <- round(c(apply(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
 #                                                      paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#                                                      "Mplus", ], 1, mean, na.rm = TRUE),
+#                                                      "NNE.Att", ], 1, mean, na.rm = TRUE),
 #                                        apply(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
 #                                                      paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#                                                      "NNE", ], 1, mean, na.rm = TRUE),
+#                                                      "NNE.noAtt", ], 1, mean, na.rm = TRUE),
 #                                        0), round.n)
 #   posi.start <- posi.start + 1
 # }
@@ -149,63 +152,61 @@
 #
 #     time.cur <- system.time({
 #
-#       time.NNE <- system.time({
-#         hidden.layers <- c(ceiling(log10(N.cur)) * ceiling(log2(L.cur)), ceiling(log10(N.cur)) * ceiling(log2(L.cur)))
-#         res.NNE <- LCA(response,
-#                        L = L.cur, par.ini = par.ini,
-#                        method="NNE", nrep = nrep, starts=starts, maxiter.wa=maxiter.wa, vis = vis,
-#                        control.NNE=list(hidden.layers=hidden.layers, activation.function=activation.function,
-#                                         d.model=NULL, nhead=NULL, dim.feedforward=NULL, eps=1e-8,
-#                                         initial.temperature=initial.temperature, cooling.rate=cooling.rate, maxiter.sa=maxiter.sa, threshold.sa=threshold.sa,
-#                                         maxiter=maxiter, maxiter.early=maxiter.early, maxcycle=maxcycle,
-#                                         lr = lr, scheduler.patience = scheduler.patience, scheduler.factor = scheduler.factor,
-#                                         plot.interval=plot.interval,
-#                                         device=device))
+#       time.NNE.Att <- system.time({
+#         hidden.layers <- c(16,  16)
+#         res.NNE.Att <- LCA(response,
+#                            L = L.cur, par.ini = par.ini,
+#                            method="NNE", nrep = nrep, starts=starts, maxiter.wa=maxiter.wa, vis = vis,
+#                            control.NNE=list(hidden.layers=hidden.layers, activation.function=activation.function,
+#                                             use.attention = TRUE,
+#                                             d.model=8, nhead=2, dim.feedforward=16, eps=1e-8,
+#                                             initial.temperature=initial.temperature, cooling.rate=cooling.rate, maxiter.sa=maxiter.sa, threshold.sa=threshold.sa,
+#                                             maxiter=maxiter, maxiter.early=maxiter.early, maxcycle=maxcycle,
+#                                             lr = lr, scheduler.patience = scheduler.patience, scheduler.factor = scheduler.factor,
+#                                             plot.interval=plot.interval,
+#                                             device=device))
 #       })
-#       res.NNE$par <- res.NNE$params$par
-#       res.NNE$P.Z <- res.NNE$params$P.Z
+#       res.NNE.Att$par <- res.NNE.Att$params$par
+#       res.NNE.Att$P.Z <- res.NNE.Att$params$P.Z
 #
-#       time.Mplus <- system.time({
-#         Mplus.obj <- tryCatch({
-#           tmp <- LCA(response,
-#                      L=L.cur, par.ini="random", method="Mplus", nrep=nrep, starts=starts, maxiter.wa=maxiter.wa, vis=vis,
-#                      control.Mplus=list(maxiter=2000, tol=1e-4, clean.files=TRUE))
-#
-#           if (is.null(tmp) ||
-#               (!is.list(tmp)) ||
-#               (is.list(tmp) && length(tmp) == 0) ||
-#               (is.list(tmp) && !is.null(tmp$error))) {
-#             stop("Mplus run failed silently")
-#           }
-#           tmp
-#         },
-#         error = function(e) {
-#           warning("Mplus failed (", conditionMessage(e), "); falling back to NNE")
-#           Mplus.obj <- res.NNE
-#         })
-#
-#         res.Mplus<- list(par=Mplus.obj$params$par, P.Z.Xn=Mplus.obj$P.Z.Xn)
+#       time.NNE.noAtt <- system.time({
+#         hidden.layers <- c(16,  16)
+#         res.NNE.noAtt <- LCA(response,
+#                              L = L.cur, par.ini = par.ini,
+#                              method="NNE", nrep = nrep, starts=starts, maxiter.wa=maxiter.wa, vis = vis,
+#                              control.NNE=list(hidden.layers=hidden.layers, activation.function=activation.function,
+#                                               use.attention = FALSE,
+#                                               d.model=8, nhead=2, dim.feedforward=16, eps=1e-8,
+#                                               initial.temperature=initial.temperature, cooling.rate=cooling.rate, maxiter.sa=maxiter.sa, threshold.sa=threshold.sa,
+#                                               maxiter=maxiter, maxiter.early=maxiter.early, maxcycle=maxcycle,
+#                                               lr = lr, scheduler.patience = scheduler.patience, scheduler.factor = scheduler.factor,
+#                                               plot.interval=plot.interval,
+#                                               device=device))
 #       })
+#       res.NNE.noAtt$par <- res.NNE.noAtt$params$par
+#       res.NNE.noAtt$P.Z <- res.NNE.noAtt$params$P.Z
 #
 #     })
 #     results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
 #             paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#             "Mplus", t] <- c(LCPA:::get.index.LCA(res.t, res.Mplus), time.Mplus[3])
+#             "NNE.Att", t] <- c(LCPA:::get.index.LCA(res.t, res.NNE.Att),
+#                                length(res.NNE.Att$Log.Lik.history) < maxiter * maxcycle, time.NNE.Att[3])
 #     results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
 #             paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#             "NNE", t] <- c(LCPA:::get.index.LCA(res.t, res.NNE), time.NNE[3])
+#             "NNE.noAtt", t] <- c(LCPA:::get.index.LCA(res.t, res.NNE.noAtt),
+#                                  length(res.NNE.noAtt$Log.Lik.history) < maxiter * maxcycle, time.NNE.noAtt[3])
 #
 #     ####### preview result ########
 #     time.posi <- time.cur[3] + time.posi
 #     cat("mean of time cost in", paste0(posi, "/", trials.length), ":", round(time.posi / t, round.n), "\n\n")
-#     results.cur.Mplus <- matrix(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
-#                                         paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#                                         "Mplus", 1:t], nrow = length(results.names))
-#     results.cur.NNE <- matrix(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
-#                                       paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
-#                                       "NNE", 1:t], nrow = length(results.names))
-#     results.pre[posi, 1:(length(methods.names)*length(results.names)+1)] <- round(c(apply(results.cur.Mplus, 1, mean, na.rm = TRUE),
-#                                                                                     apply(results.cur.NNE, 1, mean, na.rm = TRUE),
+#     results.cur.NNE.Att <- matrix(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
+#                                           paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
+#                                           "NNE.Att", 1:t], nrow = length(results.names))
+#     results.cur.NNE.noAtt <- matrix(results[paste0("distribution=", distribution.cur), paste0("L=", L.cur), paste0("IQ=", IQ.cur),
+#                                             paste0("poly=", length.poly.cur), paste0("I=", I.cur), paste0("N=", N.cur), ,
+#                                             "NNE.noAtt", 1:t], nrow = length(results.names))
+#     results.pre[posi, 1:(length(methods.names)*length(results.names)+1)] <- round(c(apply(results.cur.NNE.Att, 1, mean, na.rm = TRUE),
+#                                                                                     apply(results.cur.NNE.noAtt, 1, mean, na.rm = TRUE),
 #                                                                                     time.posi/t), round.n)
 #     posi.print <- c(max(posi-19, 1):min(max(posi, 2), trials.length))
 #     if(all(posi.print == 1)){
@@ -226,11 +227,11 @@
 #     cat("\n")
 #
 #     if(t %% times.interval == 0){
-#       saveRDS(results, paste0("results/", names.file, ".rds"))
+#       saveRDS(results, res.path)
 #     }
 #     t <- t + 1
 #   }
 #
 #   posi <- posi + 1
-#   saveRDS(results, paste0("results/", names.file, ".rds"))
+#   saveRDS(results, res.path)
 # }
