@@ -107,7 +107,7 @@ compare.model <- function(object1, object2, n.Bootstrap=0){
   fit.index1 <- get.fit.index(model1)
   fit.index2 <- get.fit.index(model2)
 
-  BF <- exp(fit.index1$SIC - fit.index2$SIC)
+  BF <- exp(fit.index2$SIC - fit.index1$SIC)
 
   LRT.obj <- LRT.test(object1, object2)
   LRT.VLMR.obj <- LRT.test.VLMR(object1, object2)

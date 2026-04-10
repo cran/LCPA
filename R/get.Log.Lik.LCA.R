@@ -8,7 +8,7 @@
 #'   Values can be any categorical encoding (e.g., 1/2/3, A/B/C, or 0/1). The function automatically:
 #'   \itemize{
 #'     \item Converts all responses to 0-based integer encoding internally
-#'     \item Determines the maximum number of categories (\eqn{K_{\max}}) across items
+#'     \item Determines the maximum number of categories (\eqn{K_{\max}}) across indicators
 #'   }
 #' @param P.Z A numeric vector of length \eqn{L} containing prior probabilities for latent classes.
 #'   Must satisfy:
@@ -20,13 +20,13 @@
 #'   where \eqn{par[l, i, k]} represents \eqn{P(X_i = k-1 \mid Z=l)} (after internal 0-based re-encoding).
 #'   Must satisfy:
 #'   \itemize{
-#'     \item For each class \eqn{l} and item \eqn{i}: \eqn{\sum_{k=1}^{K_i} par[l,i,k] = 1}
+#'     \item For each class \eqn{l} and indicator \eqn{i}: \eqn{\sum_{k=1}^{K_i} par[l,i,k] = 1}
 #'     \item Probabilities for non-existent categories (where \eqn{k > K_i}) are ignored but must be present in the array
 #'   }
 #'
 #' @return A single numeric value representing the total log-likelihood:
 #'   \deqn{\log \mathcal{L} = \sum_{n=1}^N \log \left[ \sum_{l=1}^L \pi_l \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z=l) \right]}
-#'   where \eqn{x_{ni}} is the standardized (0-based) response for person \eqn{n} on item \eqn{i}.
+#'   where \eqn{x_{ni}} is the standardized (0-based) response for person \eqn{n} on indicator \eqn{i}.
 #'
 #' @details The log-likelihood calculation follows these steps:
 #'

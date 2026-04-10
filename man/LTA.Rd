@@ -19,6 +19,8 @@ LTA(
   constraint = "VV",
   method = "EM",
   tol = 1e-04,
+  lower = -10,
+  upper = 10,
   method.SE = "Bootstrap",
   n.Bootstrap = 100,
   maxiter = 5000,
@@ -132,6 +134,10 @@ annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
 }}
 
 \item{tol}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
+
+\item{lower}{The upper bound for the estimation of regression coefficients, default is -10}
+
+\item{upper}{The lower bound for the estimation of regression coefficients, default is 10}
 
 \item{method.SE}{Character. Method for estimating standard errors of parameter estimates:
 \itemize{

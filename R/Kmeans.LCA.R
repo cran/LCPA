@@ -24,7 +24,7 @@
 #'   \item Parameter estimation:
 #'     \itemize{
 #'       \item For each cluster \eqn{l}, computes empirical response probabilities
-#'             \eqn{P(X_i=k|Z=l)} for all items \eqn{i} and categories \eqn{k}.
+#'             \eqn{P(X_i=k|Z=l)} for all indicators \eqn{i} and categories \eqn{k}.
 #'       \item Handles singleton clusters by assigning near-deterministic probabilities
 #'             (e.g., \eqn{1-10^{-10}} for observed category, \eqn{10^{-10}} for others).
 #'     }
@@ -37,8 +37,8 @@
 #'   \item{\code{params}}{List of initialized parameters:
 #'     \describe{
 #'       \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities,
-#'                         where \eqn{K_{\max}} is the maximum number of categories across items.
-#'                         Dimension order: latent classes (1:L), items (1:I), response categories (1:K_max).}
+#'                         where \eqn{K_{\max}} is the maximum number of categories across indicators.
+#'                         Dimension order: latent classes (1:L), indicators (1:I), response categories (1:K_max).}
 #'       \item{\code{P.Z}}{Numeric vector of length \eqn{L} containing initial class prior probabilities
 #'                         derived from cluster proportions.}
 #'     }

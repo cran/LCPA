@@ -22,7 +22,7 @@ LPA(
 }
 \arguments{
 \item{response}{A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of individuals/participants/observations
-and \eqn{I} is the number of continuous observed items/variables. Missing values are not allowed.
+and \eqn{I} is the number of continuous observed indicators/items/variables. Missing values are not allowed.
 Note that \code{response} must be standardized using \code{\link[base]{scale}} or
 \code{\link[LCPA]{normalize}} before input.}
 
@@ -352,6 +352,9 @@ across profiles, with symmetry (\eqn{\sigma_{12} = \sigma_{21}}) automatically e
 }
 
 \examples{
+
+library(LCPA)
+
 # Simulate bivariate continuous data for 2 profiles
 set.seed(123)
 data.obj <- sim.LPA(N = 500, I = 3, L = 2, constraint = "VV")

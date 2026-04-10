@@ -5,7 +5,7 @@
 #' external Mplus software. It supports flexible covariance structures and initialization strategies.
 #'
 #' @param response A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of individuals/participants/observations
-#'                 and \eqn{I} is the number of continuous observed items/variables. Missing values are not allowed.
+#'                 and \eqn{I} is the number of continuous observed indicators/items/variables. Missing values are not allowed.
 #'                 Note that \code{response} must be standardized using \code{\link[base]{scale}} or
 #'                 \code{\link[LCPA]{normalize}} before input.
 #' @param L Integer specifying the number of latent profiles (default: 2).
@@ -314,6 +314,9 @@
 #' McLachlan, G. J., & Peel, D. (2004). Finite Mixture Models. Wiley. https://books.google.com.sg/books?id=c2_fAox0DQoC
 #'
 #' @examples
+#'
+#' library(LCPA)
+#'
 #' # Simulate bivariate continuous data for 2 profiles
 #' set.seed(123)
 #' data.obj <- sim.LPA(N = 500, I = 3, L = 2, constraint = "VV")
@@ -368,7 +371,7 @@ LPA <- function(response,
   I <- ncol(response)
 
   default_control.EM <- list(maxiter=2000, tol=1e-4)
-  default_control.Mplus <- list(maxiter=2000, tol=1e-4, files.path = NULL, files.clean = TRUE)
+  default_control.Mplus <- list(maxiter=2000, tol=1e-4, files.path = "", files.clean = TRUE)
   default_control.NNE <- list(
     hidden.layers = c(16, 16),
     activation.function = "tanh",

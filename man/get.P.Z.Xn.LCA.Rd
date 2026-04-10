@@ -4,79 +4,59 @@
 \alias{get.P.Z.Xn.LCA}
 \title{Compute Posterior Latent Class Probabilities Based on Fixed Parameters}
 \usage{
-get.P.Z.Xn.LCA(response, par, tol = 1e-10, maxiter = 2000, vis = TRUE)
+get.P.Z.Xn.LCA(response, par, P.Z)
 }
 \arguments{
 \item{response}{Numeric matrix (\eqn{N \times I}) of categorical responses.
-Categories are automatically remapped to 0-based integers via
+Categories are automatically remapped to 0-based integers internally via
 \code{\link[LCPA]{adjust.response}}.}
 
 \item{par}{3D array (\eqn{L \times I \times K_{\max}}) of fixed conditional response
 probabilities where:
 \itemize{
 \item \eqn{L} = number of latent classes
-\item \eqn{I} = number of items
-\item \eqn{K_{\max}} = maximum categories across items
+\item \eqn{I} = number of indicators
+\item \eqn{K_{\max}} = maximum categories across indicators
 }
-\code{par[l, i, k]} = \eqn{P(X_i = k-1 \mid Z = l)} (0-based indexing).}
+\code{par[l, i, k]} = \eqn{P(X_i = k-1 \mid Z = l)} (using 1-based indexing for the array dimension corresponding to category k-1).}
 
-\item{tol}{Convergence tolerance for absolute change in log-likelihood. Default: 1e-10.}
-
-\item{maxiter}{Maximum EM iterations. Default: 2000.}
-
-\item{vis}{Logical: show iteration progress? Default: TRUE.}
+\item{P.Z}{Vector of length \eqn{L} with fixed class prior probabilities (\eqn{\pi_l}).
+These values are used directly without re-estimation.}
 }
 \value{
 Numeric matrix (\eqn{N \times L}) of posterior probabilities.
-Rows sum to 1. Columns named "Class.1", "Class.2", etc.
+Rows sum to 1. Columns are named "Class.1", "Class.2", etc.
 }
 \description{
-Computes posterior probabilities of latent class membership while simultaneously
-re-estimating class prevalences via an EM algorithm. Unlike standard posterior
-computation, this function iteratively updates class prevalences (\eqn{\pi_l})
-using fixed conditional response probabilities (\code{par}).
+Computes posterior probabilities of latent class membership for each observation
+using fixed conditional response probabilities (\code{par}) and fixed class prior
+probabilities (\code{P.Z}).
 }
 \details{
-\enumerate{
-\item Response categories are standardized to 0-based integers using
-\code{\link[LCPA]{adjust.response}}.
-\item Class prevalences are initialized uniformly (\eqn{\pi_l^{(0)} = 1/L}).
-\item Numerical stability: Small constants (1e-50) prevent division by zero.
-\item Termination occurs when:
-\itemize{
-\item \eqn{|\log L^{(t)} - \log L^{(t-1)}| < \code{tol}} (log-likelihood change)
-\item Maximum iterations reached
-}
-}
-}
-\section{Algorithm}{
-
-The function implements an EM algorithm with:
-\describe{
-\item{E-step}{Compute posterior probabilities for observation \eqn{n} and class \eqn{l}:
+Unlike an EM algorithm, this function does NOT iteratively update class prevalences.
+It performs a single calculation step based on Bayes' theorem:
 \deqn{
-      P(Z_n = l \mid \mathbf{X}_n) =
-      \frac{\pi_l^{(t)} \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = l)}
-           {\sum_{k=1}^L \pi_k^{(t)} \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = k)}
-    }}
-\item{M-step}{Update class prevalences:
-\deqn{
-      \pi_l^{(t+1)} = \frac{1}{N} \sum_{n=1}^N P(Z_n = l \mid \mathbf{X}_n)
-    }}
+  P(Z_n = l \mid \mathbf{X}_n) =
+  \frac{\pi_l \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = l)}
+       {\sum_{k=1}^L \pi_k \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = k)}
 }
-Convergence is determined by the absolute change in log-likelihood between iterations.
+where \eqn{\pi_l} are the fixed priors provided in the \code{P.Z} argument.
 }
-
 \examples{
 \donttest{
 library(LCPA)
 set.seed(123)
-data.obj <- sim.LCA(N = 200, I = 3, L = 2, IQ = 0.85)  # From LCPA
-fit <- LCA(data.obj$response, L = 2, method = "EM", nrep = 5)  # From LCPA
+# Simulate data
+data.obj <- sim.LCA(N = 200, I = 3, L = 2, IQ = 0.85)
 
+# Fit a model to get parameters
+fit <- LCA(data.obj$response, L = 2, method = "EM", nrep = 5)
+
+# Calculate posteriors using fixed parameters from the fitted model
 P.Z.Xn <- get.P.Z.Xn.LCA(
   response = data.obj$response,
-  par = fit$params$par  # Fixed conditional probabilities
+  par = fit$params$par,
+  P.Z = fit$params$P.Z
 )
 head(P.Z.Xn)
 }

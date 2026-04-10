@@ -13,9 +13,10 @@ A named list of logical values indicating whether each package was already insta
 \item{matplotlib_installed}{Logical. Was \code{matplotlib} already available?}
 \item{sklearn_installed}{Logical. Was \code{scikit-learn} already available?}
 \item{scipy_installed}{Logical. Was \code{scipy} already available?}
+\item{six_installed}{Logical. Was \code{six} already available?}
 }
 \description{
-Checks whether five essential Python packages required to run neural latent variable models
+Checks whether essential Python packages required to run neural latent variable models
 (e.g., LCAnet, LPAnet) are installed in the current Python environment. If any are missing,
 the user is interactively prompted to install them via \code{reticulate::py_install()}.
 The targeted packages are:
@@ -23,8 +24,9 @@ The targeted packages are:
 \item \code{numpy} — Fundamental package for numerical computing in Python.
 \item \code{torch} — PyTorch deep learning framework (supports CPU/GPU computation).
 \item \code{matplotlib} — 2D plotting and visualization library.
-\item \code{scikit-learn} — Machine learning utilities (used here primarily for KMeans initialization).
+\item \code{scikit-learn} — Machine learning utilities.
 \item \code{scipy} — Scientific computing and advanced linear algebra routines.
+\item \code{six} — Python 3 compatibility library.
 }
 
 For \code{torch}, users can choose between CPU-only or GPU-enabled versions (with CUDA support).
@@ -37,7 +39,7 @@ ensuring all backend dependencies are met before model execution.
 The function performs the following steps for each dependency:
 \enumerate{
 \item Uses \code{reticulate::py_module_available()} to test if the module is importable.
-\item If not available, prints a message describing the package’s purpose.
+\item If not available, prints a message describing the package's purpose.
 \item Prompts the user interactively (via \code{readline}) whether to proceed with installation.
 \item For \code{torch}, offers CPU/GPU choice and CUDA version selection if GPU is chosen.
 \item Installs the package using \code{reticulate::py_install()} with appropriate index URL if needed.

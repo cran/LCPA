@@ -93,6 +93,8 @@
 #'                                      annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
 #'               }
 #' @param tol Convergence tolerance for log-likelihood difference (default: 1e-4).
+#' @param lower The upper bound for the estimation of regression coefficients, default is -10
+#' @param upper The lower bound for the estimation of regression coefficients, default is 10
 #' @param method.SE Character. Method for estimating standard errors of parameter estimates:
 #'               \itemize{
 #'                 \item \code{"Obs"} — Approximates the observed information matrix via numerical differentiation (Richardson's method).
@@ -378,6 +380,7 @@ LTA <- function(responses, L=2,
                 params=NULL, is.sort=TRUE,
                 constraint = "VV",
                 method="EM", tol=1e-4,
+                lower=-10, upper=10,
                 method.SE="Bootstrap", n.Bootstrap=100,
                 maxiter=5000, nrep = 20,
                 starts=100, maxiter.wa=20,
@@ -467,9 +470,9 @@ LTA <- function(responses, L=2,
   P.Z.Xns <- Zs <- P.Zs <- vector("list", times)
   for(t in 1:times){
     if(type == "LCA"){
-      P.Z.Xns[[t]] <- get.P.Z.Xn.LCA(response=responses[[t]], par=params$par, vis=vis)
+      P.Z.Xns[[t]] <- get.P.Z.Xn.LCA(response=responses[[t]], par=params$par, P.Z=params$P.Z)
     } else {
-      P.Z.Xns[[t]] <- get.P.Z.Xn.LPA(response=responses[[t]], means=params$means, covs=params$covs, vis=vis)
+      P.Z.Xns[[t]] <- get.P.Z.Xn.LPA(response=responses[[t]], means=params$means, covs=params$covs, P.Z=params$P.Z)
     }
     P.Zs[[t]] <- colSums(P.Z.Xns[[t]]) / sum(P.Z.Xns[[t]])
     Zs[[t]] <- apply(P.Z.Xns[[t]], 1, which.max)
@@ -499,8 +502,8 @@ LTA <- function(responses, L=2,
   }
 
   npar <- length(init.par)
-  lb <- rep(-5, npar)
-  ub <- rep( 5, npar)
+  lb <- rep(lower, npar)
+  ub <- rep(upper, npar)
 
   int_width <- ceiling(log10(N * I * L))
   total_width <- int_width + 5
@@ -670,16 +673,20 @@ LTA <- function(responses, L=2,
     par.Bootstrap <- matrix(0, n.Bootstrap, npar)
     for(bs in 1:n.Bootstrap){
 
+      covariates.cur <- vector("list", times)
       samples.cur <- sample(1:N, N, replace = TRUE)
-      P.Z.Xns.cur <- Zs.cur <- P.Zs.cur <- covariates.cur <- vector("list", times)
+      for(t in 1:times){
+        covariates.cur[[t]] <- covariates[[t]][samples.cur, , drop=FALSE]
+      }
+
+      P.Z.Xns.cur <- Zs.cur <- P.Zs.cur <- vector("list", times)
       for(t in 1:times){
         if(type == "LCA"){
-          P.Z.Xns.cur[[t]] <- get.P.Z.Xn.LCA(response=responses[[t]][samples.cur, ], par=params$par, vis=FALSE)
+          P.Z.Xns.cur[[t]] <- get.P.Z.Xn.LCA(response=responses[[t]][samples.cur, ], par=params$par, P.Z=params$P.Z)
         } else {
-          P.Z.Xns.cur[[t]] <- get.P.Z.Xn.LPA(response=responses[[t]][samples.cur, ], means=params$means, covs=params$covs, vis=FALSE)
+          P.Z.Xns.cur[[t]] <- get.P.Z.Xn.LPA(response=responses[[t]][samples.cur, ], means=params$means, covs=params$covs, P.Z=params$P.Z)
         }
 
-        covariates.cur[[t]] <- covariates[[t]][samples.cur, , drop=FALSE]
         P.Zs.cur[[t]] <- colSums(P.Z.Xns.cur[[t]]) / sum(P.Z.Xns.cur[[t]])
         Zs.cur[[t]] <- apply(P.Z.Xns.cur[[t]], 1, which.max)
       }
@@ -690,7 +697,7 @@ LTA <- function(responses, L=2,
         CEP.cur <- replicate(times, diag(L), simplify=FALSE)
       }
 
-      init.par <- rnorm(npar, mean=refined_init, sd=abs(refined_init) * 0.1)
+      init.par <- rnorm(npar, mean=0, sd=abs(refined_init) * 0.1)
       Log.Lik.history.cur <- c(0)
       make_loglik_with_print_Bootstrap <- function(vis, ref.class, bs, n.Bootstrap) {
         iter <- 0

@@ -2,16 +2,16 @@
 #'
 #' Checks whether each column in the response matrix contains exactly the number
 #' of unique response categories specified in \code{poly.value}. Handles edge cases
-#' where all items have identical category counts efficiently.
+#' where all indicators have identical category counts efficiently.
 #'
 #' @param response A numeric matrix of dimension \eqn{N \times I}, where:
 #'   \itemize{
 #'     \item \eqn{N}: Number of subjects/observations (rows)
-#'     \item \eqn{I}: Number of items/variables (columns)
+#'     \item \eqn{I}: Number of indicators/items/variables (columns)
 #'   }
-#'   Each cell contains the observed response value for a subject on an item.
+#'   Each cell contains the observed response value for a subject on an indicator.
 #' @param poly.value An integer vector of length \eqn{I} specifying the expected number
-#'   of unique response categories (levels) for each corresponding item in
+#'   of unique response categories (levels) for each corresponding indicator in
 #'   \code{response}. Values must be positive integers.
 #'
 #' @return Logical value indicating validation status:
@@ -25,7 +25,7 @@
 #'       (when columns have varying category counts)
 #'   }
 #'
-#' @note This function contains a specific behavior: When all items have identical numbers of
+#' @note This function contains a specific behavior: When all indicators have identical numbers of
 #'   unique response categories, it returns \code{TRUE} immediately without validating against
 #'   \code{poly.value}. This may lead to unexpected results if \code{poly.value} contains
 #'   inconsistent expectations. Users should ensure \code{poly.value} accurately reflects

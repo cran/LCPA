@@ -2,74 +2,123 @@
 % Please edit documentation in R/LRT.test.Bootstrap.R
 \name{LRT.test.Bootstrap}
 \alias{LRT.test.Bootstrap}
-\title{Bootstrap Likelihood Ratio Test}
+\title{Bootstrap Likelihood Ratio Test for Latent Class/Profile Models}
 \usage{
-LRT.test.Bootstrap(object1, object2, n.Bootstrap = 100, vis = TRUE)
+LRT.test.Bootstrap(
+  object1,
+  object2,
+  n.Bootstrap = 100,
+  vis = TRUE,
+  use.sequential = TRUE
+)
 }
 \arguments{
-\item{object1}{Fitted model object with fewer parameters (i.e., fewer \code{npar}, small model).}
+\item{object1}{Fitted model object representing the null model (e.g., \code{L-1} classes).
+Must be of class \code{"LCA"} or \code{"LPA"}.}
 
-\item{object2}{Fitted model object with more parameters (i.e., more \code{npar}, large model).}
+\item{object2}{Fitted model object representing the alternative model (e.g., \code{L} classes).
+Must be of the same class as \code{object1}.}
 
-\item{n.Bootstrap}{Number of bootstrap replicates (default = 100). Higher values increase
-accuracy but computation time (we suggest that \code{n.Bootstrap = 1000}).}
+\item{n.Bootstrap}{Maximum number of bootstrap replicates (default = 100).
+If \code{use.sequential = FALSE}, exactly this many replicates are performed.
+If \code{use.sequential = TRUE} (default), this is an upper bound; the algorithm may stop early.
+McLachlan & Peel (2000) suggest 100 replicates as typically sufficient for stable p-values,
+especially near the conventional \eqn{\alpha = 0.05} threshold.
+This default also aligns with the implementation in Nylund et al. (2007).}
 
-\item{vis}{Logical. If \code{TRUE}, displays progress information during bootstrap (default: \code{TRUE}).}
+\item{vis}{Logical. If \code{TRUE} (default), displays real-time progress during bootstrapping.}
+
+\item{use.sequential}{Logical. If \code{TRUE} (default), applies the sequential stopping rule from
+Nylund et al. (2007) to terminate early when the decision is statistically clear.
+If \code{FALSE}, performs exactly \code{n.Bootstrap} replicates (traditional fixed bootstrap).}
 }
 \value{
 An object of class \code{"htest"} containing:
 \itemize{
-\item \code{statistic}: Observed likelihood ratio test statistic
-\item \code{parameter}: Degrees of freedom (reported as \code{NA} since p-value is bootstrap-derived)
-\item \code{p.value}: Bootstrap p-value
-\item \code{method}: Name of the test ("Bootstrap Likelihood Ratio Test")
-\item \code{data.name}: Model comparison description
+\item \code{statistic}: Observed likelihood ratio test statistic,
+\eqn{-2 \times (\text{logLik}_{\text{null}} - \text{logLik}_{\text{alt}})}.
+\item \code{parameter}: Degrees of freedom (set to \code{NA}; the bootstrap p-value does not rely on asymptotic chi-square distribution).
+\item \code{p.value}: Bootstrap p-value, computed as the proportion of bootstrap LRT statistics
+greater than or equal to the observed LRT statistic.
+\item \code{method}: Character string indicating the procedure used:
+either "Bootstrap LRT with Sequential Stopping" or "Bootstrap LRT (Fixed Replicates)".
+\item \code{data.name}: Descriptive string summarizing the model comparison,
+including the actual number of bootstrap replicates performed and, if applicable,
+the reason for early stopping under the sequential rule.
+\item \code{LRT.Bootstrap}: Numeric vector of length \eqn{R} (where \eqn{R} is the actual number of
+bootstrap replicates performed) containing the bootstrap LRT statistics:
+\eqn{LRT_{\text{boot}} = -2 \times (\text{logLik}_{\text{null,boot}} - \text{logLik}_{\text{alt,boot}})}.
+These are generated under the null hypothesis (i.e., data simulated from the smaller model).
+This vector can be used for diagnostic purposes, such as inspecting the empirical null distribution
+or computing alternative p-value estimates.
 }
 }
 \description{
-Conducts a bootstrap likelihood ratio test to compare the fit of two nested models.
-This test evaluates whether a model with more parameters provides a significantly
-better fit than a model with fewer parameters by approximating the null distribution
-through parametric bootstrapping.
+Conducts a bootstrap likelihood ratio test (BLRT) to compare two nested latent class analysis (LCA)
+or latent profile analysis (LPA) models. The test evaluates whether a model with more classes
+(the alternative model) provides significantly better fit than a model with fewer classes
+(the null model). Implements both fixed-replicate and sequential stopping procedures for computational efficiency.
 }
 \details{
-Note that even the result of \code{\link[LCPA]{LRT.test.Bootstrap}} should not be taken as the sole
-criterion; fit indices (e.g., \code{\link[LCPA]{get.fit.index}}) and classification accuracy
-measures (e.g., \code{\link[LCPA]{get.entropy}}, \code{\link[LCPA]{get.AvePP}}) must be considered together.
-Above all and the most important criterion, is that the better model is the one that aligns with theoretical
-expectations and offers clear interpretability.
-
-The \code{\link[LCPA]{LRT.test.Bootstrap}} statistic is calculated as:
-\deqn{LRT = -2 \times (\text{LogLik}_{1} - \text{LogLik}_{2})}
-where:
+Core Workflow (Parametric Bootstrap):
 \itemize{
-\item \eqn{\text{LogLik}_{1}}: Log-likelihood of the smaller model (fewer parameters).
-\item \eqn{\text{LogLik}_{2}}: Log-likelihood of the larger model (more parameters).
+\item Parameter Extraction: Parameters from the null model (\code{object1}) are treated as the population truth.
+\item Data Simulation: Generates datasets using \code{\link[LCPA]{sim.LCA}} or \code{\link[LCPA]{sim.LPA}},
+preserving the original sample size and indicator structure.
+\item Model Re-fitting: For each simulated dataset, both the null and alternative models are re-estimated.
+Initial parameters are set to random values (\code{par.ini = "random"}) to avoid convergence to local maxima;
+the EM algorithm includes fallback strategies upon non-convergence.
+\item LRT Distribution: Computes bootstrap LRT statistics:
+\eqn{LRT_{\text{boot}} = -2 \times (\text{logLik}_{\text{null,boot}} - \text{logLik}_{\text{alt,boot}})}.
+\item P-value Calculation: The p-value is the proportion of bootstrap LRTs that are
+greater than or equal to the observed LRT statistic.
 }
 
-The \code{\link[LCPA]{LRT.test.Bootstrap}} function employs a parametric bootstrap procedure to
-empirically estimate the distribution of the LRT statistic under the null hypothesis (that the
-smaller model is sufficient). The specific steps are as follows:
-\enumerate{
-\item Parameter Extraction: The estimated parameters (\code{params}) from the smaller model
-(\code{object1}) are treated as the true population values (ground truth).
-\item Data Simulation: The function invokes \code{\link[LCPA]{sim.LCA}} or \code{\link[LCPA]{sim.LPA}}
-to generate \code{n.Bootstrap} independent datasets. Each dataset maintains the same sample size (\code{N})
-and number of indicators (\code{I}) as the original empirical data.
-\item Model Re-fitting: For each simulated dataset, both the small model and the large model are
-re-fitted. To ensure consistency, the estimation settings (e.g., convergence criteria, iterations)
-are identical to those used for the original models, with the exception that
-\code{\link[LCPA]{LRT.test.Bootstrap}} forces \code{par.ini = "random"} to avoid local maxima.
-\item Distribution Generation: This process generates \code{n.Bootstrap} pairs of
-\eqn{\text{LogLik}_{1, boot}} and \eqn{\text{LogLik}_{2, boot}}, which are used to compute
-a collection of bootstrap LRT statistics:
-\eqn{LRT_{boot} = -2 \times (\text{LogLik}_{1, boot} - \text{LogLik}_{2, boot})}.
-\item P-value Calculation: The bootstrap \eqn{p}-value is calculated as the proportion of
-simulated \eqn{LRT_{boot}} values that are greater than or equal to the observed \eqn{LRT}
-statistic from the original data.
+Sequential Stopping Rule (Nylund et al., 2007):
+When \code{use.sequential = TRUE}, the algorithm checks three stopping criteria after each replication:
+\itemize{
+\item Upper Stopping Points: Stop if the current estimated p-value (\eqn{\hat{p}}) is
+greater than or equal to a pre-specified threshold at replication \eqn{n_i},
+indicating insufficient evidence against the null model.
+\item Lower Stopping Points: Stop if \eqn{\hat{p} \leq p_i} at replication \eqn{n_i},
+indicating strong evidence in favor of the alternative model.
+\item Conditional Lower Stopping Points: Stop if \eqn{\hat{p} = 0} \emph{and}
+the observed LRT exceeds the mean of the current bootstrap LRTs by more than \eqn{s} standard deviations.
+This leverages the approximate normality of the LRT distribution under the null (Nylund et al., 2007).
 }
+The exact stopping thresholds follow Appendix A of Nylund et al. (2007):
+\itemize{
+\item Upper: (n, 2/n) for n = 2–3; (n, 3/n) for n = 4–9; (n, 4/n) for n = 10–17;
+(n, 5/n) for n = 18–26; (n, 6/n) for n = 27–99; (100, 0).
+\item Lower: (49, 0), (78, 1/78).
+\item Conditional: (5, 0, 20), (10, 0, 10), (20, 0, 5),
+where the third value denotes the required z-score threshold.
+}
+This rule ensures >95\% agreement with the decision that would be made using an infinite number of replicates
+when the true p-value is below 0.10. Near \eqn{p = 0.05}, the algorithm continues until the maximum
+number of replicates to avoid premature conclusions.
 
-This method is particularly recommended for Latent Class and Latent Profile Analysis because
-the traditional Chi-square distribution for LRT often fails to hold due to parameters
-being on the boundary of the parameter space (e.g., probabilities near 0 or 1).
+Critical Interpretation Notes:
+\itemize{
+\item The BLRT should \strong{not} be used in isolation. Always integrate results with:
+\itemize{
+\item Information criteria: e.g., BIC, aBIC, CAIC via \code{\link[LCPA]{get.fit.index}}.
+\item Classification quality metrics: e.g., entropy (\code{\link[LCPA]{get.entropy}}),
+average posterior probability (\code{\link[LCPA]{get.AvePP}}).
+\item Substantive interpretability and theoretical coherence of the extracted classes.
+}
+\item The BLRT is especially valuable in LCA/LPA contexts where the standard asymptotic LRT is invalid
+due to boundary parameter issues (e.g., class probabilities approaching 0 or 1; McLachlan & Peel, 2000).
+\item Early termination under sequential stopping (e.g., at \eqn{n \ll 100}) yields reliable p-values
+when the evidence is strong (\eqn{p \ll 0.05} or \eqn{p \gg 0.05}).
+However, if stopping occurs near \code{n.Bootstrap} with \eqn{p \approx 0.05},
+the result should be considered inconclusive.
+\item In small samples (\eqn{N < 300}) or with poorly separated classes,
+the BLRT may exhibit inflated Type I error rates; corroborate findings with BIC and other indices.
+}
+}
+\references{
+McLachlan, G. J., & Peel, D. (2000). Finite Mixture Models. John Wiley & Sons.
+
+Nylund, K. L., Asparouhov, T., & Muthén, B. O. (2007). Deciding on the Number of Classes in Latent Class Analysis and Growth Mixture Modeling: A Monte Carlo Simulation Study. Structural Equation Modeling: A Multidisciplinary Journal, 14(4), 535–569. https://doi.org/10.1080/10705510701575396
 }

@@ -23,11 +23,11 @@ A list of class \code{"SE"} containing:
 \item LPA: \code{means} (matrix: classes x variables),
 \code{covs} (array: vars x vars x classes),
 \code{P.Z} (vector: class prob SEs)
-\item LCA: \code{par} (array: classes x items x categories),
+\item LCA: \code{par} (array: classes x indicators x categories),
 \code{P.Z} (vector: class prob SEs)
 \item Critical Note for \code{"Obs"} method:
 Only \emph{free parameters} have non-zero SEs. Non-free parameters (e.g., last class probability in \code{P.Z} due
-to sum-to-1 constraint; last category probability in LCA items) have SE=0.
+to sum-to-1 constraint; last category probability in LCA indicators) have SE=0.
 Bootstrap provides SEs for all parameters.
 }
 }

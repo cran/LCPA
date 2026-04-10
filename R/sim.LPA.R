@@ -404,14 +404,14 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
 
         e_min_new <- min(eigen(covs.cur, symmetric = TRUE, only.values = TRUE)$values)
         if (e_min_new <= 1e-8) {
-          stop(sprintf("nearPD correction failed for class %d (min eigenvalue=%.20f). Consider adjusting parameters.",
-                       l, e_min_new))
+          jitter <- abs(e_min_new) + 1e-6
+          diag(covs.cur) <- diag(covs.cur) + jitter
         }
         covs[, , l] <- covs.cur
       }
     }
 
-    class_data <- mvtnorm::rmvnorm(n = n_l, mean = as.numeric(mean_l), sigma = covs.cur)
+    class_data <- mvtnorm::rmvnorm(n = n_l, mean = as.numeric(mean_l), sigma = (covs.cur + t(covs.cur)) / 2)
     response[Z == l, ] <- class_data
   }
   P.Z.Xn <- matrix(0, nrow = N, ncol = L)

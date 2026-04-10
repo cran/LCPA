@@ -47,7 +47,7 @@
 #'     \item{arguments}{A list containing all input arguments.}
 #'   }
 #'
-#' @section Item Quality (IQ) Parameter:
+#' @section Indicator Quality (IQ) Parameter:
 #' Controls the discriminative power of observed variables:
 #' \describe{
 #'   \item{\code{IQ = "random"}}{(Default)
@@ -123,7 +123,7 @@
 #' # Example 1: Default settings (moderate separation, random class sizes)
 #' sim_data <- sim.LCA(N = 30, I = 5, L = 3)
 #'
-#' # Example 2: High-discrimination items (IQ=0.85), uniform class sizes
+#' # Example 2: High-discrimination indicators (IQ=0.85), uniform class sizes
 #' sim_high_disc <- sim.LCA(
 #'   N = 30,
 #'   I = 4,
@@ -133,7 +133,7 @@
 #'   distribution = "uniform"
 #' )
 #'
-#' # Example 3: Binary items (poly.value=2) with high separation
+#' # Example 3: Binary indicators (poly.value=2) with high separation
 #' sim_binary <- sim.LCA(N = 300, I = 10, L = 2, poly.value = 2, IQ = 0.9)
 #'
 #' @export

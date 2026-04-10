@@ -15,19 +15,24 @@ import warnings
 import copy
 from torch.distributions import Dirichlet
 import random
+import os
+import sys
 
 class LPAnet(nn.Module):
     def __init__(self, response, L=5, par_ini=None, constraint="VV",
                  hidden_layers=[32, 32], activation_function='tanh', use_attention=True, 
-                 d_model=None, nhead=None, dim_feedforward=None, eps=1e-8):
+                 d_model=None, nhead=None, dim_feedforward=None, eps=1e-6):
         super(LPAnet, self).__init__()
         self.L = L
-        self.response = response.float()
+        if isinstance(response, np.ndarray):
+            self.response = torch.tensor(response, dtype=torch.float32)
+        else:
+            self.response = response.float()
         self.device = self.response.device
         self.N, self.I = self.response.shape
         self.constraint = constraint
         self.npar = self._compute_npar()
-        self.eps = eps
+        self.eps = max(eps, 1e-6)
         self.use_attention = use_attention
         self.shared_mask = None
         
@@ -65,7 +70,7 @@ class LPAnet(nn.Module):
             self.P_Z_init = torch.from_numpy(np.asarray(par_ini["P.Z"], dtype=np.float32)).float().to(self.device).squeeze()
 
         elif par_ini == "kmeans":
-            _, covs_np, means_np, P_Z_np = self.kmeans_classify(self.response, self.L, constraint=self.constraint)
+            _, covs_np, means_np, P_Z_np = self.kmeans_classify(self.response, self.response, self.L, constraint=self.constraint)
 
             means_raw = torch.from_numpy(means_np).float().to(self.device)
             means_raw = torch.atanh(torch.clamp(means_raw, min=-1.99, max=1.99)/2.0)
@@ -97,10 +102,10 @@ class LPAnet(nn.Module):
             raw_covs = self.inverse_activation_for_covs(target_covs, eps=self.eps)
             self.covs = nn.Parameter(raw_covs)
             
-            alpha_z = torch.ones(L) * 3.0
+            alpha_z = torch.ones(L, device=self.device) * 3.0
             dirichlet_z = Dirichlet(alpha_z)
-            P_Z_sample = dirichlet_z.sample().cpu().numpy()
-            self.P_Z_init = torch.from_numpy(P_Z_sample).float().to(self.device)
+            P_Z_sample = dirichlet_z.sample()
+            self.P_Z_init = P_Z_sample
 
         layers = []
         input_dim = self.input_dim
@@ -234,23 +239,23 @@ class LPAnet(nn.Module):
         dtype = raw_covs.dtype
 
         tril_idx = torch.tril_indices(I, I, offset=0, device=device)
-        num_tril = tril_idx.shape[1]
         diag_mask = (tril_idx[0] == tril_idx[1])
         off_diag_mask = ~diag_mask
 
-        tril_vals = raw_covs[tril_idx[0], tril_idx[1]]
+        tril_vals = raw_covs[tril_idx[0], tril_idx[1]].T.clone()
         
         if diag_mask.any():
-            diag_vals = tril_vals[diag_mask]
+            diag_vals = tril_vals[:, diag_mask]
             diag_pos = torch.clamp(F.softplus(diag_vals), min=0.01, max=3.99)
-            tril_vals[diag_mask] = diag_pos
+            tril_vals[:, diag_mask] = diag_pos
         
         if off_diag_mask.any():
-            off_diag_vals = tril_vals[off_diag_mask]
-            tril_vals[off_diag_mask] = torch.tanh(off_diag_vals) * 4.0
+            off_diag_vals = tril_vals[:, off_diag_mask]
+            off_diag_transformed = torch.tanh(off_diag_vals) * 4.0
+            tril_vals[:, off_diag_mask] = off_diag_transformed
         
         Lmats = torch.zeros((L, I, I), device=device, dtype=dtype)
-        Lmats[:, tril_idx[0], tril_idx[1]] = tril_vals.T
+        Lmats[:, tril_idx[0], tril_idx[1]] = tril_vals
         
         covs = torch.bmm(Lmats, Lmats.transpose(1, 2))
         activated_covs = covs.permute(1, 2, 0)
@@ -263,7 +268,6 @@ class LPAnet(nn.Module):
         dtype = target_covs.dtype
     
         tril_idx = torch.tril_indices(I, I, offset=0, device=device)
-        num_tril = tril_idx.shape[1]
         diag_mask = (tril_idx[0] == tril_idx[1])
         off_diag_mask = ~diag_mask
     
@@ -283,22 +287,21 @@ class LPAnet(nn.Module):
                 Lmat, _ = self.adaptive_cholesky_constrained(Sigma, non_shared_mask)
             Lmats[c] = Lmat
     
-        tril_vals = Lmats[:, tril_idx[0], tril_idx[1]]
+        tril_vals = Lmats[:, tril_idx[0], tril_idx[1]].clone()
     
-        if diag_mask.any():
-            diag_vals = tril_vals[:, diag_mask]
-            inv_diag = torch.log(torch.expm1(torch.clamp(diag_vals, min=0.01, max=3.99)) + eps)
-            tril_vals[:, diag_mask] = inv_diag
+        diag_vals = tril_vals[:, diag_mask]
+        inv_diag = torch.log(torch.expm1(torch.clamp(diag_vals, min=0.01, max=3.99)) + eps)
+        tril_vals[:, diag_mask] = inv_diag
     
-        if off_diag_mask.any():
-            off_diag_vals = tril_vals[:, off_diag_mask] / 4.0
-            off_diag_vals = torch.clamp(off_diag_vals, min=-0.99, max=0.99)
-            tril_vals[:, off_diag_mask] = torch.atanh(off_diag_vals)
+        off_diag_vals = tril_vals[:, off_diag_mask] / 4.0
+        off_diag_vals = torch.clamp(off_diag_vals, min=-0.99, max=0.99)
+        off_diag_atanh = torch.atanh(off_diag_vals)
+        tril_vals[:, off_diag_mask] = off_diag_atanh
             
         raw_covs = torch.zeros_like(target_covs)
         raw_covs[tril_idx[0], tril_idx[1]] = tril_vals.T
         return raw_covs
-    
+
     @staticmethod
     def kmeans_classify(features, Y, L, max_attempts=5, nstart=1, eps=1e-4, random_state=None, constraint="VV"):
         features_np = features.detach().cpu().numpy()
@@ -436,7 +439,6 @@ class LPAnet(nn.Module):
         elif constraint == "V":
             constraint = "VV"
         
-        # Vectorized constraint application
         diag_indices = torch.arange(I, device=device)
         if constraint == "E0":
             diag_vals = torch.diagonal(pooled_cov)
@@ -446,7 +448,7 @@ class LPAnet(nn.Module):
             return covs_constrained
         
         if constraint == "V0":
-            class_diags = torch.diagonal(covs, dim1=0, dim2=1)  # (I, L)
+            class_diags = torch.diagonal(covs, dim1=0, dim2=1)
             class_diags = torch.clamp(class_diags, min=eps)
             covs_constrained = torch.zeros_like(covs)
             covs_constrained[diag_indices, diag_indices, :] = class_diags.T
@@ -462,7 +464,7 @@ class LPAnet(nn.Module):
             return covs_constrained
         
         if constraint == "VE":
-            class_diags = torch.diagonal(covs, dim1=0, dim2=1)  # (I, L)
+            class_diags = torch.diagonal(covs, dim1=0, dim2=1)
             covs_constrained = pooled_cov.unsqueeze(-1).expand(I, I, L).clone()
             covs_constrained[diag_indices, diag_indices, :] = class_diags.T
             return covs_constrained
@@ -492,7 +494,7 @@ class LPAnet(nn.Module):
         assert I == I2, "Covariance matrix must be square"
         device = covs.device
         dtype = covs.dtype
-        eps = self.eps
+        eps = max(self.eps, 1e-5)
         if self.shared_mask is None:
             self._init_shared_mask()
         non_shared_mask = ~self.shared_mask
@@ -500,54 +502,53 @@ class LPAnet(nn.Module):
         
         def safe_fallback(original_mat):
             diag_vals = torch.abs(torch.diag(original_mat))
-            safe_diag = torch.clamp(diag_vals, min=eps * 10) 
+            safe_diag = torch.clamp(diag_vals, min=eps * 100) 
             return torch.diag(safe_diag)
         
-        if not torch.any(non_shared_mask):
-            identity = torch.eye(I, device=device, dtype=dtype).unsqueeze(-1) * (eps * 10)
-            return covs + identity
+        has_non_shared = torch.any(non_shared_mask)
+        identity = torch.eye(I, device=device, dtype=dtype).unsqueeze(-1) * (eps * 100)
+        covs_pd = torch.where(has_non_shared, covs_pd, covs + identity)
         
-        total_jitter = 0.0
-        max_jitter_per_matrix = 0.0
+        if not has_non_shared.item():
+            return covs_pd
         
         for l in range(L):
             Sigma = covs[:, :, l]
             Sigma = 0.5 * (Sigma + Sigma.T)
             
+            jitter = eps * 10
+            Sigma_jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
+            
             try:
-                lmat, applied_jitter = self.optimized_cholesky_constrained(Sigma.clone(), non_shared_mask)
+                lmat, applied_jitter = self.optimized_cholesky_constrained(Sigma_jittered.clone(), non_shared_mask)
                 candidate = lmat @ lmat.T
-                if self._is_positive_definite(candidate, eps * 0.1):
+                is_pd = self._is_positive_definite(candidate, eps * 0.1)
+                if is_pd:
                     covs_pd[:, :, l] = candidate
-                    total_jitter += applied_jitter
-                    max_jitter_per_matrix = max(max_jitter_per_matrix, applied_jitter)
                     continue
-            except Exception as e1:
+            except Exception:
                 pass 
             
             try:
                 Sigma_sym = 0.5 * (Sigma + Sigma.T)
                 eigvals, eigvecs = torch.linalg.eigh(Sigma_sym)
-                eigvals = torch.clamp(eigvals, min=eps * 5)
+                eigvals = torch.clamp(eigvals, min=eps * 10)
                 candidate = eigvecs @ torch.diag(eigvals) @ eigvecs.T
                 candidate = 0.5 * (candidate + candidate.T)
                 
-                if self._is_positive_definite(candidate, eps * 0.5):
+                is_pd = self._is_positive_definite(candidate, eps * 0.5)
+                if is_pd:
                     covs_pd[:, :, l] = candidate
                     continue
-            except Exception as e2:
+            except Exception:
                 pass
             
-            covs_pd[:, :, l] = safe_fallback(Sigma)
-        
-        for l in range(L):
-            mat = covs_pd[:, :, l]
-            if not self._is_positive_definite(mat, eps * 0.1):
-                covs_pd[:, :, l] = safe_fallback(covs[:, :, l])
+            fallback = safe_fallback(Sigma)
+            covs_pd[:, :, l] = fallback
         
         return covs_pd
     
-    def _is_positive_definite(self, mat, tol=1e-8):
+    def _is_positive_definite(self, mat, tol=1e-6):
         try:
             _ = torch.linalg.cholesky(mat)
             return True
@@ -560,43 +561,46 @@ class LPAnet(nn.Module):
         except:
             return False
     
-    def optimized_cholesky_constrained(self, Sigma, non_shared_mask, max_jitter=1e-3):
+    def optimized_cholesky_constrained(self, Sigma, non_shared_mask, max_jitter=1e-2):
         device = Sigma.device
         dtype = Sigma.dtype
         I = Sigma.shape[0]
+        eps = max(self.eps, 1e-5)
         
         if I == 1:
             val = Sigma[0, 0].item()
-            safe_val = max(val, self.eps * 10)
+            safe_val = max(val, eps * 100)
             return torch.tensor([[math.sqrt(safe_val)]], device=device, dtype=dtype), 0.0
         
         Sigma = 0.5 * (Sigma + Sigma.T)
         
-        if not torch.any(non_shared_mask):
-            try:
-                L = torch.linalg.cholesky(Sigma)
-                return L, 0.0
-            except:
-                jitter = max(self.eps * 10, max_jitter)
+        has_non_shared = torch.any(non_shared_mask)
+        if not has_non_shared.item():
+            for jitter_scale in [1.0, 10.0, 100.0]:
+                jitter = eps * jitter_scale
                 jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
                 try:
                     L = torch.linalg.cholesky(jittered)
                     return L, jitter
                 except:
-                    eigvals, eigvecs = torch.linalg.eigh(Sigma)
-                    eigvals = torch.clamp(eigvals, min=self.eps * 5)
-                    recon = eigvecs @ torch.diag(eigvals) @ eigvecs.T
-                    return torch.linalg.cholesky(0.5 * (recon + recon.T)), self.eps * 5
+                    continue
+            eigvals, eigvecs = torch.linalg.eigh(Sigma)
+            eigvals = torch.clamp(eigvals, min=eps * 10)
+            recon = eigvecs @ torch.diag(eigvals) @ eigvecs.T
+            return torch.linalg.cholesky(0.5 * (recon + recon.T)), eps * 10
         
-        try:
-            L = torch.linalg.cholesky(Sigma)
-            return L, 0.0
-        except:
-            pass
+        for jitter_scale in [1.0, 10.0, 100.0]:
+            jitter = eps * jitter_scale
+            jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
+            try:
+                L = torch.linalg.cholesky(jittered)
+                return L, jitter
+            except:
+                continue
         
         try:
             min_eig = torch.linalg.eigvalsh(Sigma).min().item()
-            adjustment = max((self.eps * 5) - min_eig, self.eps * 5)
+            adjustment = max((eps * 10) - min_eig, eps * 10)
         except:
             adjustment = max_jitter * 10
         
@@ -618,7 +622,7 @@ class LPAnet(nn.Module):
         
         try:
             eigvals, eigvecs = torch.linalg.eigh(Sigma)
-            new_eigvals = torch.clamp(eigvals, min=self.eps * 5)  # 严格下限
+            new_eigvals = torch.clamp(eigvals, min=eps * 10)
             new_mat = eigvecs @ torch.diag(new_eigvals) @ eigvecs.T
             new_mat = 0.5 * (new_mat + new_mat.T)
             
@@ -627,36 +631,36 @@ class LPAnet(nn.Module):
             result = 0.5 * (result + result.T)
             
             diag_vals = torch.diag(result)
-            torch.diagonal(result).copy_(torch.clamp(diag_vals, min=self.eps * 10))
+            torch.diagonal(result).copy_(torch.clamp(diag_vals, min=eps * 100))
             
-            return torch.linalg.cholesky(result), self.eps * 5
+            return torch.linalg.cholesky(result), eps * 10
         except:
-            diag_vals = torch.clamp(torch.diag(Sigma), min=self.eps * 10)
+            diag_vals = torch.clamp(torch.diag(Sigma), min=eps * 100)
             safe_mat = torch.diag(diag_vals)
-            return torch.linalg.cholesky(safe_mat), self.eps * 10
+            return torch.linalg.cholesky(safe_mat), eps * 10
     
     def compute_log_pdf(self, dev, covs_constrained):
         N, L_dev, I = dev.shape
         assert L_dev == self.L, "dev second dim must equal self.L"
         device = dev.device
-        eps = getattr(self, 'eps', 1e-6)
+        eps = max(getattr(self, 'eps', 1e-6), 1e-5)
         covs_batch = covs_constrained.permute(2, 0, 1)  
-        dev_batch_T = dev.permute(1, 2, 0)  # (L, I, N)
+        dev_batch_T = dev.permute(1, 2, 0)
         eye = torch.eye(I, device=device).expand(L_dev, I, I)
-        covs_batch = covs_batch + eps * eye
+        covs_batch = covs_batch + eps * 10 * eye
         try:
             chol_batch = torch.linalg.cholesky(covs_batch)
         except RuntimeError:
             covs_batch = covs_batch + (eps * 100) * eye
             chol_batch = torch.linalg.cholesky(covs_batch)
         diag_chol = torch.diagonal(chol_batch, dim1=1, dim2=2)
-        logdet = 2.0 * torch.sum(torch.log(diag_chol), dim=1)  # (L,)
+        logdet = 2.0 * torch.sum(torch.log(diag_chol), dim=1)
         y = torch.linalg.solve_triangular(chol_batch, dev_batch_T, upper=False)
-        quad = torch.sum(y**2, dim=1)  # (L, N)
+        quad = torch.sum(y**2, dim=1)
         const_term = -0.5 * I * math.log(2 * math.pi)
-        log_pdfs = const_term - 0.5 * (logdet.unsqueeze(1) + quad)  # (L, N)
+        log_pdfs = const_term - 0.5 * (logdet.unsqueeze(1) + quad)
         log_pdfs = torch.clamp(log_pdfs, min=-1e8, max=1e8)
-        return log_pdfs.t()  # (N, L)
+        return log_pdfs.t()
     
     def get_Log_lik(self, P_Z, means, covs_constrained):
         N, I = self.response.shape
@@ -840,7 +844,7 @@ def NN_LPA(response,
            vis=True,
            hidden_layers=[32],
            activation_function='tanh', use_attention=True, 
-           d_model=None, nhead=None, dim_feedforward=None, eps=1e-8, Lambda=1e-5, 
+           d_model=None, nhead=None, dim_feedforward=None, eps=1e-6, Lambda=1e-5, 
            initial_temperature=2000,
            cooling_rate=0.95,
            maxiter_sa=2000,
@@ -854,15 +858,29 @@ def NN_LPA(response,
            plot_interval=10, 
            device="CPU"):
     
-    seed = 9
+    os.environ["TORCH_COMPILE_DISABLE"] = "1"
+    os.environ["TORCHDYNAMO_DISABLE"] = "1"
+    os.environ["TORCHINDUCTOR_DISABLE_REPRODUCIBILITY"] = "1"
+    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE"] = "1"
+    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE_GEMM"] = "1"
+    os.environ["TORCH_COMPILE_DEBUG"] = "0"
+    
+    is_windows = sys.platform.startswith('win')
+    use_compile = not is_windows
+    
+    seed = 56756765
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
     
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.deterministic = False
         
     if isinstance(constraint, str):
         constraint = constraint
@@ -896,7 +914,10 @@ def NN_LPA(response,
     else:
         device = torch.device("cpu")
 
-    response_tensor = torch.tensor(response, dtype=torch.float32).to(device)
+    if isinstance(response, torch.Tensor):
+        response_tensor = response.float().to(device)
+    else:
+        response_tensor = torch.tensor(response, dtype=torch.float32).to(device)
     
     best_models = []
     
@@ -920,6 +941,13 @@ def NN_LPA(response,
                                   dim_feedforward=dim_feedforward, eps=eps)
             LPAnet_warmup.to(device)
             
+            if device.type == 'cuda' and use_compile:
+                LPAnet_warmup = torch.compile(
+                    LPAnet_warmup,
+                    mode='reduce-overhead',
+                    dynamic=True
+                )
+            
             network_params = [p for p in LPAnet_warmup.parameters() 
                              if p is not LPAnet_warmup.means and p is not LPAnet_warmup.covs]
             optimizer = torch.optim.AdamW(
@@ -931,15 +959,25 @@ def NN_LPA(response,
                 weight_decay=Lambda
             )
             
+            scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
+            
             best_ll = -float('inf')
             for epoch in range(maxiter_wa):
                 optimizer.zero_grad()
-                P_Z, means, covs = LPAnet_warmup()
-                loss, loss_ll = LPAnet_warmup.loss(P_Z, means, covs)
-                loss.backward()
-                optimizer.step()
+                if device.type == 'cuda':
+                    with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=True):
+                        P_Z, means, covs = LPAnet_warmup()
+                        loss, loss_ll = LPAnet_warmup.loss(P_Z, means, covs)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    P_Z, means, covs = LPAnet_warmup()
+                    loss, loss_ll = LPAnet_warmup.loss(P_Z, means, covs)
+                    loss.backward()
+                    optimizer.step()
                 
-                current_ll = loss_ll.item()
+                current_ll = -loss.item() 
                 if current_ll > best_ll:
                     best_ll = current_ll
                     best_state = {k: v.cpu() for k, v in LPAnet_warmup.state_dict().items()}
@@ -957,15 +995,19 @@ def NN_LPA(response,
                       f"Min in top {nrep}: {current_min_ll:.4f}", end='\r')
             
             del LPAnet_warmup, optimizer
-            torch.cuda.empty_cache()
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
         
         best_models.sort(key=lambda x: x[0], reverse=True)
+        
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
     else:
         best_models = []
     
-    if starts > 0 and vis:
-        print("\n")
-
+    if vis & starts > 0:
+       print("\n\n")
+    
     if nrep <= 5:
         colors = plt.cm.tab10(np.linspace(0, 1, nrep))
     elif nrep <= 10:
@@ -1000,8 +1042,7 @@ def NN_LPA(response,
         for rep in range(nrep):
             color = colors[rep]
             line_trainings.append(ax.plot([], [], '.', color=color, alpha=0.5, 
-                                         markersize=3,  # 点的大小
-                                         label=f'Training Rep {rep+1}')[0])
+                                         markersize=3, label=f'Training Rep {rep+1}')[0])
             line_annealings.append(ax.plot([], [], 'o', color='gray', alpha=0.6, 
                                           markersize=6)[0])
         
@@ -1027,6 +1068,13 @@ def NN_LPA(response,
                              d_model=d_model, nhead=nhead, 
                              dim_feedforward=dim_feedforward, eps=eps)
         LPAnet_model.to(device)
+        
+        if device.type == 'cuda' and use_compile:
+            LPAnet_model = torch.compile(
+                LPAnet_model,
+                mode='reduce-overhead',
+                dynamic=True
+            )
         
         if starts > 0 and rep < len(best_models):
             LPAnet_model.load_state_dict(best_models[rep][1])
@@ -1072,20 +1120,30 @@ def NN_LPA(response,
         )
         scheduler = ReduceLROnPlateau(optimizer, 'min', patience=scheduler_patience, factor=scheduler_factor)
         
+        scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
+        
         while improved and cycle < maxcycle:
             cycle += 1
 
             patience = 0
             for epoch in range(maxiter):
                 optimizer.zero_grad()
-                P_Z, means, covs = LPAnet_model()
-                loss, loss_ll = LPAnet_model.loss(P_Z, means, covs)
-                loss.backward()
-                optimizer.step()
-                scheduler.step(loss)
+                if device.type == 'cuda':
+                    with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=True):
+                        P_Z, means, covs = LPAnet_model()
+                        loss, loss_ll = LPAnet_model.loss(P_Z, means, covs)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    P_Z, means, covs = LPAnet_model()
+                    loss, loss_ll = LPAnet_model.loss(P_Z, means, covs)
+                    loss.backward()
+                    optimizer.step()
+                scheduler.step(loss.item())
 
                 cur_loss = loss.item()
-                cur_ll = loss_ll.item()
+                cur_ll = -cur_loss
                 local_step += 1
                 log_records.append((local_step, cur_loss))
 
@@ -1234,10 +1292,10 @@ def NN_LPA(response,
             global_best_marker.set_data([global_best_step], [global_best_loss])
             global_best_marker.set_zorder(10)
         
-        handles = [line_trainings[best_rep_index], global_best_marker, annealing_legend]
-        labels = ['Best Nrep', 'Global Best', 'Annealing']
+        handles = [global_best_marker, line_trainings[best_rep_index], annealing_legend]
+        labels = ['Global Best', 'Best Nrep', 'Annealing']
         ax.legend(handles=handles, labels=labels, 
-                 loc='upper right', fontsize='small')
+                 loc='upper right', fontsize='large')
         
         ax.relim()
         ax.autoscale_view()

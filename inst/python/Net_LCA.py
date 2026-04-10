@@ -15,6 +15,8 @@ import copy
 import six
 from torch.distributions import Dirichlet
 import random
+import os
+import sys
 
 class LCAnet(nn.Module):
     def __init__(self, response, L=5, par_ini=None, hidden_layers=[32, 32], 
@@ -22,18 +24,21 @@ class LCAnet(nn.Module):
                  d_model=None, nhead=None, dim_feedforward=None, eps=1e-8):
         super(LCAnet, self).__init__()
         self.L = L
-        adjust_response_obj = self.adjust_response(response)
-        self.response = adjust_response_obj["response"]
-        self.poly_orig = adjust_response_obj["poly_orig"]
-        self.poly_value = adjust_response_obj["poly_value"]
-        self.poly_max = adjust_response_obj["poly_max"]
-        self.device = self.response.device
-        self.N, self.I = self.response.shape
         self.eps = eps
         self.use_attention = use_attention
         
+        device = response.device if hasattr(response, 'device') else torch.device('cpu')
+        adjust_response_obj = self.adjust_response(response)
+        self.response = adjust_response_obj["response"].to(device)
+        self.poly_orig = adjust_response_obj["poly_orig"]
+        self.poly_value = torch.tensor(adjust_response_obj["poly_value"], dtype=torch.long, device=device)
+        self.poly_max = adjust_response_obj["poly_max"]
+        self.device = self.response.device
+        self.N, self.I = self.response.shape
+        
         self.response_arange = torch.arange(self.poly_max, dtype=torch.long, device=self.device).view(1, 1, self.poly_max).expand(self.N, self.I, -1)
-        self.response_hot = F.one_hot(self.response.long(), num_classes=self.poly_max)
+        self.response_hot = F.one_hot(self.response.long(), num_classes=self.poly_max).float()
+        self.register_buffer('response_hot_buf', self.response_hot)
 
         self.input_dim = self.response.shape[1]
 
@@ -50,58 +55,50 @@ class LCAnet(nn.Module):
 
         if par_ini is not None and not isinstance(par_ini, (str, six.string_types)):
             par_ini["par"] = np.asarray(par_ini["par"], dtype=np.float32)
-            self.par_mask = np.isnan(par_ini["par"])
+            self.par_mask_np = np.isnan(par_ini["par"])  # keep for shape only
             par_ini["par"] = np.clip(par_ini["par"], self.eps, 1 - self.eps)
             par = torch.tensor(par_ini["par"], dtype=torch.float32, device=self.device)
+            self.par_mask = torch.tensor(self.par_mask_np, device=self.device)  # GPU tensor
             self.par = nn.Parameter(self.softmax_inverse(par, self.poly_value, method='zero_sum'))
-            
-            self.P_Z = torch.from_numpy(par_ini["P.Z"]).float()
+            self.P_Z = torch.from_numpy(par_ini["P.Z"]).float().to(self.device)
+
         elif par_ini == "kmeans": 
             par, P_Z = self.kmeans_classify(self.response, self.L, self.poly_max, self.poly_value, nstart=1)
-            self.par_mask = np.isnan(par)
-            par[~self.par_mask] = np.clip(par[~self.par_mask], self.eps, 1 - self.eps)
-            par = torch.from_numpy(par).float()
-            par = par.to(self.device)
+            self.par_mask_np = np.isnan(par.cpu().numpy())  # only for shape/debug
+            self.par_mask = torch.isnan(par)  # GPU mask
             par = torch.nan_to_num(par, nan=float('-inf'))
             par = self.softmax_inverse(par, self.poly_value, method='zero_sum')
             self.par = nn.Parameter(par)
-            self.P_Z = torch.from_numpy(P_Z).float()
-            self.P_Z = torch.softmax(self.P_Z, dim=0)
+            self.P_Z = torch.softmax(P_Z, dim=0)
+
         elif par_ini == "random": 
-            par_array, P_Z = self._random_init_params_torch()
-            self.par_mask = np.isnan(par_array)
-            par_array[~self.par_mask] = np.clip(par_array[~self.par_mask], self.eps, 1 - self.eps)
-            par_tensor = torch.from_numpy(par_array).float().to(self.device)
+            par_tensor, P_Z = self._random_init_params_torch()
+            self.par_mask = torch.isnan(par_tensor)
             par_tensor = torch.nan_to_num(par_tensor, nan=float('-inf'))
             self.par = nn.Parameter(self.softmax_inverse(par_tensor, self.poly_value, method='zero_sum'))
             self.P_Z = P_Z
+
         else: 
             rand_num = random.random()
-    
             if rand_num > 0.5:
-                par_array, P_Z = self._random_init_params_torch()
-                self.par_mask = np.isnan(par_array)
-                par_array[~self.par_mask] = np.clip(par_array[~self.par_mask], self.eps, 1 - self.eps)
-                par_tensor = torch.from_numpy(par_array).float().to(self.device)
+                par_tensor, P_Z = self._random_init_params_torch()
+                self.par_mask = torch.isnan(par_tensor)
                 par_tensor = torch.nan_to_num(par_tensor, nan=float('-inf'))
                 self.par = nn.Parameter(self.softmax_inverse(par_tensor, self.poly_value, method='zero_sum'))
                 self.P_Z = P_Z
             else:
                 par, P_Z = self.kmeans_classify(
                     self.response, 
-                    self.response, 
-                    self.L, 
+                    self.L,
                     self.poly_max, 
                     self.poly_value, 
                     nstart=1
                 )
-                self.par_mask = np.isnan(par)
-                par[~self.par_mask] = np.clip(par[~self.par_mask], self.eps, 1 - self.eps)
-                par = torch.from_numpy(par).float().to(self.device)
+                self.par_mask = torch.isnan(par)
                 par = torch.nan_to_num(par, nan=float('-inf'))
                 par = self.softmax_inverse(par, self.poly_value, method='zero_sum')
                 self.par = nn.Parameter(par)
-                self.P_Z = torch.from_numpy(P_Z).float()
+                self.P_Z = torch.softmax(P_Z, dim=0)
 
         layers = []
         input_dim = self.input_dim
@@ -110,7 +107,7 @@ class LCAnet(nn.Module):
             layers.append(nn.BatchNorm1d(hidden_units, dtype=torch.float32))
             layers.append(activation)
             input_dim = hidden_units
-            
+
         final_layer = nn.Linear(input_dim, self.L, dtype=torch.float32)
         layers.append(final_layer)
         self.network = nn.Sequential(*layers)
@@ -132,43 +129,41 @@ class LCAnet(nn.Module):
             self.output_proj = nn.Linear(d_model, self.L)
 
         self.to(self.device)
-    
         self.npar = self._compute_npar()
          
     def _random_init_params_torch(self):
-        par_array = np.full((self.L, self.I, self.poly_max), np.nan)
+        par_array = torch.full((self.L, self.I, self.poly_max), float('nan'), device=self.device)
         for i in range(self.I):
             k = self.poly_value[i]
             if k <= 0:
                 continue
-            alpha = torch.ones(k) * 3.0
+            alpha = torch.ones(k, device=self.device) * 3.0
             dist = Dirichlet(alpha)
             samples = dist.sample((self.L,))
-            samples_np = samples.cpu().numpy()
-            par_array[:, i, :k] = samples_np
+            par_array[:, i, :k] = samples
             
-        alpha = torch.ones(self.L) * 3.0
+        alpha = torch.ones(self.L, device=self.device) * 3.0
         dist = Dirichlet(alpha)
-        P_Z = dist.sample().to(self.device)
-            
+        P_Z = dist.sample()
         return par_array, P_Z
     
     def _compute_npar(self):
-        npar = np.sum(self.poly_value * self.L - 1) + self.L-1
-        return npar
+        pv = self.poly_value.cpu().numpy() if isinstance(self.poly_value, torch.Tensor) else self.poly_value
+        npar = np.sum(pv * self.L - 1) + self.L - 1
+        return int(npar)
     
     @staticmethod
     def adjust_response(response):
-        device = response.device
-        N, I = response.shape
+        device = response.device if hasattr(response, 'device') else torch.device('cpu')
+        response_cpu = response.cpu() if hasattr(response, 'cpu') else response
+        N, I = response_cpu.shape
 
         poly_value = np.zeros(I, dtype=int)
-        poly_orig = []
+        unique_list = []
 
         max_k = 0
-        unique_list = []
         for i in range(I):
-            unique_vals, inverse_indices = torch.unique(response[:, i], return_inverse=True)
+            unique_vals, inverse_indices = torch.unique(response_cpu[:, i], return_inverse=True)
             unique_list.append((unique_vals, inverse_indices))
             k = len(unique_vals)
             poly_value[i] = k
@@ -181,7 +176,7 @@ class LCAnet(nn.Module):
         for i in range(I):
             unique_vals, inverse_indices = unique_list[i]
             poly_orig[i, :poly_value[i]] = unique_vals.detach().cpu().numpy().astype(int)
-            response_adjusted[:, i] = inverse_indices
+            response_adjusted[:, i] = inverse_indices.to(device)
         
         return {
             'poly_orig': poly_orig,
@@ -210,6 +205,7 @@ class LCAnet(nn.Module):
         cluster_labels = km.fit_predict(Y_normalized)
         
         P_Z = np.bincount(cluster_labels, minlength=L) / N
+        P_Z = torch.from_numpy(P_Z).float().to(Y.device)
         
         par = np.full((L, I, poly_max), np.nan)
         for l in range(L):
@@ -221,45 +217,59 @@ class LCAnet(nn.Module):
                 par[l, i, :] = par[l, i, :] + 1e-4
                 
         for i in range(I):
-            par[:, i,  0:poly_value[i]] = np.nan_to_num(par[:, i,  0:poly_value[i]], nan=1e-4)
+            par[:, i, 0:poly_value[i]] = np.nan_to_num(par[:, i, 0:poly_value[i]], nan=1e-4)
+        par = torch.from_numpy(par).float().to(Y.device)
         return par, P_Z
 
-    @staticmethod
-    def softmax_inverse(par, poly_value, method='zero_sum'):
+    def softmax_inverse(self, par, poly_value, method='zero_sum'):
         L, I, poly_max = par.shape
-        log_par = torch.log(par)
-        results = par.clone()
-        for l in range(L):
-            for i in range(I):
-                if method == 'zero_sum':
-                    results[l, i, 0:poly_value[i]] = log_par[l, i, 0:poly_value[i]] - torch.mean(log_par[l, i, 0:poly_value[i]])
-                elif method == 'max_zero':
-                    results[l, i, 0:poly_value[i]] = log_par[l, i, 0:poly_value[i]] - torch.max(log_par[l, i, 0:poly_value[i]])
-                elif method == 'first_zero':
-                    results[l, i, 0:poly_value[i]] = log_par[l, i, 0:poly_value[i]] - log_par[l, i, 0:poly_value[i]]
+        device = par.device
+        
+        arange_k = torch.arange(poly_max, device=device).unsqueeze(0)  # (1, poly_max)
+        mask = arange_k < poly_value.unsqueeze(1)  # (I, poly_max)
+        mask = mask.unsqueeze(0).expand(L, -1, -1)  # (L, I, poly_max)
+        
+        log_par = torch.log(torch.clamp(par, min=1e-12))
+        
+        valid_log_par = log_par * mask.float()
+        count = mask.sum(dim=2, keepdim=True).clamp(min=1.0)  # (L, I, 1)
+        
+        if method == 'zero_sum':
+            mean_log = valid_log_par.sum(dim=2, keepdim=True) / count
+            results = log_par - mean_log
+        elif method == 'max_zero':
+            safe_log = torch.where(mask, log_par, torch.tensor(-float('inf'), device=device))
+            max_log = safe_log.max(dim=2, keepdim=True).values
+            results = log_par - max_log
+        elif method == 'first_zero':
+            first_log = log_par[:, :, 0].unsqueeze(2)
+            results = log_par - first_log
+        else:
+            results = log_par
+            
         return results
-    
+
     def LCA(self, Z):
-        P_LCA = torch.softmax(self.par[Z - 1, :, :], dim=2) * torch.tensor(~self.par_mask[Z.detach().cpu() - 1, :, :], device=self.device).float()
+        idx = Z - 1  # (N,)
+        par_selected = self.par[idx]  # (N, I, poly_max)
+        mask_selected = ~self.par_mask[idx]  # (N, I, poly_max)
+        P_LCA = torch.softmax(par_selected, dim=2) * mask_selected.float()
         return P_LCA
 
     def get_P_Z_Xn(self):
         P_Z, par = self.forward()
-        
         eps = self.eps
         p = par.unsqueeze(0)  # (1, L, I, poly_max)
-        rt = self.response_hot.unsqueeze(1)  # (N, 1, I, poly_max)
+        rt = self.response_hot_buf.unsqueeze(1)  # (N, 1, I, poly_max)
         probs = (p * rt).sum(dim=3)  # (N, L, I)
         log_probs = torch.log(probs + eps)  # (N, L, I)
         log_pxz = torch.sum(log_probs, dim=2)  # (N, L)
         log_pz = torch.log(P_Z + eps)  # (L,)
         log_pz = log_pz.repeat(self.N, 1)  # (N, L)
         log_joint = log_pz + log_pxz  # (N, L)
-        
         log_joint_max = torch.max(log_joint, dim=1, keepdim=True).values
         log_joint = log_joint - log_joint_max
-
-        P_Z_Xn = F.softmax(log_joint, dim=1)              # (N, L)
+        P_Z_Xn = F.softmax(log_joint, dim=1)  # (N, L)
         return P_Z_Xn
     
     def get_Z(self):
@@ -270,7 +280,7 @@ class LCAnet(nn.Module):
     def log_lik(self, P_Z, par):
         eps = self.eps
         p = par.unsqueeze(0)  # (1, L, I, poly_max)
-        rt = self.response_hot.unsqueeze(1)  # (N, 1, I, poly_max)
+        rt = self.response_hot_buf.unsqueeze(1)  # (N, 1, I, poly_max)
         probs = (p * rt).sum(dim=3)  # (N, L, I)
         log_probs = torch.log(probs + eps)  # (N, L, I)
         log_pxz = torch.sum(log_probs, dim=2)  # (N, L)
@@ -278,15 +288,12 @@ class LCAnet(nn.Module):
         log_pz = log_pz.repeat(self.N, 1)  # (N, L)
         log_joint = log_pz + log_pxz  # (N, L)
         log_marginal_per_sample = torch.logsumexp(log_joint, dim=1)  # (N,)
-        log_likelihood = torch.sum(log_marginal_per_sample)  # 标量
+        log_likelihood = torch.sum(log_marginal_per_sample)  # scalar
         return log_likelihood
     
     def loss(self, P_Z, par):
-        
         n_log_likelihood = - self.log_lik(P_Z, par)
-
         total_loss = n_log_likelihood
-    
         return total_loss, -n_log_likelihood
 
     def forward(self, x=None):
@@ -305,12 +312,10 @@ class LCAnet(nn.Module):
             logits_mapped = logits
         
         P_Z_Xn = F.softmax(logits_mapped, dim=1)
-
         P_Z = torch.sum(P_Z_Xn, dim=0, keepdim=True) + self.eps
         self.P_Z = P_Z / torch.sum(P_Z)
 
-        valid_mask = torch.tensor(~self.par_mask, device=self.device)
-        par_temp = torch.where(valid_mask, self.par, torch.tensor(float('-inf'), device=self.device))
+        par_temp = torch.where(self.par_mask, torch.tensor(float('-inf'), device=self.device), self.par)
         par = torch.softmax(par_temp, dim=2)
         
         return self.P_Z, par
@@ -408,15 +413,29 @@ def NN_LCA(response,
            plot_interval=10, 
            device="CPU"):
     
-    seed = 9
+    os.environ["TORCH_COMPILE_DISABLE"] = "1"
+    os.environ["TORCHDYNAMO_DISABLE"] = "1"
+    os.environ["TORCHINDUCTOR_DISABLE_REPRODUCIBILITY"] = "1"
+    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE"] = "1"
+    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE_GEMM"] = "1"
+    os.environ["TORCH_COMPILE_DEBUG"] = "0"
+    
+    is_windows = sys.platform.startswith('win')
+    use_compile = not is_windows
+    
+    seed = 56756765
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
+        torch.backends.cudnn.deterministic = False
         
     if isinstance(hidden_layers, (list, tuple)):
         hidden_layers = [int(x) for x in hidden_layers]
@@ -467,6 +486,13 @@ def NN_LCA(response,
                                   dim_feedforward=dim_feedforward, eps=eps)
             LCAnet_warmup.to(device)
             
+            if device.type == 'cuda' and use_compile:
+                LCAnet_warmup = torch.compile(
+                    LCAnet_warmup,
+                    mode='reduce-overhead',
+                    dynamic=True
+                )
+            
             network_params = [p for p in LCAnet_warmup.parameters() if p is not LCAnet_warmup.par]
             optimizer = torch.optim.AdamW(
                 [
@@ -476,13 +502,17 @@ def NN_LCA(response,
                 weight_decay=Lambda
             )
             
+            scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
+            
             best_ll = -float('inf')
             for epoch in range(maxiter_wa):
                 optimizer.zero_grad()
-                P_Z, par = LCAnet_warmup()
-                loss, loss_ll = LCAnet_warmup.loss(P_Z, par)
-                loss.backward()
-                optimizer.step()
+                with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=(device.type == 'cuda')):
+                    P_Z, par = LCAnet_warmup()
+                    loss, loss_ll = LCAnet_warmup.loss(P_Z, par)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
                 
                 current_ll = loss_ll.item()
                 if current_ll > best_ll:
@@ -508,8 +538,8 @@ def NN_LCA(response,
     else:
         best_models = []
         
-    if starts > 0 and vis:
-        print("\n")
+    if vis & starts > 0:
+       print("\n\n")
 
     if nrep <= 5:
         colors = plt.cm.tab10(np.linspace(0, 1, nrep))
@@ -543,7 +573,7 @@ def NN_LCA(response,
         for rep in range(nrep):
             color = colors[rep]
             line_trainings.append(ax.plot([], [], '.', color=color, alpha=0.5, 
-                                         markersize=3,  # 点的大小
+                                         markersize=3,
                                          label=f'Training Rep {rep+1}', )[0])
             line_annealings.append(ax.plot([], [], 'o', color='gray', alpha=0.6, 
                                           markersize=6)[0])
@@ -568,6 +598,13 @@ def NN_LCA(response,
                               d_model=d_model, nhead=nhead, 
                               dim_feedforward=dim_feedforward, eps=eps)
         LCAnet_model.to(device)
+        
+        if device.type == 'cuda' and use_compile:
+            LCAnet_model = torch.compile(
+                LCAnet_model,
+                mode='reduce-overhead',
+                dynamic=True
+            )
         
         if starts > 0 and rep < len(best_models):
             LCAnet_model.load_state_dict(best_models[rep][1])
@@ -609,17 +646,21 @@ def NN_LCA(response,
         )
         scheduler = ReduceLROnPlateau(optimizer, 'min', patience=scheduler_patience, factor=scheduler_factor)
         
+        scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
+        
         while improved and cycle < maxcycle:
             cycle += 1
 
             patience = 0
             for epoch in range(maxiter):
                 optimizer.zero_grad()
-                P_Z, par = LCAnet_model()
-                loss, loss_ll = LCAnet_model.loss(P_Z, par)
-                loss.backward()
-                optimizer.step()
-                scheduler.step(loss)
+                with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=(device.type == 'cuda')):
+                    P_Z, par = LCAnet_model()
+                    loss, loss_ll = LCAnet_model.loss(P_Z, par)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                scheduler.step(loss.item())
 
                 cur_loss = loss.item()
                 cur_ll = loss_ll.item()
@@ -769,8 +810,8 @@ def NN_LCA(response,
             global_best_marker.set_data([global_best_step], [global_best_loss])
             global_best_marker.set_zorder(10)
         
-        handles = [line_trainings[best_rep_index], global_best_marker, annealing_legend]
-        labels = ['Best Nrep', 'Global Best', 'Annealing']
+        handles = [global_best_marker, line_trainings[best_rep_index], annealing_legend]
+        labels = ['Global Best', 'Best Nrep', 'Annealing']
         ax.legend(handles=handles, labels=labels, 
                  loc='upper right', fontsize='large')
         

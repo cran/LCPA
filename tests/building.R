@@ -36,7 +36,7 @@
 #'
 #'
 #' library(cranlogs)
-#' downloads <- cran_downloads(packages = "Qval", from = "2024-08-01", to = "2025-10-30")
+#' downloads <- cran_downloads(packages = "LCAP", from = "2024-08-01", to = "2026-4-09")
 #' print(downloads)
 #' sum(downloads$count)
 #'

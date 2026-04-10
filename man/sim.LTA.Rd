@@ -27,7 +27,7 @@ sim.LTA(
 \arguments{
 \item{N}{Integer; sample size.}
 
-\item{I}{Integer; number of observed items/indicators per time point.}
+\item{I}{Integer; number of observed indicators/items/indicators per time point.}
 
 \item{L}{Integer; number of latent classes/profiles.}
 
@@ -50,9 +50,9 @@ generated with 0.7 diagonal probability and uniform off-diagonals. \strong{Ignor
 
 \item{covs.range}{Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).}
 
-\item{poly.value}{Integer; number of categories for polytomous LCA items (default: 5).}
+\item{poly.value}{Integer; number of categories for polytomous LCA indicators (default: 5).}
 
-\item{IQ}{Character; method for generating item discrimination in LCA. \code{"random"} (default) or fixed values.}
+\item{IQ}{Character; method for generating indicator discrimination in LCA. \code{"random"} (default) or fixed values.}
 
 \item{params}{List or NULL; pre-specified parameters for reproducibility (see Details).}
 
@@ -80,7 +80,7 @@ A list of class \code{"sim.LTA"} containing:
 \item{\code{responses}}{List of length \code{times}; observed data matrices (\eqn{N \times I}).}
 \item{\code{Zs}}{List of length \code{times}; true latent class memberships (\eqn{N \times 1} vectors).}
 \item{\code{P.Zs}}{List of length \code{times}; marginal class probabilities at each time.}
-\item{\code{par}}{Item parameters for LCA (if \code{type="LCA"}).}
+\item{\code{par}}{Indicator parameters for LCA (if \code{type="LCA"}).}
 \item{\code{means}}{Class means for LPA (if \code{type="LPA"}).}
 \item{\code{covs}}{Class covariance matrices for LPA (if \code{type="LPA"}).}
 \item{\code{rate}}{True transition matrices (non-covariate mode only; \code{NULL} when \code{times=1}).}
@@ -95,7 +95,7 @@ A list of class \code{"sim.LTA"} containing:
 Simulates longitudinal latent class/profile data where initial class membership and transition
 probabilities may be influenced by time-varying covariates. Supports both Latent Class Analysis (LCA)
 for categorical outcomes and Latent Profile Analysis (LPA) for continuous outcomes. Measurement
-invariance is assumed by default (identical item parameters across time).
+invariance is assumed by default (identical indicator parameters across time).
 }
 \details{
 Covariate Requirements:
@@ -110,7 +110,7 @@ randomly generated from \eqn{\text{Uniform}(-1, 1)} (non-reference classes only)
 
 Parameter Compatibility:
 \itemize{
-\item Use \code{params} to fix item parameters (LCA) or class means/covariances (LPA) across simulations.
+\item Use \code{params} to fix indicator parameters (LCA) or class means/covariances (LPA) across simulations.
 \item In non-covariate mode, \code{rate} must be a list of \eqn{(times-1)} valid transition matrices (ignored when \code{times=1}).
 \item In covariate mode with \code{times>=2}, all three (\code{covariates}, \code{beta}, \code{gamma}) must be consistent in dimensions.
 }

@@ -4,7 +4,7 @@
 \alias{get.P.Z.Xn.LPA}
 \title{Compute Posterior Latent Profile Probabilities Based on Fixed Parameters}
 \usage{
-get.P.Z.Xn.LPA(response, means, covs, tol = 1e-10, maxiter = 2000, vis = TRUE)
+get.P.Z.Xn.LPA(response, means, covs, P.Z)
 }
 \arguments{
 \item{response}{Numeric matrix (\eqn{N \times I}) of continuous responses.
@@ -21,69 +21,42 @@ Row \eqn{l} contains profile-specific means \eqn{\boldsymbol{\mu}_l}.}
 \itemize{
 \item \code{covs[, , l]} = profile-specific covariance matrix \eqn{\boldsymbol{\Sigma}_l}
 }
-Each slice must be symmetric and positive definite (after jittering).}
+Each slice must be symmetric and positive definite.}
 
-\item{tol}{Convergence tolerance for absolute change in log-likelihood. Default: 1e-10.}
-
-\item{maxiter}{Maximum EM iterations. Default: 2000.}
-
-\item{vis}{Logical: show iteration progress? Default: TRUE.}
+\item{P.Z}{Vector of length \eqn{L} with fixed profile prior probabilities (\eqn{\pi_l}).
+These values are used directly without re-estimation.}
 }
 \value{
 Numeric matrix (\eqn{N \times L}) of posterior probabilities.
-Rows sum to 1. Columns named "Class.1", "Class.2", etc.
+Rows sum to 1. Columns are named "Class.1", "Class.2", etc.
 }
 \description{
-Computes posterior probabilities of latent profile membership while simultaneously
-re-estimating profile prevalences via an EM algorithm. Unlike standard posterior
-computation, this function iteratively updates profile prevalences (\eqn{\pi_l})
-using fixed profile characteristics (means and covariances).
+Computes posterior probabilities of latent profile membership for each observation
+using fixed profile parameters (means, covariances) and fixed prior probabilities.
 }
 \details{
-\enumerate{
-\item Numerical stability:
-\itemize{
-\item Covariance matrices are jittered with \code{tol} for positive definiteness
-\item Log-space computation with log-sum-exp trick
-\item Uniform probabilities used as fallback for non-finite densities
-}
-\item Profile prevalences are initialized uniformly (\eqn{\pi_l^{(0)} = 1/L}).
-\item Termination occurs when:
-\itemize{
-\item \eqn{|\log L^{(t)} - \log L^{(t-1)}| < \code{tol}} (log-likelihood change)
-\item Maximum iterations reached
-}
-}
-}
-\section{Algorithm}{
-
-The function implements an EM algorithm with:
-\describe{
-\item{E-step}{Compute posterior probabilities for observation \eqn{n} and profile \eqn{l}:
+Unlike an EM algorithm, this function does NOT iteratively update profile prevalences.
+It performs a single E-step calculation:
 \deqn{
-      P(Z_n = l \mid \mathbf{x}_n) =
-      \frac{\pi_l^{(t)} \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_l, \boldsymbol{\Sigma}_l)}
-           {\sum_{k=1}^L \pi_k^{(t)} \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k)}
-    }}
-\item{M-step}{Update profile prevalences:
-\deqn{
-      \pi_l^{(t+1)} = \frac{1}{N} \sum_{n=1}^N P(Z_n = l \mid \mathbf{x}_n)
-    }}
+  P(Z_n = l \mid \mathbf{x}_n) =
+  \frac{\pi_l \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_l, \boldsymbol{\Sigma}_l)}
+       {\sum_{k=1}^L \pi_k \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k)}
 }
-Convergence is determined by the absolute change in log-likelihood between iterations.
+where \eqn{\pi_l} are the fixed priors provided in the \code{P.Z} argument.
 }
-
 \examples{
 \donttest{
 library(LCPA)
 set.seed(123)
-data.obj <- sim.LPA(N = 300, I = 2, L = 2, constraint = "VV")  # From LCPA
-fit <- LPA(data.obj$response, L = 2, method = "EM", nrep = 5)  # From LCPA
+data.obj <- sim.LPA(N = 300, I = 2, L = 2, constraint = "VV")
+fit <- LPA(data.obj$response, L = 2, method = "EM", nrep = 5)
 
+# Calculate posteriors using fixed parameters from a fitted model
 P.Z.Xn <- get.P.Z.Xn.LPA(
   response = data.obj$response,
-  means = fit$params$means,    # Fixed profile means
-  covs = fit$params$covs       # Fixed profile covariances
+  means = fit$params$means,
+  covs = fit$params$covs,
+  P.Z = fit$params$P.Z
 )
 head(P.Z.Xn)
 }

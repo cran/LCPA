@@ -134,24 +134,6 @@ get.runs <- function(posi, trial.list){
   return(runs)
 }
 
-format_mplus_vars_auto <- function(var_names, indent = "  ", max_line_length = 80) {
-  current_line <- indent
-  lines <- character(0)
-
-  for (v in var_names) {
-    proposed <- paste(current_line, v)
-    if (nchar(proposed) > max_line_length) {
-      lines <- c(lines, current_line)
-      current_line <- paste(indent, v)
-    } else {
-      current_line <- proposed
-    }
-  }
-  lines <- c(lines, current_line)  # add last line
-
-  return(paste(lines, collapse = "\n"))
-}
-
 is.valid.params <- function(params, model.type) {
   if (any(params$P.Z <= 0) || any(params$P.Z >= 1) || abs(sum(params$P.Z) - 1) > 1e-6) {
     return(FALSE)

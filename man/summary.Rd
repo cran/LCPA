@@ -18,9 +18,9 @@
 
 \method{summary}{LPA}(object, digits = 4, I.max = 5, ...)
 
-\method{summary}{LTA}(object, digits = 4, I.max = 5, ...)
+\method{summary}{LTA}(object, digits = 4, ...)
 
-\method{summary}{LCPA}(object, digits = 4, I.max = 5, ...)
+\method{summary}{LCPA}(object, digits = 4, ...)
 
 \method{summary}{sim.LCA}(object, digits = 4, I.max = 5, ...)
 

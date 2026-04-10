@@ -443,7 +443,7 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
 
 #' @describeIn summary Summary method for \code{LTA} objects
 #' @export
-summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
+summary.LTA <- function(object, digits = 4, ...) {
   arguments <- object$arguments
   times <- length(object$P.Zs)
   L <- ncol(object$beta)
@@ -506,7 +506,7 @@ summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
 
   # Initial state coefficients table (always needed)
   cov_names_initial <- cov_names_list[[1]]
-  vars_to_show_initial <- min(I.max, length(cov_names_initial))
+  vars_to_show_initial <- length(cov_names_initial)
 
   initial_coef <- data.frame(
     Class = character(),
@@ -562,7 +562,7 @@ summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
     )
 
     cov_names_trans <- cov_names_list[[2]]  # Same for all time points
-    vars_to_show_trans <- min(I.max, length(cov_names_trans))
+    vars_to_show_trans <- length(cov_names_trans)
 
     # CRITICAL FIX: Correct reference class handling for transitions
     # For each FROM class, all transitions are relative to the SAME reference destination class
@@ -604,7 +604,7 @@ summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
     transition_coefs <- list()
     for (t in 1:(times-1)) {
       cov_names_trans <- cov_names_list[[t+1]]
-      vars_to_show_trans <- min(I.max, length(cov_names_trans))
+      vars_to_show_trans <- length(cov_names_trans)
 
       trans_df <- data.frame(
         From_Class = character(),
@@ -689,7 +689,6 @@ summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
     transition_models = transition_coefs,
     convergence = convergence_info,
     digits = digits,
-    I.max.shown = I.max,
     total.vars = if (!is.null(arguments$covariates)) max(sapply(arguments$covariates, ncol)) else 1,
     covariates.timeCross = covariates.timeCross,
     reference_class = ref.class  # Store reference class at top level for easy access
@@ -701,7 +700,7 @@ summary.LTA <- function(object, digits = 4, I.max = 5, ...) {
 
 #' @describeIn summary Summary method for \code{LCPA} objects
 #' @export
-summary.LCPA <- function(object, digits = 4, I.max = 5, ...) {
+summary.LCPA <- function(object, digits = 4, ...) {
   arguments <- object$arguments
   L <- ncol(object$beta)
   ref.class <- arguments$ref.class
@@ -746,7 +745,7 @@ summary.LCPA <- function(object, digits = 4, I.max = 5, ...) {
     }
   }
 
-  vars_to_show <- min(I.max, length(cov_names))
+  vars_to_show <- length(cov_names)
 
   # Coefficients table (beta)
   coef_df <- data.frame(
@@ -822,7 +821,7 @@ summary.LCPA <- function(object, digits = 4, I.max = 5, ...) {
     reference_class = ref.class,
     convergence = convergence_info,
     digits = digits,
-    I.max.shown = vars_to_show,
+    vars.to.show = vars_to_show,
     total.vars = length(cov_names),
     has.covariates = !is.null(arguments$covariate)
   )
@@ -1226,7 +1225,7 @@ summary.compare.model <- function(object, digits = 4, ...) {
                   "SIC", "CAIC", "AWE", "SABIC"),
     mode1 = c(
       as.character(L1),
-      fmt_num(fit.index1$npar),
+      as.character(fit.index1$npar),
       fmt_num(fit.index1$Log.Lik),
       fmt_num(fit.index1[["-2LL"]]),
       fmt_num(fit.index1$AIC),
@@ -1238,7 +1237,7 @@ summary.compare.model <- function(object, digits = 4, ...) {
     ),
     mode2 = c(
       as.character(L2),
-      fmt_num(fit.index2$npar),
+      as.character(fit.index2$npar),
       fmt_num(fit.index2$Log.Lik),
       fmt_num(fit.index2[["-2LL"]]),
       fmt_num(fit.index2$AIC),

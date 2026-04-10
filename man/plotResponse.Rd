@@ -10,7 +10,7 @@ plotResponse(response)
 \item{response}{A matrix or data frame containing response data where:
 \itemize{
 \item Rows represent respondents, samples or observations
-\item Columns represent variables, items or questions (must have numeric suffixes, e.g., "item1", "Q2")
+\item Columns represent variables, indicators or questions (must have numeric suffixes, e.g., "indicator1", "Q2")
 \item Cell values contain numeric responses
 }
 Non-numeric columns (except row identifiers) will cause errors.}
@@ -18,16 +18,16 @@ Non-numeric columns (except row identifiers) will cause errors.}
 \value{
 A \code{ggplot} object containing:
 \itemize{
-\item Density curves for each variable colored by item
+\item Density curves for each variable colored by indicator
 \item Adaptive color schemes based on number of variables
-\item Optimized legend layout for large numbers of items
+\item Optimized legend layout for large numbers of indicators
 \item Publication-ready theme with grid lines and clean styling
 }
 The plot can be further customized using standard ggplot2 syntax.
 }
 \description{
 Creates a publication-quality density plot showing the distribution of responses
-across multiple items/variables. Automatically handles variable ordering, color
+across multiple indicators/items/variables. Automatically handles variable ordering, color
 scaling, and legend layout based on the number of variables.
 }
 \section{Theming Details}{
@@ -43,14 +43,14 @@ The plot uses a minimal theme with:
 }
 
 \examples{
-# Simulate response data for 5 items
+# Simulate response data for 5 indicators
 set.seed(42)
 resp_data <- data.frame(
-  item1 = rnorm(100, mean = 3, sd = 1),
-  item2 = rnorm(100, mean = 2, sd = 0.8),
-  item3 = rnorm(100, mean = 4, sd = 1.2),
-  item4 = rnorm(100, mean = 3.5, sd = 0.9),
-  item5 = rnorm(100, mean = 2.5, sd = 1.1)
+  indicator1 = rnorm(100, mean = 3, sd = 1),
+  indicator2 = rnorm(100, mean = 2, sd = 0.8),
+  indicator3 = rnorm(100, mean = 4, sd = 1.2),
+  indicator4 = rnorm(100, mean = 3.5, sd = 0.9),
+  indicator5 = rnorm(100, mean = 2.5, sd = 1.1)
 )
 
 library(LCPA)
@@ -58,10 +58,10 @@ library(LCPA)
 p <- plotResponse(resp_data)
 print(p)
 
-# For data with many items (18 items example)
-many_items <- as.data.frame(replicate(18, rnorm(50, mean = runif(1, 1, 5), sd = 1)))
-names(many_items) <- paste0("Q", 1:18)
-p_large <- plotResponse(many_items)
+# For data with many indicators (18 indicators example)
+many_indicators <- as.data.frame(replicate(18, rnorm(50, mean = runif(1, 1, 5), sd = 1)))
+names(many_indicators) <- paste0("Q", 1:18)
+p_large <- plotResponse(many_indicators)
 print(p_large)
 
 }

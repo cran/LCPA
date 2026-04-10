@@ -6,9 +6,9 @@
 #'
 #' @param response A matrix or data frame of observed responses.
 #'                  Rows of the matrix represent individuals/participants/observations (\eqn{N}), columns of the
-#'                  matrix represent observed items/variables (\eqn{I}).
-#'                  For \code{type = "LCA"}: items must be binary or categorical (coded as integers starting from 0).
-#'                  For \code{type = "LPA"}: items must be continuous (numeric), and the response matrix must be
+#'                  matrix represent observed indicators/items/variables (\eqn{I}).
+#'                  For \code{type = "LCA"}: indicators must be binary or categorical (coded as integers starting from 0).
+#'                  For \code{type = "LPA"}: indicators must be continuous (numeric), and the response matrix must be
 #'                  standardized using \code{\link[base]{scale}} or \code{\link[LCPA]{normalize}} prior to input.
 #' @param L Integer scalar. Number of latent classes/profiles. Must satisfy \eqn{L \geq 2}.
 #' @param ref.class Integer \eqn{L \geq ref.class \geq 1}. Specifies which latent class to use as the reference category.
@@ -17,8 +17,8 @@
 #'                  then \code{ref.class} refers to the position in this sorted order.
 #' @param type Character string. Specifies the type of latent variable model for Step 1:
 #'             \itemize{
-#'               \item \code{"LCA"} — Latent Class Analysis for categorical items.
-#'               \item \code{"LPA"} — Latent Profile Analysis for continuous items.
+#'               \item \code{"LCA"} — Latent Class Analysis for categorical indicators.
+#'               \item \code{"LPA"} — Latent Profile Analysis for continuous indicators.
 #'             }
 #'             See \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}} for details.
 #' @param covariate Optional. A matrix or data frame of covariates for modeling latent class membership.
@@ -35,8 +35,8 @@
 #'     \item A \code{list} for LCA containing:
 #'       \describe{
 #'         \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-#'                           each latent class, item, and response category (where \eqn{K_{\max}} is the maximum
-#'                           number of categories across items).}
+#'                           each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
+#'                           number of categories across indicators).}
 #'         \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
 #'       }
 #'     \item A \code{list} for LPA containing:
@@ -54,8 +54,8 @@
 #'                 \item A \code{list} for LCA containing:
 #'                    \describe{
 #'                      \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-#'                                        each latent class, item, and response category (where \eqn{K_{\max}} is the maximum
-#'                                        number of categories across items).}
+#'                                        each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
+#'                                        number of categories across indicators).}
 #'                      \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
 #'                    }
 #'                 \item A \code{list} for LPA containing:
@@ -81,6 +81,8 @@
 #'                                      annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
 #'               }
 #' @param tol Convergence tolerance for log-likelihood difference (default: 1e-4).
+#' @param lower The upper bound for the estimation of regression coefficients, default is -10
+#' @param upper The lower bound for the estimation of regression coefficients, default is 10
 #' @param method.SE Character. Method for estimating standard errors of parameter estimates:
 #'               \itemize{
 #'                 \item \code{"Obs"} — Approximates the observed information matrix via numerical differentiation (Richardson's method).
@@ -268,7 +270,7 @@
 #' set.seed(123)
 #' N <- 2000  # Sample size
 #' L <- 3    # Number of latent classes
-#' I <- 6    # Number of items
+#' I <- 6    # Number of indicators
 #'
 #' # Create covariates (intercept + 2 covariates + 1 interaction)
 #'  Intercept = rep(1, N)
@@ -330,6 +332,7 @@ LCPA <- function(response, L = 2,
                  params = NULL, is.sort = TRUE,
                  constraint = "VV",
                  method = "EM", tol = 1e-4,
+                 lower=-10, upper=10,
                  method.SE = "Bootstrap", n.Bootstrap=100,
                  maxiter = 5000, nrep = 20,
                  starts = 100, maxiter.wa = 20,
@@ -418,9 +421,9 @@ LCPA <- function(response, L = 2,
     cat(paste0("Starting the second step for ", type, " ...\n\n"))
   }
   if (type == "LCA") {
-    P.Z.Xns <- list(get.P.Z.Xn.LCA(response = response, par = params$par, vis = vis))
+    P.Z.Xns <- list(get.P.Z.Xn.LCA(response = response, par = params$par, P.Z=params$P.Z))
   } else {
-    P.Z.Xns <- list(get.P.Z.Xn.LPA(response = response, means = params$means, covs = params$covs, vis = vis))
+    P.Z.Xns <- list(get.P.Z.Xn.LPA(response = response, means = params$means, covs = params$covs, P.Z=params$P.Z))
   }
   P.Zs <- list(colSums(P.Z.Xns[[1]]) / sum(P.Z.Xns[[1]]))
   Zs <- list(apply(P.Z.Xns[[1]], 1, which.max))
@@ -452,8 +455,8 @@ LCPA <- function(response, L = 2,
   }
 
   npar <- length(init.par)
-  lb <- rep(-5, npar)
-  ub <- rep( 5, npar)
+  lb <- rep(lower, npar)
+  ub <- rep(upper, npar)
 
   int_width <- ceiling(log10(N * I * L))
   total_width <- int_width + 5
@@ -623,16 +626,17 @@ LCPA <- function(response, L = 2,
     }
     par.Bootstrap <- matrix(0, n.Bootstrap, npar)
     for(bs in 1:n.Bootstrap){
-
+      covariates.cur <- vector("list", 1)
       samples.cur <- sample(1:N, N, replace = TRUE)
-      P.Z.Xns.cur <- Zs.cur <- P.Zs.cur <- covariates.cur <- vector("list", 1)
+      covariates.cur[[1]] <- covariates[[1]][samples.cur, , drop=FALSE]
+
+      P.Z.Xns.cur <- Zs.cur <- P.Zs.cur <- vector("list", 1)
       if(type == "LCA"){
-        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LCA(response=response[samples.cur, ], par=params$par, vis=FALSE)
+        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LCA(response=response[samples.cur, ], par=params$par, P.Z=params$P.Z)
       } else {
-        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LPA(response=response[samples.cur, ], means=params$means, covs=params$covs, vis=FALSE)
+        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LPA(response=response[samples.cur, ], means=params$means, covs=params$covs, P.Z=params$P.Z)
       }
 
-      covariates.cur[[1]] <- covariates[[1]][samples.cur, , drop=FALSE]
       P.Zs.cur[[1]] <- colSums(P.Z.Xns.cur[[1]]) / sum(P.Z.Xns.cur[[1]])
       Zs.cur[[1]] <- apply(P.Z.Xns.cur[[1]], 1, which.max)
 
@@ -642,7 +646,7 @@ LCPA <- function(response, L = 2,
         CEP.cur <- replicate(1, diag(L), simplify=FALSE)
       }
 
-      init.par <- rnorm(npar, mean=refined_init, sd=abs(refined_init) * 0.1)
+      init.par <- rnorm(npar, mean=0, sd=abs(refined_init) * 0.1)
       Log.Lik.history.cur <- c(0)
       make_loglik_with_print_Bootstrap <- function(vis, ref.class, bs, n.Bootstrap) {
         iter <- 0

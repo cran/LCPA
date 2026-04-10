@@ -10,7 +10,7 @@ normalize(response)
 \item{response}{A numeric matrix or data frame of dimension \eqn{N \times I}, where:
 \itemize{
 \item \eqn{N} = number of observations (rows)
-\item \eqn{I} = number of variables (columns)
+\item \eqn{I} = number of indicators/items/variables (columns)
 }
 Non-numeric columns will be coerced to numeric with a warning. Missing values are not allowed
 and will cause the function to fail. Constant columns (zero variance) will produce \code{NaN} values.}

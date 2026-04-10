@@ -1,6 +1,7 @@
 #' @importFrom MplusAutomation mplusObject mplusModeler
 #' @importFrom dplyr filter
 #' @importFrom stats na.omit
+
 Mplus.LCA <- function(response, L = 2,
                       nrep = 10, starts = 200, maxiter.wa=20,
                       vis = TRUE,
@@ -76,15 +77,27 @@ Mplus.LCA <- function(response, L = 2,
   if (is.null(var_names)) {
     var_names <- paste0("V", seq_len(ncol(response)))
   }
-  colnames(response) <- var_names
-  var_names <- format_mplus_vars_auto(var_names)
+
+  standardize_varnames <- function(names) {
+    names <- gsub("^[^a-zA-Z]", "V", names)
+    names <- gsub("[^a-zA-Z0-9_]", "_", names)
+    names <- make.unique(names, sep = "_")
+    return(names)
+  }
+
+  var_names_std <- standardize_varnames(var_names)
+  colnames(response) <- var_names_std
+  var_names <- var_names_std
+
   df <- as.data.frame(response)
 
   poly.value <- sapply(df, function(x) length(unique(na.omit(x))))
   if (any(poly.value == 1)) stop("Some variables have only 1 level; invalid for LCA.")
 
+  var_names_formatted <- format_mplus_vars_auto(var_names)
+
   variable_str <- paste0("CLASSES = c1(", L, ");\n",
-                         "CATEGORICAL = ", paste(var_names, collapse = " "), ";\n",
+                         "CATEGORICAL = ", var_names_formatted, ";\n",
                          "ANALYSIS:\n",
                          "  TYPE = mixture;\n",
                          "  STARTS = ", starts, " ", nrep, ";\n",
@@ -94,7 +107,7 @@ Mplus.LCA <- function(response, L = 2,
 
   model_str <- "%OVERALL%"
 
-  output_str <- "  TECH11 TECH14;"
+  output_str <- "  TECH8;"
 
   post_file <- file.path(temp_dir, "posterior.dat")
   savedata_str <- paste0('  FILE = "', post_file, '";\n',
@@ -118,7 +131,7 @@ Mplus.LCA <- function(response, L = 2,
     cat("Running Mplus ...\n")
   }
 
-  Mplus.obj <- suppressWarnings(
+  Mplus.obj <- suppressMessages(suppressWarnings(
     MplusAutomation::mplusModeler(
       mobj,
       dataout   = dataout_path,
@@ -128,7 +141,7 @@ Mplus.LCA <- function(response, L = 2,
       check     = FALSE,
       quiet     = TRUE
     )
-  )
+  ))
 
   if(is.null(Mplus.obj) ||
      is.null(Mplus.obj$results) ||
@@ -145,7 +158,7 @@ Mplus.LCA <- function(response, L = 2,
 
   prob_data <- dplyr::filter(
     params_df,
-    grepl("^V[0-9]+$", .data[["param"]]),
+    .data[["param"]] %in% var_names,
     .data[["LatentClass"]] %in% 1:L
   )
 
@@ -154,18 +167,23 @@ Mplus.LCA <- function(response, L = 2,
     dim = c(L, I, poly.max),
     dimnames = list(
       paste0("Class.", 1:L),
-      paste0("V", 1:I),
+      var_names,
       paste0("Cat.", 1:poly.max)
     )
   )
+
   for (i in 1:nrow(prob_data)) {
     row <- prob_data[i, ]
     cls_idx <- as.integer(row$LatentClass)
-    var_idx <- as.integer(gsub("V", "", row$param))
+    var_idx <- match(row$param, var_names)
     cat_idx <- as.integer(row$category)
+
+    if (is.na(var_idx)) next
+
     if (cls_idx < 1 || cls_idx > L) next
     if (var_idx < 1 || var_idx > I) next
     if (cat_idx < 1 || cat_idx > poly.max) next
+
     est_val <- suppressWarnings(as.numeric(row$est))
     if (is.na(est_val) || est_val < 0 || est_val > 1) {
       warning(paste("Invalid probability at row", i,
@@ -211,3 +229,22 @@ Mplus.LCA <- function(response, L = 2,
   return(res)
 }
 
+format_mplus_vars_auto <- function(var_names, indent = "  ", max_line_length = 70) {
+  result_lines <- c()
+  current_line <- indent
+
+  for (var in var_names) {
+    sep <- if (nchar(current_line) == nchar(indent)) "" else " "
+    candidate <- paste0(current_line, sep, var)
+
+    if (nchar(candidate) > max_line_length) {
+      result_lines <- c(result_lines, current_line)
+      current_line <- paste0(indent, var)
+    } else {
+      current_line <- candidate
+    }
+  }
+
+  result_lines <- c(result_lines, current_line)
+  return(paste(result_lines, collapse = "\n"))
+}

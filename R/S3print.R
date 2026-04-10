@@ -406,57 +406,94 @@ print.summary.LTA <- function(x, ...) {
 print_coef_table <- function(df, digits) {
   if (nrow(df) == 0) return(cat("  No coefficients to display\n"))
 
-  # Add significance markers
+  # 1. Add significance markers (Sig column) based on p_value
   if ("p_value" %in% names(df)) {
     df$Sig <- ""
-    p_vals <- as.numeric(df$p_value)
-    df$Sig[!is.na(p_vals) & p_vals < 0.001] <- "***"
-    df$Sig[!is.na(p_vals) & p_vals < 0.01 & p_vals >= 0.001] <- "**"
-    df$Sig[!is.na(p_vals) & p_vals < 0.05 & p_vals >= 0.01] <- "*"
-    df$Sig[!is.na(p_vals) & p_vals < 0.1 & p_vals >= 0.05] <- "."
+    # Ensure p_values are numeric for comparison
+    p_vals_num <- suppressWarnings(as.numeric(df$p_value))
+
+    df$Sig[!is.na(p_vals_num) & p_vals_num < 0.001] <- "***"
+    df$Sig[!is.na(p_vals_num) & p_vals_num < 0.01 & p_vals_num >= 0.001] <- "** "
+    df$Sig[!is.na(p_vals_num) & p_vals_num < 0.05 & p_vals_num >= 0.01] <- "*  "
+    df$Sig[!is.na(p_vals_num) & p_vals_num < 0.1 & p_vals_num >= 0.05] <- ".  "
   }
 
-  # Create 95% CI column
+  # 2. Format P Value for display (New Column: P Value)
+  if ("p_value" %in% names(df)) {
+    p_vals_num <- suppressWarnings(as.numeric(df$p_value))
+    df$`P Value` <- NA_character_
+
+    valid_p <- !is.na(p_vals_num) & is.finite(p_vals_num)
+
+    # Format: if < 0.0001 show "< 0.0001", else show 4 decimal places
+    df$`P Value`[valid_p & p_vals_num < 0.0001] <- "< 0.0001"
+    df$`P Value`[valid_p & p_vals_num >= 0.0001] <- sprintf("%.4f", p_vals_num[valid_p & p_vals_num >= 0.0001])
+
+    # Handle NA/Inf cases explicitly as string "NA" for printing consistency
+    df$`P Value`[!valid_p] <- "NA"
+  }
+
+  # 3. Create 95% CI column
   if ("lower_95" %in% names(df) && "upper_95" %in% names(df)) {
     valid_ci <- !is.na(df$lower_95) & !is.na(df$upper_95) & is.finite(df$lower_95) & is.finite(df$upper_95)
     df$`95% CI` <- "NA"
     df$`95% CI`[valid_ci] <- sprintf("(%.*f, %.*f)", digits, df$lower_95[valid_ci], digits, df$upper_95[valid_ci])
   }
 
-  # Format numeric columns
-  if ("Estimate" %in% names(df)) {
-    valid_est <- !is.na(df$Estimate) & is.finite(df$Estimate)
-    df$Estimate <- as.character(df$Estimate)
-    df$Estimate[valid_est] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$Estimate[valid_est]))
+  # 4. Format numeric columns to character strings for aligned printing
+  format_numeric_col <- function(col_name, df_obj, dig) {
+    if (col_name %in% names(df_obj)) {
+      vals <- df_obj[[col_name]]
+      # Check if already character (from previous steps like P Value) to avoid double formatting errors
+      if (!is.character(vals)) {
+        valid <- !is.na(vals) & is.finite(vals)
+        formatted <- rep("NA", length(vals))
+        formatted[valid] <- sprintf(paste0("%.", dig, "f"), as.numeric(vals[valid]))
+        df_obj[[col_name]] <- formatted
+      }
+    }
+    return(df_obj)
   }
 
-  if ("Std_Error" %in% names(df)) {
-    valid_se <- !is.na(df$Std_Error) & is.finite(df$Std_Error)
-    df$Std_Error <- as.character(df$Std_Error)
-    df$Std_Error[valid_se] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$Std_Error[valid_se]))
-  }
+  df <- format_numeric_col("Estimate", df, digits)
+  df <- format_numeric_col("Std_Error", df, digits)
+  df <- format_numeric_col("z_value", df, 4) # z-value usually looks better with 4 digits
 
-  if ("z_value" %in% names(df)) {
-    valid_z <- !is.na(df$z_value) & is.finite(df$z_value)
-    df$z_value <- as.character(df$z_value)
-    df$z_value[valid_z] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$z_value[valid_z]))
-  }
-
-  # Define column order with 95% CI after Std_Error
+  # 5. Define column order
+  # Order: Class, Covariate, Estimate, Std_Error, 95% CI, z_value, P Value, Sig
   cols <- c("Class", "Covariate", "Estimate", "Std_Error")
-  if ("95% CI" %in% names(df)) cols <- c(cols, "95% CI")
-  cols <- c(cols, "z_value")
-  if ("Sig" %in% names(df)) cols <- c(cols, "Sig")
 
+  if ("95% CI" %in% names(df)) {
+    cols <- c(cols, "95% CI")
+  }
+
+  cols <- c(cols, "z_value")
+
+  # Insert P Value BEFORE Sig
+  if ("P Value" %in% names(df)) {
+    cols <- c(cols, "P Value")
+  }
+
+  if ("Sig" %in% names(df)) {
+    cols <- c(cols, "Sig")
+  }
+
+  # Subset dataframe to selected columns
   print_df <- df[, cols, drop = FALSE]
+
+  # Clean up column names for display (replace underscores with spaces)
   colnames(print_df) <- gsub("_", " ", colnames(print_df))
 
-  print(print_df, row.names = FALSE, right = TRUE)
+  # Print the table without row names and quotes
+  print(print_df, row.names = FALSE, right = TRUE, quote = FALSE)
+
+  # Footer notes
   if ("Sig" %in% names(df)) {
-    cat("Signif. codes:  *** < 0.001, ** < 0.01, * < 0.05, . < 0.1\n")
+    cat("\nSignif. codes:  *** < 0.001, ** < 0.01, * < 0.05, . < 0.1\n")
   }
   cat("95% confidence intervals calculated as: Estimate +/- 1.96 * Std_Error\n")
 }
+
 
 # Helper function to print transition tables with significance markers and 95% CI
 print_transition_table <- function(df, digits) {
@@ -578,9 +615,9 @@ print.summary.LCPA <- function(x, ...) {
   }
 
   # Note if truncated
-  if (x$total.vars > x$I.max.shown) {
+  if (x$total.vars > x$vars.to.show) {
     cat(sprintf("\nNote: Only top %d covariates shown (total: %d). Use summary(object, I.max = Inf) to see all.\n",
-                x$I.max.shown, x$total.vars))
+                x$vars.to.show, x$total.vars))
   }
 
   # Convergence Information

@@ -1,6 +1,7 @@
 #' @importFrom MplusAutomation mplusObject mplusModeler
 #' @importFrom dplyr filter
 #' @importFrom stats var
+
 Mplus.LPA <- function(response, L = 2, constraint = "VV",
                       nrep = 10, starts = 200, maxiter.wa=20,
                       vis = TRUE,
@@ -8,21 +9,22 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
                       files.path = NULL,
                       files.clean = TRUE) {
 
-
   if (!is.matrix(response) && !is.data.frame(response)) {
     stop("response must be a matrix or data frame")
   }
+
   response <- as.matrix(response)
   if (!is.numeric(response)) stop("response must be numeric")
   if (ncol(response) < 2) stop("At least two indicator variables required")
-  L <- as.integer(L)
 
+  L <- as.integer(L)
   I <- ncol(response)
   N <- nrow(response)
 
   if (is.null(files.path)) {
     stop("No valid 'files.path' provided!", call. = FALSE)
   }
+
   if(files.path != ""){
     if (!dir.exists(files.path)) {
       dir.create(
@@ -40,6 +42,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
     temp_dir <- paste0("Mplus_LPA_", timestamp)
   }
+
   if (!dir.exists(temp_dir)) {
     dir.create(
       temp_dir,
@@ -50,9 +53,11 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
       stop("Failed to create: ", paste0(getwd(), "/", temp_dir), call. = FALSE)
     }
   }
+
   if(vis){
     cat("Temporary working: ", paste0(getwd(), "/", temp_dir), "\n")
   }
+
   if (isTRUE(files.clean)) {
     on.exit({
       if (dir.exists(temp_dir)) {
@@ -76,12 +81,22 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     }, add = TRUE)
   }
 
-  var_names <- colnames(response)
-  if (is.null(var_names)) {
-    var_names <- paste0("V", seq_len(I))
-    colnames(response) <- var_names
+  orig_var_names <- colnames(response)
+  if (is.null(orig_var_names)) {
+    orig_var_names <- paste0("V", seq_len(I))
   }
-  # var_names_Mplus <- format_mplus_vars_auto(var_names)
+  standardize_varnames <- function(names) {
+    names_std <- tolower(names)
+    names_std <- gsub("^[^a-z]", "v", names_std)
+    names_std <- gsub("[^a-z0-9_]", "_", names_std)
+    names_std <- make.unique(names_std, sep = "_")
+    return(names_std)
+  }
+
+  var_names_std <- standardize_varnames(orig_var_names)
+  colnames(response) <- var_names_std
+  var_names <- var_names_std
+
   df <- as.data.frame(response)
 
   variable_str <- paste0("CLASSES = c1(", L, ");\n",
@@ -94,8 +109,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
 
   model_lines <- generate_mplus_model(constraint, var_names, L, class_var = "c1")
   model_str <- paste(model_lines, collapse = "\n")
-
-  output_str <- "  TECH11 TECH14;"
+  output_str <- "  TECH8;"
 
   post_file <- file.path(temp_dir, "posterior.dat")
   savedata_str <- paste0('  FILE = "', post_file, '";\n',
@@ -135,6 +149,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     if (file.exists(out_file)) break
     Sys.sleep(0.1)
   }
+
   if (!file.exists(out_file)) {
     stop("Mplus output file not found: ", out_file)
   }
@@ -147,38 +162,83 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
 
   analysis_result <- Mplus.obj$results
   params_df <- analysis_result$parameters$unstandardized
+
+  var_names_upper <- toupper(var_names)
+
   mean_data <- dplyr::filter(params_df, .data[["paramHeader"]] == "Means" & .data[["LatentClass"]] %in% 1:L)
-  var_data  <- dplyr::filter(params_df, .data[["paramHeader"]] == "Variances" & .data[["param"]] %in% var_names & .data[["LatentClass"]] %in% 1:L)
-  cov_data  <- dplyr::filter(params_df, .data[["paramHeader"]] %in% paste0("V", 1:I, ".WITH") & .data[["LatentClass"]] %in% 1:L)
+  var_data  <- dplyr::filter(params_df, .data[["paramHeader"]] == "Variances" & .data[["param"]] %in% var_names_upper & .data[["LatentClass"]] %in% 1:L)
+  cov_data <- dplyr::filter(
+    params_df,
+    grepl("\\.WITH$", .data[["paramHeader"]]) &
+      .data[["LatentClass"]] %in% 1:L
+  )
+
+  if (nrow(mean_data) > 0) {
+    mean_data$param <- tolower(mean_data$param)
+  }
+  if (nrow(var_data) > 0) {
+    var_data$param <- tolower(var_data$param)
+  }
+  if (nrow(cov_data) > 0) {
+    cov_data$param <- tolower(cov_data$param)
+    cov_data$paramHeader <- tolower(cov_data$paramHeader)
+  }
 
   means <- matrix(0, nrow = L, ncol = I, dimnames = list(1:L, var_names))
   covs <- array(0, dim = c(I, I, L), dimnames = list(var_names, var_names, 1:L))
+
   for (i in 1:nrow(mean_data)) {
     cls <- as.integer(sub("C1#", "", mean_data$LatentClass[i]))
     var <- mean_data$param[i]
-    means[cls, var] <- ifelse(is.numeric(as.numeric(mean_data$est[i])), as.numeric(mean_data$est[i]), NA)
+    if (var %in% colnames(means)) {
+      est_val <- as.numeric(mean_data$est[i])
+      if (!is.na(est_val) && is.finite(est_val)) {
+        means[cls, var] <- est_val
+      }
+    }
   }
+
   for (i in 1:nrow(var_data)) {
     cls <- as.integer(sub("C1#", "", var_data$LatentClass[i]))
     var <- var_data$param[i]
-    covs[var, var, cls] <- ifelse(is.numeric(as.numeric(var_data$est[i])), as.numeric(var_data$est[i]), NA)
+    if (var %in% rownames(covs) && var %in% colnames(covs)) {
+      est_val <- as.numeric(var_data$est[i])
+      if (!is.na(est_val) && is.finite(est_val)) {
+        covs[var, var, cls] <- est_val
+      }
+    }
   }
+
   for (i in 1:nrow(cov_data)) {
-    cls <- as.integer(sub("C1#", "", cov_data$LatentClass[i]))
-    var1 <- as.numeric(gsub("[^0-9]", "", cov_data$paramHeader[i]))
-    var2 <- as.numeric(gsub("[^0-9]", "", cov_data$param[i]))
-    var.cur <- ifelse(is.numeric(as.numeric(cov_data$est[i])), as.numeric(cov_data$est[i]), NA)
-    covs[var1, var2, cls] <- var.cur
-    covs[var2, var1, cls] <- var.cur
+    cls_raw <- as.character(cov_data$LatentClass[i])
+    cls <- as.integer(sub("C1#", "", cls_raw))
+
+    raw_var1 <- sub("\\.with$", "", as.character(cov_data$paramHeader[i]), ignore.case = TRUE)
+    raw_var1 <- tolower(raw_var1)
+
+    raw_var2 <- tolower(as.character(cov_data$param[i]))
+    var1_idx <- match(raw_var1, var_names)
+    var2_idx <- match(raw_var2, var_names)
+
+    if (!is.na(var1_idx) && !is.na(var2_idx)) {
+      est_val <- as.numeric(cov_data$est[i])
+
+      if (!is.na(est_val) && is.finite(est_val)) {
+        covs[var1_idx, var2_idx, cls] <- est_val
+        covs[var2_idx, var1_idx, cls] <- est_val
+      }
+    }
   }
 
   P.Z <- analysis_result$class_counts$posteriorProb[, 3]
   if(is.null(P.Z)){
     P.Z <- rep(1/L, L)
   }
+
   logres <- matrix(NA_real_, nrow = N, ncol = L)
   tresponse <- t(response)
   jitter = 1e-10
+
   for (l in 1:L) {
     covs.l <- covs[,,l]
     mean.l <- means[l,]
@@ -196,6 +256,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
       rowmax[nonfinite_rows] <- 0
     }
   }
+
   exp_rel <- exp(logres - matrix(rowmax, N, L))
   row_sums <- rowSums(exp_rel)
   bad <- !is.finite(row_sums) | row_sums < 1e-20
@@ -203,8 +264,8 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     exp_rel[bad,] <- 1/L
     row_sums[bad] <- 1
   }
-  P.Z.Xn <- exp_rel / row_sums
 
+  P.Z.Xn <- exp_rel / row_sums
   nk <- colSums(P.Z.Xn)
   empty_clusters <- which(nk < 1e-5)
   if (length(empty_clusters) > 0) {
@@ -222,6 +283,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
 
   Log.Lik <- get.Log.Lik.LPA(response, P.Z, means, covs, jitter = 1e-10)
   npar <- get.npar.LPA(I, L, constraint)
+
   AIC <- -2 * Log.Lik + 2 * npar
   BIC <- -2 * Log.Lik + npar * log(N)
 
@@ -229,6 +291,9 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     cat(sprintf("Mplus Model: %s\nLog-likelihood = %.5f | BIC = %.2f\n",
                 title_str, Log.Lik, BIC))
   }
+
+  dimnames(means) <- list(1:L, orig_var_names)
+  dimnames(covs) <- list(orig_var_names, orig_var_names, 1:L)
 
   res <- list(
     params = list(means = means, covs = covs, P.Z = P.Z),
@@ -251,59 +316,40 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
 
 #' @importFrom utils combn
 #' @importFrom stats setNames
-#'
 generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
   n_vars <- length(var_names)
   var_pairs <- t(combn(var_names, 2))
 
-  valid_param_name <- function(name) {
-    if (!grepl("^[a-zA-Z]", name) || grepl("[^a-zA-Z0-9_]", name)) {
-      stop("Invalid variable name for Mplus: '", name, "'. ",
-           "Names must start with a letter and contain only letters, numbers, or underscores.")
-    }
-    return(name)
-  }
-  var_names <- sapply(var_names, valid_param_name, USE.NAMES = FALSE)
-
   if (is.character(constraint) && constraint == "VE") {
-    # 1. 构建%OVERALL%部分：定义共享协方差 (所有类使用相同协方差值)
     overall_lines <- c(
       "%OVERALL%",
       apply(var_pairs, 1, function(pair) {
         pair_idx <- which(apply(var_pairs, 1, function(x) all(sort(x) == sort(pair))))
-        # 使用短标签名 (Mplus兼容8字符限制): c1, c2, c3...
         sprintf("%s WITH %s (c%d);", pair[1], pair[2], pair_idx)
       })
     )
 
-    # 2. 构建类特定部分：自由方差 + 均值
     class_lines <- lapply(1:L, function(k) {
       c(
         paste0("%", class_var, "#", k, "%"),
-        paste0("[", paste(var_names, collapse = " "), "];"),  # 自由估计均值
-        paste0(paste(var_names, collapse = ";\n"), ";")       # 自由估计方差 (无标签)
+        paste0("[", paste(var_names, collapse = " "), "];"),
+        paste0(var_names, ";", collapse = "\n")
       )
     })
 
-    # 3. 返回完整MODEL语法 (无MODEL CONSTRAINT)
     return(c(
       overall_lines,
       unlist(class_lines)
     ))
   }
 
-  # 处理其他约束
   if (is.character(constraint)) {
-    # 预定义约束
     switch(constraint,
            "E0" = {
-             # 修复: 每个变量有独立的共享方差 (I个变量→I个方差参数)
              overall_lines <- c(
-               # 为每个变量分配唯一方差标签 (1,2,...,n_vars)
                sapply(seq_along(var_names), function(i) {
-                 sprintf("%s (%d);", var_names[i], i)  # 关键修改
+                 sprintf("%s (%d);", var_names[i], i)
                }),
-               # 所有协方差固定为0
                apply(var_pairs, 1, function(pair) {
                  sprintf("%s WITH %s@0;", pair[1], pair[2])
                })
@@ -312,34 +358,32 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
              class_lines <- lapply(1:L, function(k) {
                c(
                  paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];")  # 自由估计均值
+                 paste0("[", var_names, "];")
                )
              })
+
              return(c("%OVERALL%", overall_lines, unlist(class_lines)))
            },
            "V0" = {
-             # 自由方差 + 零协方差 (对角矩阵)
              class_lines <- lapply(1:L, function(k) {
                c(
                  paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),    # 均值
-                 paste0(var_names, ";"),          # 自由方差
-                 # 所有协方差固定为0
+                 paste0("[", var_names, "];"),
+                 paste0(var_names, ";"),
                  apply(var_pairs, 1, function(pair) {
                    sprintf("%s WITH %s@0;", pair[1], pair[2])
                  })
                )
              })
+
              return(c(unlist(class_lines)))
            },
            "EE" = {
-             # 等方差 + 等协方差 (同质满秩协方差)
              overall_lines <- character(0)
-             # 为每个变量分配唯一方差标签 (1,2,...,n_vars)
              overall_lines <- c(overall_lines, sapply(seq_along(var_names), function(i) {
                sprintf("%s (%d);", var_names[i], i)
              }))
-             # 为每对协方差分配唯一标签 (n_vars+1, ...)
+
              cov_labels <- (n_vars + 1):(n_vars + nrow(var_pairs))
              overall_lines <- c(overall_lines, apply(var_pairs, 1, function(pair) {
                idx <- which(apply(var_pairs, 1, function(x) all(sort(x) == sort(pair))))
@@ -349,44 +393,45 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
              class_lines <- lapply(1:L, function(k) {
                c(
                  paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];")  # 自由估计均值
+                 paste0("[", var_names, "];")
                )
              })
+
              return(c("%OVERALL%", overall_lines, unlist(class_lines)))
            },
            "EV" = {
-             # 等方差 + 自由协方差
-             # 总体部分: 约束方差相等
              overall_lines <- sapply(seq_along(var_names), function(i) {
                sprintf("%s (%d);", var_names[i], i)
              })
 
-             # 类特定部分: 自由协方差
              class_lines <- lapply(1:L, function(k) {
                cov_lines <- apply(var_pairs, 1, function(pair) {
                  paste0(pair[1], " WITH ", pair[2], ";")
                })
+
                c(
                  paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),  # 均值
-                 cov_lines                     # 自由协方差
+                 paste0("[", var_names, "];"),
+                 cov_lines
                )
              })
+
              return(c("%OVERALL%", overall_lines, unlist(class_lines)))
            },
            "VV" = {
-             # 默认: 自由方差 + 自由协方差 (异质满秩)
              class_lines <- lapply(1:L, function(k) {
                cov_lines <- apply(var_pairs, 1, function(pair) {
                  paste0(pair[1], " WITH ", pair[2], ";")
                })
+
                c(
                  paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),  # 均值
-                 paste0(var_names, ";"),        # 自由方差
-                 cov_lines                     # 自由协方差
+                 paste0("[", var_names, "];"),
+                 paste0(var_names, ";"),
+                 cov_lines
                )
              })
+
              return(c(unlist(class_lines)))
            },
            {
@@ -394,7 +439,6 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
            }
     )
   } else if (is.list(constraint)) {
-    # 自定义约束：验证并预处理
     constraints <- lapply(constraint, function(x) {
       if (length(x) != 2 || !is.numeric(x)) {
         stop("Each constraint must be a numeric vector of length 2")
@@ -403,94 +447,77 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
       if (any(x < 1) || any(x > n_vars)) {
         stop("Constraint indices must be between 1 and ", n_vars)
       }
-      sort(x)  # 规范化顺序 (e.g., c(2,1) -> c(1,2))
+      sort(x)
     })
 
-    # 去重
     constraint_keys <- sapply(constraints, function(x) paste(sort(x), collapse = ":"))
     unique_idx <- !duplicated(constraint_keys)
     if (sum(!unique_idx) > 0) {
       warning(sum(!unique_idx), " duplicate constraints removed")
     }
     constraints <- constraints[unique_idx]
-
-    # 分配唯一标签 (1000+ 避免与预定义约束冲突)
     n_constraints <- length(constraints)
     labels <- 1000 + seq_len(n_constraints) - 1
     constraint_to_label <- setNames(labels, sapply(constraints, paste, collapse = ":"))
 
-    # 初始化约束映射
-    var_constraints <- rep(NA_integer_, n_vars)  # 方差约束
-    cov_constraints <- matrix(NA_integer_, nrow = n_vars, ncol = n_vars)  # 协方差约束
+    var_constraints <- rep(NA_integer_, n_vars)
+    cov_constraints <- matrix(NA_integer_, nrow = n_vars, ncol = n_vars)
 
-    # 映射约束到标签
     for (con in constraints) {
       key <- paste(con, collapse = ":")
       label <- constraint_to_label[key]
       i <- con[1]
       j <- con[2]
-
       if (i == j) {
-        # 方差约束 (e.g., c(2,2) -> 变量2的方差)
         if (!is.na(var_constraints[i])) {
           warning("Variable ", i, " already has a variance constraint; using first constraint")
         } else {
           var_constraints[i] <- label
         }
       } else {
-        # 协方差约束 (e.g., c(1,2) -> 变量1和2的协方差)
         if (!is.na(cov_constraints[i, j])) {
           warning("Covariance between variables ", i, " and ", j,
                   " already constrained; using first constraint")
         } else {
           cov_constraints[i, j] <- label
-          cov_constraints[j, i] <- label  # 对称
+          cov_constraints[j, i] <- label
         }
       }
     }
 
-    # 生成每个类别的语法
     class_lines <- lapply(1:L, function(k) {
       lines <- c(
         paste0("%", class_var, "#", k, "%"),
-        paste0("[", paste(var_names, collapse = " "), "];")  # 自由估计均值
+        paste0("[", paste(var_names, collapse = " "), "];")
       )
 
-      # 处理方差
       for (i in seq_len(n_vars)) {
         var_name <- var_names[i]
         label <- var_constraints[i]
-
         if (!is.na(label)) {
-          # 跨类别等式约束 (相同标签)
           lines <- c(lines, sprintf("%s (%d);", var_name, label))
         } else {
-          # 自由方差
           lines <- c(lines, sprintf("%s;", var_name))
         }
       }
 
-      # 处理协方差
       for (pair_idx in seq_len(nrow(var_pairs))) {
         v1 <- var_pairs[pair_idx, 1]
         v2 <- var_pairs[pair_idx, 2]
         idx1 <- match(v1, var_names)
         idx2 <- match(v2, var_names)
         label <- cov_constraints[idx1, idx2]
-
         if (!is.na(label)) {
-          # 跨类别等式约束
           lines <- c(lines, sprintf("%s WITH %s (%d);", v1, v2, label))
         } else {
-          # 自由协方差
           lines <- c(lines, sprintf("%s WITH %s;", v1, v2))
         }
       }
+
       lines
     })
 
     return(c(unlist(class_lines)))
-
   } else {
     stop("Invalid constraint specification. Must be character string or list of integer vectors.")
   }

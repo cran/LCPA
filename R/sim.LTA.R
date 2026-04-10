@@ -3,10 +3,10 @@
 #' Simulates longitudinal latent class/profile data where initial class membership and transition
 #' probabilities may be influenced by time-varying covariates. Supports both Latent Class Analysis (LCA)
 #' for categorical outcomes and Latent Profile Analysis (LPA) for continuous outcomes. Measurement
-#' invariance is assumed by default (identical item parameters across time).
+#' invariance is assumed by default (identical indicator parameters across time).
 #'
 #' @param N Integer; sample size.
-#' @param I Integer; number of observed items/indicators per time point.
+#' @param I Integer; number of observed indicators/items/indicators per time point.
 #' @param L Integer; number of latent classes/profiles.
 #' @param distribution Character; distribution of initial class probabilities when not using covariates or \code{params}.
 #'   Options: \code{"uniform"} (equal probabilities) or \code{"random"} (Dirichlet-distributed, default).
@@ -20,8 +20,8 @@
 #'   \code{"VV"} (unstructured, default), \code{"VE"} (diagonal variance), \code{"EE"} (equal variance).
 #' @param mean.range Numeric vector; range for randomly generated class means in LPA (default: \code{c(-2, 2)}).
 #' @param covs.range Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).
-#' @param poly.value Integer; number of categories for polytomous LCA items (default: 5).
-#' @param IQ Character; method for generating item discrimination in LCA. \code{"random"} (default) or fixed values.
+#' @param poly.value Integer; number of categories for polytomous LCA indicators (default: 5).
+#' @param IQ Character; method for generating indicator discrimination in LCA. \code{"random"} (default) or fixed values.
 #' @param params List or NULL; pre-specified parameters for reproducibility (see Details).
 #' @param is.sort A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
 #'                order according to \code{P.Z}. All other parameters will be adjusted accordingly
@@ -43,7 +43,7 @@
 #'   \item{\code{responses}}{List of length \code{times}; observed data matrices (\eqn{N \times I}).}
 #'   \item{\code{Zs}}{List of length \code{times}; true latent class memberships (\eqn{N \times 1} vectors).}
 #'   \item{\code{P.Zs}}{List of length \code{times}; marginal class probabilities at each time.}
-#'   \item{\code{par}}{Item parameters for LCA (if \code{type="LCA"}).}
+#'   \item{\code{par}}{Indicator parameters for LCA (if \code{type="LCA"}).}
 #'   \item{\code{means}}{Class means for LPA (if \code{type="LPA"}).}
 #'   \item{\code{covs}}{Class covariance matrices for LPA (if \code{type="LPA"}).}
 #'   \item{\code{rate}}{True transition matrices (non-covariate mode only; \code{NULL} when \code{times=1}).}
@@ -99,7 +99,7 @@
 #'
 #' Parameter Compatibility:
 #' \itemize{
-#'   \item Use \code{params} to fix item parameters (LCA) or class means/covariances (LPA) across simulations.
+#'   \item Use \code{params} to fix indicator parameters (LCA) or class means/covariances (LPA) across simulations.
 #'   \item In non-covariate mode, \code{rate} must be a list of \eqn{(times-1)} valid transition matrices (ignored when \code{times=1}).
 #'   \item In covariate mode with \code{times>=2}, all three (\code{covariates}, \code{beta}, \code{gamma}) must be consistent in dimensions.
 #' }

@@ -21,7 +21,7 @@ LCA(
 }
 \arguments{
 \item{response}{A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of individuals/participants/observations
-and \eqn{I} is the number of observed categorical items/variables. Each column must contain nominal-scale
+and \eqn{I} is the number of observed categorical items/variables/indicators. Each column must contain nominal-scale
 discrete responses (e.g., integers representing categories).}
 
 \item{L}{Integer specifying the number of latent classes (default: 2).}
@@ -33,8 +33,8 @@ discrete responses (e.g., integers representing categories).}
 \item A \code{list} containing:
 \describe{
 \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-each latent class, item, and response category (where \eqn{K_{\max}} is the maximum
-number of categories across items).}
+each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
+number of categories across indicators).}
 \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
 }
 }}
@@ -155,7 +155,7 @@ When \code{method = "EM"}, parameters are estimated via the Expectation-Maximiza
 \itemize{
 \item \strong{E-step:} Compute posterior class probabilities given current parameters:
 \deqn{P(Z_n = l \mid \mathbf{X}_n) = \frac{\pi_l \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n=l)}{\sum_{k=1}^L \pi_k \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n=k)}}
-where \eqn{x_{ni}} is the standardized (0-based) response for person \eqn{n} on item \eqn{i} (see \code{\link[LCPA]{adjust.response}}).
+where \eqn{x_{ni}} is the standardized (0-based) response for person \eqn{n} on indicator \eqn{i} (see \code{\link[LCPA]{adjust.response}}).
 \item \strong{M-step:} Update parameters by maximizing expected complete-data log-likelihood:
 \itemize{
 \item Class probabilities: \eqn{\pi_l^{\text{new}} = \frac{1}{N} \sum_{n=1}^N P(Z_n = l \mid \mathbf{X}_n)}
@@ -175,7 +175,7 @@ with simulated annealing. See \code{\link[LCPA]{install_python_dependencies}}. K
 \strong{Architecture}:
 \describe{
 \item{Input Representation}{
-Observed categorical responses are converted to 0-based integer indices per item (not one-hot encoded).
+Observed categorical responses are converted to 0-based integer indices per indicator (not one-hot encoded).
 For example, original responses \eqn{[1, 2, 4]} become \eqn{[0, 1, 2]}.
 }
 \item{Feature Estimator (Feedforward Network)}{
@@ -200,8 +200,8 @@ Global conditional probability parameters (\eqn{P(X_i = k \mid Z = l)}) are stor
 parameters \code{par} (an \eqn{L \times I \times K_{\max}} tensor). A \emph{masked softmax} is applied
 along categories to enforce:
 \itemize{
-\item Probabilities sum to 1 within each item-class pair
-\item Non-existent categories (beyond item's actual max response) are masked to zero probability
+\item Probabilities sum to 1 within each indicator-class pair
+\item Non-existent categories (beyond indicator's actual max response) are masked to zero probability
 }
 }
 }
@@ -269,6 +269,8 @@ Files are automatically deleted after estimation unless \code{control.Mplus$clea
 }
 
 \examples{
+library(LCPA)
+
 # Example with simulated data
 set.seed(123)
 data.obj <- sim.LCA(N = 500, I = 4, L = 2, IQ=0.9)
