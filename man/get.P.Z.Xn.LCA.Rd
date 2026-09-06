@@ -4,12 +4,10 @@
 \alias{get.P.Z.Xn.LCA}
 \title{Compute Posterior Latent Class Probabilities Based on Fixed Parameters}
 \usage{
-get.P.Z.Xn.LCA(response, par, P.Z)
+get.P.Z.Xn.LCA(response, par, P.Z, category.levels)
 }
 \arguments{
-\item{response}{Numeric matrix (\eqn{N \times I}) of categorical responses.
-Categories are automatically remapped to 0-based integers internally via
-\code{\link[LCPA]{adjust.response}}.}
+\item{response}{Numeric matrix (\eqn{N \times I}) of categorical responses.}
 
 \item{par}{3D array (\eqn{L \times I \times K_{\max}}) of fixed conditional response
 probabilities where:
@@ -18,14 +16,19 @@ probabilities where:
 \item \eqn{I} = number of indicators
 \item \eqn{K_{\max}} = maximum categories across indicators
 }
-\code{par[l, i, k]} = \eqn{P(X_i = k-1 \mid Z = l)} (using 1-based indexing for the array dimension corresponding to category k-1).}
+\code{par[l, i, q]} = \eqn{P(X_i=q-1\mid Z=l)} (using 1-based array
+indexing for the dimension corresponding to category \eqn{q-1}).}
 
 \item{P.Z}{Vector of length \eqn{L} with fixed class prior probabilities (\eqn{\pi_l}).
 These values are used directly without re-estimation.}
+
+\item{category.levels}{List of length \eqn{I}. Element \eqn{i} contains the
+ordered response categories for indicator \eqn{i} as fixed in Step 1.
+Categories absent from the current sample remain in this mapping.}
 }
 \value{
 Numeric matrix (\eqn{N \times L}) of posterior probabilities.
-Rows sum to 1. Columns are named "Class.1", "Class.2", etc.
+Rows sum to 1. Columns are named \code{"Class 1"}, \code{"Class 2"}, and so on.
 }
 \description{
 Computes posterior probabilities of latent class membership for each observation
@@ -36,11 +39,14 @@ probabilities (\code{P.Z}).
 Unlike an EM algorithm, this function does NOT iteratively update class prevalences.
 It performs a single calculation step based on Bayes' theorem:
 \deqn{
-  P(Z_n = l \mid \mathbf{X}_n) =
-  \frac{\pi_l \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = l)}
-       {\sum_{k=1}^L \pi_k \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n = k)}
+  \tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+  \frac{\pi_l\prod_{i=1}^I
+  P(X_{ni}=x_{ni}\mid Z_n=l)}
+  {\sum_{h=1}^L\pi_h\prod_{i=1}^I
+  P(X_{ni}=x_{ni}\mid Z_n=h)}
 }
-where \eqn{\pi_l} are the fixed priors provided in the \code{P.Z} argument.
+where the class probabilities and conditional response probabilities are
+fixed by the \code{P.Z} and \code{par} arguments.
 }
 \examples{
 \donttest{
@@ -56,7 +62,8 @@ fit <- LCA(data.obj$response, L = 2, method = "EM", nrep = 5)
 P.Z.Xn <- get.P.Z.Xn.LCA(
   response = data.obj$response,
   par = fit$params$par,
-  P.Z = fit$params$P.Z
+  P.Z = fit$params$P.Z,
+  category.levels = fit$params$category.levels
 )
 head(P.Z.Xn)
 }

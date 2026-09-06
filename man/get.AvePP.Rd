@@ -14,8 +14,9 @@ get.AvePP(object)
 \itemize{
 \item \eqn{N} = Total number of observations (\eqn{n = 1, 2, \dots, N})
 \item \eqn{L} = Number of latent classes (\eqn{l = 1, 2, \dots, L})
-\item Element \eqn{p_{nl} = P(Z_n = l \mid \mathbf{X}_n)} denotes the posterior probability
-that observation \eqn{n} belongs to class \eqn{l} given observed data \eqn{\mathbf{X}_n}
+\item Element \eqn{p_{nl}=P(Z_n=l\mid\mathbf{X}_n)} denotes the
+posterior probability that participant \eqn{n} belongs to class
+\eqn{l} given the observed indicator vector \eqn{\mathbf{X}_n}
 }
 }}
 }
@@ -25,11 +26,15 @@ A \eqn{(L+1) \times (L+1)} matrix with the following structure:
 \item Rows: Represent each latent class (1 to L) and a final "Total" row.
 \item Columns: Represent each latent class (1 to L) and a final "Total" column.
 \item Diagonal elements \eqn{\text{ave}[l,l]}: Average posterior probability for observations assigned to class \eqn{l}.
-That is, \deqn{\overline{P}_{ll} = \frac{1}{N_l} \sum_{n: \hat{z}_n = l} p_{nl},}
-where \eqn{N_l} is the number of observations assigned to class \eqn{l}, and \eqn{\hat{z}_n = \arg\max_{l'} p_{nl'}}.
+That is,
+\deqn{\overline{P}_{ll}=\frac{1}{N_l}
+      \sum_{n:\widehat{Z}_n=l}p_{nl},}
+where \eqn{N_l} is the number of participants assigned to class
+\eqn{l}, and \eqn{\widehat{Z}_n=\arg\max_h p_{nh}}.
 \item Off-diagonal elements \eqn{\text{ave}[l,k]} (\eqn{l \ne k}): Average posterior probability of class \eqn{k}
 among observations assigned to class \eqn{l}. Useful for assessing classification confusion.
-\deqn{\overline{P}_{lk} = \frac{1}{N_l} \sum_{n: \hat{z}_n = l} p_{nk}.}
+\deqn{\overline{P}_{lk}=\frac{1}{N_l}
+      \sum_{n:\widehat{Z}_n=l}p_{nk}.}
 \item Bottom-right corner \eqn{\text{ave}[L+1,L+1]}: Overall average posterior probability across all observations,
 \deqn{\overline{P}_{\text{total}} = \frac{1}{N} \sum_{n=1}^N \max_{l} p_{nl}.}
 }
@@ -59,5 +64,8 @@ print(AvePP_value)
 
 }
 \references{
-Nylund-Gibson, K., & Choi, A. Y. (2018). Ten frequently asked questions about latent class analysis. Translational Issues in Psychological Science, 4(4), 440-461. https://doi.org/10.1037/tps0000176
+Nylund-Gibson, K., & Choi, A. Y. (2018). Ten frequently asked questions
+about latent class analysis. \emph{Translational Issues in Psychological Science,
+4}(4), 440--461.
+\doi{10.1037/tps0000176}
 }

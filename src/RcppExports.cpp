@@ -11,37 +11,87 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// em_e_step
-List em_e_step(IntegerMatrix Y, NumericVector par_pre, NumericVector P_Z_pre, int N, int I, int L, int poly_max);
-RcppExport SEXP _LCPA_em_e_step(SEXP YSEXP, SEXP par_preSEXP, SEXP P_Z_preSEXP, SEXP NSEXP, SEXP ISEXP, SEXP LSEXP, SEXP poly_maxSEXP) {
+// lca_expectation_cpp
+List lca_expectation_cpp(const IntegerMatrix& response, const NumericVector& par, const NumericVector& P_Z);
+RcppExport SEXP _LCPA_lca_expectation_cpp(SEXP responseSEXP, SEXP parSEXP, SEXP P_ZSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< IntegerMatrix >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type par_pre(par_preSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type P_Z_pre(P_Z_preSEXP);
-    Rcpp::traits::input_parameter< int >::type N(NSEXP);
-    Rcpp::traits::input_parameter< int >::type I(ISEXP);
-    Rcpp::traits::input_parameter< int >::type L(LSEXP);
-    Rcpp::traits::input_parameter< int >::type poly_max(poly_maxSEXP);
-    rcpp_result_gen = Rcpp::wrap(em_e_step(Y, par_pre, P_Z_pre, N, I, L, poly_max));
+    Rcpp::traits::input_parameter< const IntegerMatrix& >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type par(parSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type P_Z(P_ZSEXP);
+    rcpp_result_gen = Rcpp::wrap(lca_expectation_cpp(response, par, P_Z));
     return rcpp_result_gen;
 END_RCPP
 }
-// em_m_step
-List em_m_step(NumericMatrix P_Z_Xn, NumericVector Y_hot, IntegerVector poly_value, int N, int I, int L, int poly_max);
-RcppExport SEXP _LCPA_em_m_step(SEXP P_Z_XnSEXP, SEXP Y_hotSEXP, SEXP poly_valueSEXP, SEXP NSEXP, SEXP ISEXP, SEXP LSEXP, SEXP poly_maxSEXP) {
+// lca_maximization_cpp
+List lca_maximization_cpp(const IntegerMatrix& response, const NumericMatrix& posterior, const IntegerVector& poly_value, double smoothing);
+RcppExport SEXP _LCPA_lca_maximization_cpp(SEXP responseSEXP, SEXP posteriorSEXP, SEXP poly_valueSEXP, SEXP smoothingSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type P_Z_Xn(P_Z_XnSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type Y_hot(Y_hotSEXP);
+    Rcpp::traits::input_parameter< const IntegerMatrix& >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type posterior(posteriorSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type poly_value(poly_valueSEXP);
+    Rcpp::traits::input_parameter< double >::type smoothing(smoothingSEXP);
+    rcpp_result_gen = Rcpp::wrap(lca_maximization_cpp(response, posterior, poly_value, smoothing));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_lca_response_cpp
+IntegerMatrix sample_lca_response_cpp(const IntegerVector& classes, const NumericVector& par, const IntegerVector& poly_value);
+RcppExport SEXP _LCPA_sample_lca_response_cpp(SEXP classesSEXP, SEXP parSEXP, SEXP poly_valueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const IntegerVector& >::type classes(classesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type par(parSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type poly_value(poly_valueSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_lca_response_cpp(classes, par, poly_value));
+    return rcpp_result_gen;
+END_RCPP
+}
+// lca_score_information_cpp
+List lca_score_information_cpp(IntegerMatrix response, NumericVector par, NumericVector P_Z, IntegerVector poly_value, bool compute_information);
+RcppExport SEXP _LCPA_lca_score_information_cpp(SEXP responseSEXP, SEXP parSEXP, SEXP P_ZSEXP, SEXP poly_valueSEXP, SEXP compute_informationSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerMatrix >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type par(parSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type P_Z(P_ZSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type poly_value(poly_valueSEXP);
-    Rcpp::traits::input_parameter< int >::type N(NSEXP);
-    Rcpp::traits::input_parameter< int >::type I(ISEXP);
-    Rcpp::traits::input_parameter< int >::type L(LSEXP);
-    Rcpp::traits::input_parameter< int >::type poly_max(poly_maxSEXP);
-    rcpp_result_gen = Rcpp::wrap(em_m_step(P_Z_Xn, Y_hot, poly_value, N, I, L, poly_max));
+    Rcpp::traits::input_parameter< bool >::type compute_information(compute_informationSEXP);
+    rcpp_result_gen = Rcpp::wrap(lca_score_information_cpp(response, par, P_Z, poly_value, compute_information));
+    return rcpp_result_gen;
+END_RCPP
+}
+// lpa_expectation_cpp
+List lpa_expectation_cpp(const arma::mat& response, const arma::mat& means, const arma::cube& covs, const arma::vec& P_Z, bool repair);
+RcppExport SEXP _LCPA_lpa_expectation_cpp(SEXP responseSEXP, SEXP meansSEXP, SEXP covsSEXP, SEXP P_ZSEXP, SEXP repairSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type means(meansSEXP);
+    Rcpp::traits::input_parameter< const arma::cube& >::type covs(covsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type P_Z(P_ZSEXP);
+    Rcpp::traits::input_parameter< bool >::type repair(repairSEXP);
+    rcpp_result_gen = Rcpp::wrap(lpa_expectation_cpp(response, means, covs, P_Z, repair));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mvn_log_density_cpp
+NumericVector mvn_log_density_cpp(const arma::mat& response, const arma::rowvec& mean, const arma::mat& covariance, bool repair);
+RcppExport SEXP _LCPA_mvn_log_density_cpp(SEXP responseSEXP, SEXP meanSEXP, SEXP covarianceSEXP, SEXP repairSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type response(responseSEXP);
+    Rcpp::traits::input_parameter< const arma::rowvec& >::type mean(meanSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type covariance(covarianceSEXP);
+    Rcpp::traits::input_parameter< bool >::type repair(repairSEXP);
+    rcpp_result_gen = Rcpp::wrap(mvn_log_density_cpp(response, mean, covariance, repair));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -58,13 +108,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // lta_vector_to_parameters_cpp
-List lta_vector_to_parameters_cpp(NumericVector params, List covariates_list, int L, int ref_class);
+List lta_vector_to_parameters_cpp(const NumericVector& params, const List& covariates_list, int L, int ref_class);
 RcppExport SEXP _LCPA_lta_vector_to_parameters_cpp(SEXP paramsSEXP, SEXP covariates_listSEXP, SEXP LSEXP, SEXP ref_classSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type params(paramsSEXP);
-    Rcpp::traits::input_parameter< List >::type covariates_list(covariates_listSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< const List& >::type covariates_list(covariates_listSEXP);
     Rcpp::traits::input_parameter< int >::type L(LSEXP);
     Rcpp::traits::input_parameter< int >::type ref_class(ref_classSEXP);
     rcpp_result_gen = Rcpp::wrap(lta_vector_to_parameters_cpp(params, covariates_list, L, ref_class));
@@ -72,19 +122,68 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_log_lik_lta_optim_cpp
-double get_log_lik_lta_optim_cpp(NumericVector init_par, List CEP_list, List Zs_list, List covariates_list, bool covariates_timeCross, int ref_class, arma::umat latent_paths);
-RcppExport SEXP _LCPA_get_log_lik_lta_optim_cpp(SEXP init_parSEXP, SEXP CEP_listSEXP, SEXP Zs_listSEXP, SEXP covariates_listSEXP, SEXP covariates_timeCrossSEXP, SEXP ref_classSEXP, SEXP latent_pathsSEXP) {
+List get_log_lik_lta_optim_cpp(const NumericVector& params, const List& CEP_list, const List& Zs_list, const List& covariates_list, bool covariates_time_cross, int ref_class, bool compute_gradient);
+RcppExport SEXP _LCPA_get_log_lik_lta_optim_cpp(SEXP paramsSEXP, SEXP CEP_listSEXP, SEXP Zs_listSEXP, SEXP covariates_listSEXP, SEXP covariates_time_crossSEXP, SEXP ref_classSEXP, SEXP compute_gradientSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type init_par(init_parSEXP);
-    Rcpp::traits::input_parameter< List >::type CEP_list(CEP_listSEXP);
-    Rcpp::traits::input_parameter< List >::type Zs_list(Zs_listSEXP);
-    Rcpp::traits::input_parameter< List >::type covariates_list(covariates_listSEXP);
-    Rcpp::traits::input_parameter< bool >::type covariates_timeCross(covariates_timeCrossSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< const List& >::type CEP_list(CEP_listSEXP);
+    Rcpp::traits::input_parameter< const List& >::type Zs_list(Zs_listSEXP);
+    Rcpp::traits::input_parameter< const List& >::type covariates_list(covariates_listSEXP);
+    Rcpp::traits::input_parameter< bool >::type covariates_time_cross(covariates_time_crossSEXP);
     Rcpp::traits::input_parameter< int >::type ref_class(ref_classSEXP);
-    Rcpp::traits::input_parameter< arma::umat >::type latent_paths(latent_pathsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_log_lik_lta_optim_cpp(init_par, CEP_list, Zs_list, covariates_list, covariates_timeCross, ref_class, latent_paths));
+    Rcpp::traits::input_parameter< bool >::type compute_gradient(compute_gradientSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_log_lik_lta_optim_cpp(params, CEP_list, Zs_list, covariates_list, covariates_time_cross, ref_class, compute_gradient));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_multinomial_logit_cpp
+IntegerVector sample_multinomial_logit_cpp(const NumericMatrix& covariates, const NumericMatrix& coefficients);
+RcppExport SEXP _LCPA_sample_multinomial_logit_cpp(SEXP covariatesSEXP, SEXP coefficientsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type covariates(covariatesSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type coefficients(coefficientsSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_multinomial_logit_cpp(covariates, coefficients));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mean_multinomial_logit_probability_cpp
+NumericVector mean_multinomial_logit_probability_cpp(const NumericMatrix& covariates, const NumericMatrix& coefficients);
+RcppExport SEXP _LCPA_mean_multinomial_logit_probability_cpp(SEXP covariatesSEXP, SEXP coefficientsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type covariates(covariatesSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type coefficients(coefficientsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mean_multinomial_logit_probability_cpp(covariates, coefficients));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_transition_logit_cpp
+IntegerVector sample_transition_logit_cpp(const IntegerVector& previous, const NumericMatrix& covariates, const List& gamma);
+RcppExport SEXP _LCPA_sample_transition_logit_cpp(SEXP previousSEXP, SEXP covariatesSEXP, SEXP gammaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const IntegerVector& >::type previous(previousSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type covariates(covariatesSEXP);
+    Rcpp::traits::input_parameter< const List& >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_transition_logit_cpp(previous, covariates, gamma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sample_markov_cpp
+IntegerVector sample_markov_cpp(const IntegerVector& previous, const NumericMatrix& rate);
+RcppExport SEXP _LCPA_sample_markov_cpp(SEXP previousSEXP, SEXP rateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const IntegerVector& >::type previous(previousSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type rate(rateSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_markov_cpp(previous, rate));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -99,14 +198,51 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// classification_error_counts_cpp
+List classification_error_counts_cpp(const NumericMatrix& posterior);
+RcppExport SEXP _LCPA_classification_error_counts_cpp(SEXP posteriorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type posterior(posteriorSEXP);
+    rcpp_result_gen = Rcpp::wrap(classification_error_counts_cpp(posterior));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bch_multinomial_cpp
+List bch_multinomial_cpp(const arma::vec& params, const arma::mat& design, const arma::mat& weight, int ref_class, bool compute_gradient, bool compute_information);
+RcppExport SEXP _LCPA_bch_multinomial_cpp(SEXP paramsSEXP, SEXP designSEXP, SEXP weightSEXP, SEXP ref_classSEXP, SEXP compute_gradientSEXP, SEXP compute_informationSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type params(paramsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type design(designSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< int >::type ref_class(ref_classSEXP);
+    Rcpp::traits::input_parameter< bool >::type compute_gradient(compute_gradientSEXP);
+    Rcpp::traits::input_parameter< bool >::type compute_information(compute_informationSEXP);
+    rcpp_result_gen = Rcpp::wrap(bch_multinomial_cpp(params, design, weight, ref_class, compute_gradient, compute_information));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_LCPA_em_e_step", (DL_FUNC) &_LCPA_em_e_step, 7},
-    {"_LCPA_em_m_step", (DL_FUNC) &_LCPA_em_m_step, 7},
+    {"_LCPA_lca_expectation_cpp", (DL_FUNC) &_LCPA_lca_expectation_cpp, 3},
+    {"_LCPA_lca_maximization_cpp", (DL_FUNC) &_LCPA_lca_maximization_cpp, 4},
+    {"_LCPA_sample_lca_response_cpp", (DL_FUNC) &_LCPA_sample_lca_response_cpp, 3},
+    {"_LCPA_lca_score_information_cpp", (DL_FUNC) &_LCPA_lca_score_information_cpp, 5},
+    {"_LCPA_lpa_expectation_cpp", (DL_FUNC) &_LCPA_lpa_expectation_cpp, 5},
+    {"_LCPA_mvn_log_density_cpp", (DL_FUNC) &_LCPA_mvn_log_density_cpp, 4},
     {"_LCPA_make_latent_paths_cpp", (DL_FUNC) &_LCPA_make_latent_paths_cpp, 2},
     {"_LCPA_lta_vector_to_parameters_cpp", (DL_FUNC) &_LCPA_lta_vector_to_parameters_cpp, 4},
     {"_LCPA_get_log_lik_lta_optim_cpp", (DL_FUNC) &_LCPA_get_log_lik_lta_optim_cpp, 7},
+    {"_LCPA_sample_multinomial_logit_cpp", (DL_FUNC) &_LCPA_sample_multinomial_logit_cpp, 2},
+    {"_LCPA_mean_multinomial_logit_probability_cpp", (DL_FUNC) &_LCPA_mean_multinomial_logit_probability_cpp, 2},
+    {"_LCPA_sample_transition_logit_cpp", (DL_FUNC) &_LCPA_sample_transition_logit_cpp, 3},
+    {"_LCPA_sample_markov_cpp", (DL_FUNC) &_LCPA_sample_markov_cpp, 2},
     {"_LCPA_adjust_response_cpp", (DL_FUNC) &_LCPA_adjust_response_cpp, 1},
+    {"_LCPA_classification_error_counts_cpp", (DL_FUNC) &_LCPA_classification_error_counts_cpp, 1},
+    {"_LCPA_bch_multinomial_cpp", (DL_FUNC) &_LCPA_bch_multinomial_cpp, 6},
     {NULL, NULL, 0}
 };
 

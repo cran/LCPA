@@ -36,16 +36,17 @@ Minimum valid value is \code{2} when \code{IQ} is numeric. Default: \code{5}.}
 
 \item{params}{List with fixed parameters for simulation:
 \describe{
-\item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities per latent class.}
-\item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
-\item{\code{Z}}{Vector of length \eqn{N} containing the latent classes of observations. A fixed
-observation classes \code{Z} is applied directly to simulate data only when \code{P.Z}
-is \code{NULL} and \code{Z} is a \code{N} length vector.}
+\item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities in the final class order.}
+\item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities in the final class order.}
+\item{\code{Z}}{Vector of length \eqn{N} containing fixed class
+assignments in the final class order. When supplied, \code{Z} takes precedence over
+\code{P.Z}.}
 }}
 
-\item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-order according to \code{P.Z}. All other parameters will be adjusted accordingly
-based on the reordered latent classes.}
+\item{is.sort}{A logical value. If \code{TRUE} (default), internally generated class probabilities
+are ordered decreasingly before class-specific parameters and observations are generated.
+Supplied parameters are already defined in this final order and are never reordered; supplied
+\code{P.Z} or \code{Z} must therefore follow decreasing class proportions.}
 }
 \value{
 A list containing:
@@ -56,15 +57,18 @@ columns are variables named \code{"I1"}, \code{"I2"}, ... Values range from \cod
 where \eqn{K = \text{max}(poly.value)} (i.e., the maximum number of categories across variables).
 Dimensions: classes x variables x categories.
 Note: For variables with \code{poly.value[i] < K}, unused category dimensions contain \code{NA}.
-Dimension names: \code{"L1"}, \code{"L2"}, ... (classes); \code{"I1"}, \code{"I2"}, ... (variables);
+Dimension names: \code{"Class 1"}, \code{"Class 2"}, and so on for classes;
+\code{"I1"}, \code{"I2"}, and so on for indicators;
 \code{"poly0"}, \code{"poly1"}, ... (categories).}
 \item{Z}{Integer vector (length \eqn{N}) of true class assignments (1 to L). Named with observation IDs (e.g., \code{"O1"}).}
-\item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions. Named with class labels (e.g., \code{"L1"}).}
+\item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions,
+named \code{"Class 1"}, \code{"Class 2"}, and so on.}
 \item{poly.value}{Integer vector (length \eqn{I}) specifying number of categories per variable.}
 \item{P.Z.Xn}{Binary matrix (\eqn{N \times L}) of true class membership indicators (one-hot encoded).
 Row \code{i}, column \code{l} = 1 if observation \code{i} belongs to class \code{l}, else 0.
 Row/column names match \code{Z} and class labels.}
 \item{arguments}{A list containing all input arguments.}
+\item{call}{The matched simulation call.}
 }
 }
 \description{
@@ -73,7 +77,7 @@ Each observed variable follows a multinomial distribution within classes, with f
 class separation via the \code{IQ} parameter and class size distributions.
 }
 \details{
-\strong{Probability Generation:}
+Probability generation:
 \itemize{
 \item Dirichlet Sampling (\code{IQ="random"}):
 For each variable-class combination, probabilities are drawn from
@@ -89,7 +93,7 @@ remaining probability \eqn{1 - \text{par.special}[l]} uniformly (via Dirichlet) 
 }
 }
 
-\strong{Data Generation:}
+Data generation:
 \itemize{
 \item Class assignments \code{Z} are generated first according to \code{distribution}.
 \item For each observation \code{p} and variable \code{i}:
@@ -101,7 +105,7 @@ remaining probability \eqn{1 - \text{par.special}[l]} uniformly (via Dirichlet) 
 \item Entire dataset is regenerated if any category of any variable has zero observations.
 }
 
-\strong{Critical Constraints:}
+Critical constraints:
 \itemize{
 \item When \code{IQ} is numeric: \eqn{0.5 < IQ < 1} and \code{min(poly.value) >= 2}
 \item \code{N} must be sufficiently large to observe all categories, especially when \code{IQ} is high
@@ -120,11 +124,13 @@ Category probabilities for each variable-class combination are drawn from a symm
 \item{\code{IQ = numeric}}{ (0.5 < IQ < 1)
 Forces high discriminative power for each variable:
 \enumerate{
-\item For each variable, two categories per class are assigned extreme probabilities:
-one category gets probability \eqn{IQ}, another gets \eqn{1-IQ}.
-\item Remaining categories share the residual probability \eqn{1 - IQ - (1-IQ) = 0}.
-\emph{Note: This requires \code{poly.value} >= 2 for all variables.}
-\item Category assignments are randomized within classes to avoid structural patterns.
+\item Across the \eqn{L} classes, construct \eqn{L} focal
+probabilities containing \eqn{IQ}, \eqn{1-IQ}, and, when
+\eqn{L>2}, values sampled from \eqn{[1-IQ,IQ]}.
+\item For each class, assign its focal probability to one category
+and distribute the remaining mass over the other categories using
+a symmetric Dirichlet draw.
+\item Randomize category positions within each class.
 }
 Higher \code{IQ} values (closer to 1) yield stronger class separation but increase simulation failure risk.
 }

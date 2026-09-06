@@ -16,146 +16,194 @@
 #'     \item Standard error objects: \code{\link[LCPA]{get.SE}}
 #'   }
 #' @param digits Number of decimal places for numeric output (default: 4). Applied universally across all methods.
-#' @param I.max Maximum number of variables/items to display (\code{LCA}, \code{LPA}, \code{sim.LCA}, \code{sim.LPA}, \code{sim.LTA},
-#'   \code{LCPA}, \code{LTA}, and \code{compare.model} only; default: 5). Controls verbosity for high-dimensional outputs.
+#' @param I.max Maximum number of variables/items to display for \code{LCA},
+#'   \code{LPA}, \code{sim.LCA}, \code{sim.LPA}, and \code{sim.LTA} summaries
+#'   (default: 5).
 #' @param L.max Maximum number of latent classes/profiles to display before truncation (\code{sim.LTA} only; default: 5).
 #'   Useful when models have many latent groups. Ignored for other classes.
-#' @param ... Additional arguments passed to or from other methods (currently ignored).
+#' @param ... Reserved for S3 method compatibility; no additional arguments are used.
 #'
-#' @return Invisibly returns a structured list containing summary components.
-#'   The exact structure depends on the class of \code{object}. All returned objects carry an appropriate
-#'   S3 class (e.g., \code{summary.LCA}, \code{summary.LPA}) for use with corresponding \code{print} methods.
+#' @return A structured list whose S3 class identifies the corresponding
+#'   summary method, such as \code{\link[LCPA]{summary.LCA}} or
+#'   \code{\link[LCPA]{summary.LPA}}. Every summary method returns its object
+#'   visibly, so an interactive call to \code{\link[base]{summary}()} dispatches
+#'   automatically to the corresponding \code{\link[LCPA]{print}} method.
 #'
 #' @details
-#' Each method returns a named list with class-specific components optimized for structured access:
-#'
+#' Each method returns a class-specific list designed both for its corresponding
+#' print method and for programmatic access:
 #' \describe{
-#'   \item{\strong{\code{LCA}}}{Returns a \code{summary.LCA} object with components:
+#'   \item{\code{LCA}}{A \code{summary.LCA} object with:
 #'     \describe{
-#'       \item{\code{call}}{Original function call.}
-#'       \item{\code{model.config}}{List: \code{latent_classes}, \code{method}.}
-#'       \item{\code{data.info}}{List: \code{N}, \code{I}, \code{poly.value}, \code{uniform_categories}.}
-#'       \item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{entropy}, \code{npar}.}
-#'       \item{\code{class.probs}}{Data frame: \code{Class}, \code{Count}, \code{Proportion}.}
-#'       \item{\code{item.probs}}{List of matrices (first \code{I.max} items) with conditional probabilities per class/category.}
-#'       \item{\code{convergence}}{List: algorithm, iterations, tolerance, loglik change, hardware (if applicable).}
-#'       \item{\code{replication}}{List: \code{nrep}, \code{best_BIC} (if multiple replications performed).}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.items}}{Metadata for printing/formatting.}
+#'       \item{\code{call}}{Original fitting call.}
+#'       \item{\code{model.config}}{Number of latent classes and estimation method.}
+#'       \item{\code{data.info}}{Sample size, item count, number of categories per item, and whether category counts are uniform.}
+#'       \item{\code{fit.stats}}{Log-likelihood, AIC, BIC, entropy, and number of free parameters.}
+#'       \item{\code{class.probs}}{Data frame containing class labels, modal-assignment counts, and estimated class proportions.}
+#'       \item{\code{item.probs}}{Conditional response-probability matrices for the first \code{I.max} items.}
+#'       \item{\code{convergence}}{Backend-specific algorithm, iteration, tolerance, initialization, and diagnostic information.}
+#'       \item{\code{replication}}{Replication count and best BIC when replication selection applies; otherwise \code{NULL}.}
+#'       \item{\code{digits}, \code{I.max.shown}, \code{total.items}}{Formatting and truncation metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{LPA}}}{Returns a \code{summary.LPA} object with components:
+#'   \item{\code{LPA}}{A \code{summary.LPA} object with:
 #'     \describe{
-#'       \item{\code{call}}{Original function call.}
-#'       \item{\code{model.config}}{List: \code{latent_profiles}, \code{constraint}, \code{cov_structure}, \code{method}.}
-#'       \item{\code{data.info}}{List: \code{N}, \code{I}, \code{distribution}.}
-#'       \item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{entropy}, \code{npar}.}
-#'       \item{\code{class.probs}}{Data frame: \code{Profile}, \code{Count}, \code{Proportion}.}
-#'       \item{\code{class.means}}{Matrix (first \code{I.max} variables) of profile-specific means.}
-#'       \item{\code{convergence}}{List: algorithm, iterations, tolerance, loglik change, hardware (if applicable).}
-#'       \item{\code{replication}}{List: \code{nrep}, \code{best_BIC} (if multiple replications performed).}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+#'       \item{\code{call}}{Original fitting call.}
+#'       \item{\code{model.config}}{Number of profiles, requested covariance constraint, its expanded description, and estimation method.}
+#'       \item{\code{data.info}}{Sample size, variable count, and multivariate-normal distribution label.}
+#'       \item{\code{fit.stats}}{Log-likelihood, AIC, BIC, entropy, and number of free parameters.}
+#'       \item{\code{class.probs}}{Data frame containing profile labels, modal-assignment counts, and estimated profile proportions.}
+#'       \item{\code{class.means}}{Profile-specific means for the first \code{I.max} variables.}
+#'       \item{\code{convergence}}{Backend-specific algorithm, iteration, tolerance, initialization, and diagnostic information.}
+#'       \item{\code{replication}}{Replication count and best BIC when replication selection applies; otherwise \code{NULL}.}
+#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{LCPA}}}{Returns a \code{summary.LCPA} object with components:
+#'   \item{\code{LCPA}}{A \code{summary.LCPA} object with:
 #'     \describe{
-#'       \item{\code{call}}{Original function call.}
-#'       \item{\code{model.config}}{List: \code{latent_classes}, \code{model_type}, \code{reference_class},
-#'         \code{covariates_mode}, \code{CEP_handling}.}
-#'       \item{\code{data.info}}{List: \code{sample_size}, \code{variables}.}
-#'       \item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{npar}.}
-#'       \item{\code{class.probs}}{Data frame: \code{Class}, \code{Probability}, \code{Proportion}, \code{Frequency}.}
-#'       \item{\code{coefficients}}{Data frame: regression coefficients for non-reference classes (Estimate, Std_Error, z_value, p_value, 95% CI).}
-#'       \item{\code{reference_class}}{Integer: reference class for multinomial logit.}
-#'       \item{\code{convergence}}{List: \code{iterations}, \code{coveraged}, \code{converg_note}.}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}, \code{has.covariates}}{Metadata for printing/formatting.}
+#'       \item{\code{call}}{Original fitting call.}
+#'       \item{\code{model.config}}{Analysis path, number of classes/profiles,
+#'         model and three-step methods, Step 1 source, dependent-variable
+#'         structure where applicable, and classification-error handling.}
+#'       \item{\code{data.info}}{Sample size and number of response variables.}
+#'       \item{\code{fit.stats}}{For XZ, log-likelihood, AIC, BIC, and number of free parameters.}
+#'       \item{\code{class.probs}}{Data frame containing class probabilities, proportions, and modal-assignment frequencies.}
+#'       \item{\code{coefficients}}{For XZ, the non-reference-class coefficient table with estimates, standard errors, 95 percent confidence limits, z statistics, and two-sided p-values.}
+#'       \item{\code{dependent.variables}}{For ZY, fitted conditional
+#'         distributions nested by model and dependent variable. Gaussian
+#'         entries contain class/profile-specific means and variances, their
+#'         standard errors and covariance matrices, and separate omnibus Wald
+#'         tests. Categorical entries contain class/profile-specific category
+#'         probabilities, standard errors, covariance matrices, and an omnibus
+#'         test of equality of the conditional distributions.}
+#'       \item{\code{covariates.names}, \code{ref.class}}{Displayed covariate names and the multinomial-logit reference class.}
+#'       \item{\code{convergence}}{Overall and model-specific Step 3 convergence and iteration information.}
+#'       \item{\code{digits}, \code{vars.to.show}, \code{total.vars}, \code{has.covariates}}{Formatting and covariate metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{LTA}}}{Returns a \code{summary.LTA} object with components:
+#'   \item{\code{LTA}}{A \code{summary.LTA} object with:
 #'     \describe{
-#'       \item{\code{call}}{Original function call.}
-#'       \item{\code{model.config}}{List: \code{time_points}, \code{latent_classes}, \code{model_type},
-#'         \code{reference_class}, \code{covariates_mode}, \code{CEP_handling}, \code{transition_mode}.}
-#'       \item{\code{data.info}}{List: \code{sample_size}, \code{variables}, \code{time_points}.}
-#'       \item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{npar}.}
-#'       \item{\code{class.probs}}{List of data frames (per time point): \code{Class}, \code{Probability}, \code{Proportion}, \code{Frequency}.}
-#'       \item{\code{initial_model}}{List: \code{coefficients} (data frame), \code{covariate_names}, \code{reference_class}.}
-#'       \item{\code{transition_models}}{Named list of data frames: transition coefficients per time interval (From_Class, To_Class, Estimate, Std_Error, etc.).}
-#'       \item{\code{reference_class}}{Integer: reference destination class for transitions.}
-#'       \item{\code{convergence}}{List: \code{iterations}, \code{coveraged}, \code{converg_note}.}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}, \code{covariates.timeCross}}{Metadata for printing/formatting.}
+#'       \item{\code{call}}{Original fitting call.}
+#'       \item{\code{model.config}}{Number of time points and classes, model type, Step 1 source, reference class, covariate mode, classification-error handling, and transition mode.}
+#'       \item{\code{data.info}}{Sample size, response-variable count, and number of time points.}
+#'       \item{\code{fit.stats}}{For XZ, log-likelihood, AIC, BIC, and number of free parameters.}
+#'       \item{\code{class.probs}}{Time-indexed data frames containing class probabilities, proportions, and modal-assignment frequencies.}
+#'       \item{\code{initial.model}}{For XZ, the initial-status coefficient table, covariate names, and reference class.}
+#'       \item{\code{transition.models}}{For XZ, time-invariant or time-indexed transition coefficient tables with origin class, destination class, covariate, estimate, standard error, confidence limits, z statistic, and p-value.}
+#'       \item{\code{dependent.variables}}{For ZY, state- or path-specific
+#'         Gaussian means and variances or categorical probabilities, together
+#'         with their standard errors, covariance matrices, confidence-interval
+#'         inputs, group masses, and omnibus Wald tests.}
+#'       \item{\code{convergence}}{Overall and model-specific Step 3 convergence and iteration information.}
+#'       \item{\code{digits}, \code{total.vars}, \code{covariates.time.cross}, \code{ref.class}}{Formatting, covariate, and reference-class metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{sim.LCA}}}{Returns a \code{summary.sim.LCA} object with components:
+#'   \item{\code{sim.LCA}}{A \code{summary.sim.LCA} object with:
 #'     \describe{
 #'       \item{\code{call}}{Original simulation call.}
-#'       \item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{poly.value}, \code{uniform_categories}, \code{IQ}, \code{distribution}.}
-#'       \item{\code{class.probs}}{Data frame: \code{Class}, \code{Probability}, \code{Frequency}.}
-#'       \item{\code{item.probs}}{List of matrices (first \code{I.max} items) with true conditional probabilities per class/category.}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+#'       \item{\code{config}}{Sample size, item count, class count, category counts, category-count uniformity, item quality, and generating distribution.}
+#'       \item{\code{class.probs}}{True class probabilities and realized frequencies.}
+#'       \item{\code{item.probs}}{True conditional response probabilities for the first \code{I.max} items.}
+#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{sim.LPA}}}{Returns a \code{summary.sim.LPA} object with components:
+#'   \item{\code{sim.LPA}}{A \code{summary.sim.LPA} object with:
 #'     \describe{
 #'       \item{\code{call}}{Original simulation call.}
-#'       \item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{constraint}, \code{constraint_desc}, \code{distribution}.}
-#'       \item{\code{class.probs}}{Data frame: \code{Profile}, \code{Probability}, \code{Frequency}.}
-#'       \item{\code{class.means}}{Matrix (first \code{I.max} variables) of true profile-specific means.}
-#'       \item{\code{cov_structure}}{Character: detailed description of covariance constraints.}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+#'       \item{\code{config}}{Sample size, variable count, profile count, constraint specification and description, and generating distribution.}
+#'       \item{\code{class.probs}}{True profile probabilities and realized frequencies.}
+#'       \item{\code{class.means}}{True profile means for the first \code{I.max} variables.}
+#'       \item{\code{constraint}}{Expanded description of the covariance constraint.}
+#'       \item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{sim.LTA}}}{Returns a \code{summary.sim.LTA} object with components:
+#'   \item{\code{sim.LTA}}{A \code{summary.sim.LTA} object with:
 #'     \describe{
 #'       \item{\code{call}}{Original simulation call.}
-#'       \item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{times}, \code{type}, \code{distribution}, \code{constraint} (if LPA).}
-#'       \item{\code{class.probs}}{List of data frames (per time point): \code{Class}, \code{Probability}, \code{Frequency}.}
-#'       \item{\code{item.probs}}{Nested list (by time/item) of true conditional probabilities (if \code{type="LCA"}).}
-#'       \item{\code{class.means}}{List of matrices (by time) of true profile means (if \code{type="LPA"}).}
-#'       \item{\code{transition}}{List: \code{mode} ("fixed" or "covariate"), \code{rate} or \code{beta}/\code{gamma} coefficients, \code{time_points}.}
-#'       \item{\code{covariates}}{List of data frames (per time point) with covariate summaries (Min, Max, Mean), if present.}
-#'       \item{\code{digits}, \code{I.max.shown}, \code{L.max.shown}, \code{total.vars}, \code{total.classes}}{Metadata for printing/formatting.}
+#'       \item{\code{config}}{Sample size, variable count, class count, time points, model type, generating distribution, coefficient reference class, and LPA constraint when applicable.}
+#'       \item{\code{class.probs}}{Time-indexed true class probabilities and realized frequencies.}
+#'       \item{\code{item.probs}, \code{class.means}}{Truncated true measurement parameters for LCA or LPA simulations, respectively.}
+#'       \item{\code{transition}}{Fixed-rate or covariate-dependent transition specification, including beta/gamma parameters and time indices when present.}
+#'       \item{\code{covariates}}{Time-indexed covariate summaries containing minima, maxima, and means, or \code{NULL}.}
+#'       \item{\code{digits}, \code{I.max.shown}, \code{L.max.shown}, \code{total.vars}, \code{total.classes}}{Formatting and truncation metadata.}
 #'     }}
 #'
-#'   \item{\strong{\code{fit.index}}}{Returns a \code{summary.fit.index} object with components:
+#'   \item{\code{\link[LCPA:get.fit.index]{fit.index}}}{A
+#'     \code{\link[LCPA]{summary.fit.index}} object with:
 #'     \describe{
-#'       \item{\code{call}}{Function call that generated the fit indices.}
-#'       \item{\code{data.info}}{List: \code{N}.}
-#'       \item{\code{fit.table}}{Data frame: \code{Statistic}, \code{Value}, \code{Description} for -2LL, AIC, BIC, SIC, CAIC, AWE, SABIC.}
-#'       \item{\code{digits}}{Numeric: precision used for formatting.}
+#'       \item{\code{call}}{Call that produced the fit-index object.}
+#'       \item{\code{data.info}}{List containing the sample size \code{N}.}
+#'       \item{\code{fit.table}}{Data frame with \code{Statistic}, \code{Value}, and \code{Description} columns for
+#'         \code{npar}, \code{Log.Lik}, \code{-2LL}, AIC, BIC, SIC, CAIC, AWE, and SABIC.}
+#'       \item{\code{digits}}{Requested numeric precision.}
 #'     }}
 #'
-#'   \item{\strong{\code{compare.model}}}{Returns a \code{summary.compare.model} object with components:
+#'   \item{\code{compare.model}}{A \code{summary.compare.model} object with:
 #'     \describe{
-#'       \item{\code{call}}{Function call that generated the comparison.}
-#'       \item{\code{data.info}}{List: \code{N}, \code{I}, \code{L} (named vector for two models).}
-#'       \item{\code{fit.table}}{Data frame comparing fit indices for both models.}
-#'       \item{\code{model_comparison}}{Data frame: \code{Classes}, \code{npar}, \code{AvePP}, \code{Entropy}.}
-#'       \item{\code{BF}}{Numeric: Bayes Factor value (if computed).}
-#'       \item{\code{BF_interpretation}}{Character: interpretive guidance for Bayes Factor.}
-#'       \item{\code{lrt_table}}{Data frame: \code{Test}, \code{Statistic}, \code{DF}, \code{p-value}, \code{Sig} (significance markers).}
-#'       \item{\code{lrt_objects}}{List: raw hypothesis test objects for further inspection.}
-#'       \item{\code{digits}}{Numeric: precision used for formatting.}
+#'       \item{\code{call}}{Call that produced the model comparison.}
+#'       \item{\code{data.info}}{Lists the named model-specific sample sizes and indicator counts and the two class counts.}
+#'       \item{\code{fit.table}}{Side-by-side table of class count, parameter count, log-likelihood, -2LL, AIC, BIC, SIC, CAIC, AWE, and SABIC.}
+#'       \item{\code{model.comparison}}{Data frame comparing class counts, parameter counts, diagonal average posterior probabilities, and entropy.}
+#'       \item{\code{BF}, \code{BF.interpretation}}{Bayes factor computed from SIC and its evidence label.}
+#'       \item{\code{LRT.table}}{Separate rows for the standard LRT, VLMR, adjusted LMR, and BLRT when available, with statistics, degrees of freedom, p-values, and significance symbols.}
+#'       \item{\code{LRT.objects}}{Named list containing the unmodified hypothesis-test objects used to build \code{LRT.table}.}
+#'       \item{\code{digits}}{Requested numeric precision.}
 #'     }}
 #'
-#'   \item{\strong{\code{SE}}}{Returns a \code{summary.SE} object with components:
+#'   \item{\code{\link[LCPA:get.SE]{SE}}}{A \code{\link[LCPA]{summary.SE}} object with:
 #'     \describe{
-#'       \item{\code{call}}{Original function call.}
-#'       \item{\code{method}}{Character: "Obs" or "Bootstrap".}
-#'       \item{\code{diagnostics}}{List: method-specific diagnostic info (e.g., n.Bootstrap, hessian_cond_number).}
-#'       \item{\code{model_type}}{Character: "LCA" or "LPA".}
-#'       \item{\code{L}}{Integer: number of latent classes/profiles.}
-#'       \item{\code{I}}{Integer: number of variables/items (NA if unknown).}
-#'       \item{\code{nonzero_counts}}{List: counts of non-zero SEs by parameter type (P.Z, means/par, covs).}
-#'       \item{\code{total_PZ}}{Integer: total number of class probability parameters.}
+#'       \item{\code{call}}{Call that produced the standard-error object.}
+#'       \item{\code{method}}{Selected \code{"Bootstrap"}, \code{"Obs"}, or \code{"Louis"} method.}
+#'       \item{\code{diagnostics}}{Complete method-specific diagnostic list from \code{\link[LCPA]{get.SE}()}.}
+#'       \item{\code{type}}{\code{"LCA"}, \code{"LPA"}, or \code{"Unknown"}, inferred from the standard-error components.}
+#'       \item{\code{L}, \code{I}}{Number of classes/profiles and variables/items.}
+#'       \item{\code{nonzero.counts}}{Counts of nonzero standard errors for \code{P.Z} and, as applicable, \code{par}, \code{means}, and \code{covs}.}
+#'       \item{\code{total.P.Z}}{Total number of class-proportion standard errors.}
 #'     }}
 #' }
 #'
 #' @name summary
 NULL
 
+.summarize.Rmixmod <- function(object, arguments){
+  control <- arguments$control.Rmixmod
+  path <- if(is.null(control$path)) "LCPA" else control$path
+
+  if(identical(path, "Rmixmod")){
+    strategy <- methods::slot(object$model, "strategy")
+    algorithm <- as.character(methods::slot(strategy, "algo"))
+    iterations <- as.integer(methods::slot(strategy, "nbIterationInAlgo"))
+    tol <- as.numeric(methods::slot(strategy, "epsilonInAlgo"))
+    deterministic <- which(algorithm != "SEM")
+
+    return(list(
+      algorithm = paste0(paste(algorithm, collapse = " -> "), " (Rmixmod)"),
+      iterations = paste(paste0(algorithm, "=", iterations), collapse = " -> "),
+      tol = if(length(deterministic)) tol[deterministic] else NULL,
+      initialization = paste0(
+        methods::slot(strategy, "initMethod"), " (",
+        as.integer(methods::slot(strategy, "nbTryInInit")), " tries; ",
+        as.integer(methods::slot(strategy, "nbIterationInInit")), " iterations)"
+      ),
+      criterion = "log-likelihood",
+      note = "Native Rmixmod strategy; starts, maxiter.warmup, and nrep are not used"
+    ))
+  }
+
+  final.iterations <- control$maxiter
+  if(is.null(final.iterations)) final.iterations <- 1000L
+  list(
+    algorithm = "Stochastic EM (SEM; Rmixmod)",
+    iterations = paste0(arguments$maxiter.warmup, " warm-up + ", final.iterations, " final SEM"),
+    initialization = paste0(arguments$starts, " starts -> ", arguments$nrep, " SEM runs"),
+    criterion = "log-likelihood",
+    note = "SEM uses a fixed iteration count; epsilon convergence is not defined"
+  )
+}
+
 #' @describeIn summary Summary method for \code{LCA} objects
 #' @importFrom utils tail
-#' @export
+#' @exportS3Method summary LCA
 summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
   call_info <- object$call
   arguments <- object$arguments
@@ -174,7 +222,7 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
   P.Z <- params$P.Z
   class.probs <- data.frame(
     Class = names(P.Z),
-    Count = as.numeric(table(object$Z)),
+    Count = as.numeric(table(factor(object$Z, levels = seq_len(L)))),
     Proportion = sprintf("%.1f%%", P.Z * 100),
     row.names = NULL,
     stringsAsFactors = FALSE
@@ -185,7 +233,7 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
     lapply(seq_len(items_to_show), function(i) {
       prob_mat <- round(object$probability[[i]], digits)
       dimnames(prob_mat) <- list(
-        paste("Class", 1:nrow(prob_mat)),
+        .latent.group.names(nrow(prob_mat), "LCA"),
         paste("Cat", 1:ncol(prob_mat))
       )
       prob_mat
@@ -209,15 +257,15 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
     convergence <- list(
       algorithm = "Expectation-Maximization (EM)",
       iterations = iter.n,
-      tolerance = tol,
-      loglik_change = ll.delta,
-      loglik_initial = ll.initial,
-      loglik_final = ll.final
+      tol = tol,
+      Log.Lik.change = ll.delta,
+      Log.Lik.initial = ll.initial,
+      Log.Lik.final = ll.final
     )
   } else if (arguments$method == "NNE") {
     iter.n <- length(object$Log.Lik.history) - 1
-    maxiter_early <- if (!is.null(arguments$control.NNE) && !is.null(arguments$control.NNE$maxiter.early)) {
-      arguments$control.NNE$maxiter.early
+    patience.early <- if (!is.null(arguments$control.NNE) && !is.null(arguments$control.NNE$patience.early)) {
+      arguments$control.NNE$patience.early
     } else {
       5
     }
@@ -228,11 +276,49 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
     convergence <- list(
       algorithm = "Neural Network Estimation (NNE)",
       iterations = iter.n,
-      early_stop_threshold = maxiter_early,
-      loglik_change = ll.delta,
-      loglik_initial = ll.initial,
-      loglik_final = ll.final,
+      patience = patience.early,
+      Log.Lik.change = ll.delta,
+      Log.Lik.initial = ll.initial,
+      Log.Lik.final = ll.final,
       hardware = arguments$control.NNE$device
+    )
+  } else if (arguments$method == "Rmixmod") {
+    convergence <- .summarize.Rmixmod(object, arguments)
+  } else if (arguments$method == "flexmix") {
+    convergence <- list(
+      algorithm = "Stochastic EM (SEM; flexmix)",
+      iterations = paste0(
+        arguments$maxiter.warmup, " warm-up + ",
+        arguments$control.flexmix$maxiter, " final SEM"
+      ),
+      tol = if (arguments$control.flexmix$tol > 0) {
+        arguments$control.flexmix$tol
+      } else {
+        NULL
+      },
+      initialization = paste0(arguments$starts, " starts -> ", arguments$nrep, " SEM runs"),
+      criterion = "log-likelihood",
+      note = paste0(
+        "Fixed iteration count; likelihood tolerance disabled; ",
+        "one stochastic classification step per SEM iteration"
+      )
+    )
+  } else if (arguments$method == "RMixtComp") {
+    convergence <- list(
+      algorithm = "Stochastic EM (SEM; RMixtComp)",
+      iterations = paste0(
+        arguments$control.RMixtComp$maxiter.burnin, " burn-in + ",
+        arguments$control.RMixtComp$maxiter, " recorded SEM + ",
+        arguments$control.RMixtComp$maxiter.gibbs.burnin, " Gibbs burn-in + ",
+        arguments$control.RMixtComp$maxiter.gibbs, " recorded Gibbs"
+      ),
+      initialization = paste0(
+        arguments$control.RMixtComp$n.init.per.class,
+        " observations per class; ", arguments$control.RMixtComp$nrep,
+        " native run(s)"
+      ),
+      criterion = arguments$control.RMixtComp$criterion,
+      note = "Direct native RMixtComp flow; no LCPA warm-up or nrep promotion"
     )
   } else if (arguments$method == "Mplus") {
     convergence <- list(
@@ -241,7 +327,10 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
     )
   }
 
-  replication <- if (arguments$nrep > 1 && arguments$method != "Mplus") {
+  replication <- if (arguments$nrep > 1 &&
+                     !arguments$method %in% c("Mplus", "RMixtComp") &&
+                     !(arguments$method == "Rmixmod" &&
+                       identical(arguments$control.Rmixmod$path, "Rmixmod"))) {
     list(
       nrep = arguments$nrep,
       best_BIC = object$best_BIC
@@ -253,14 +342,14 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
   summary_obj <- list(
     call = call_info,
     model.config = list(
-      latent_classes = arguments$L,
+      L = arguments$L,
       method = arguments$method
     ),
     data.info = list(
       N = N,
       I = I,
       poly.value = poly.value,
-      uniform_categories = poly.value.uniform
+      categories.uniform = poly.value.uniform
     ),
     fit.stats = list(
       LogLik = object$Log.Lik,
@@ -279,12 +368,12 @@ summary.LCA <- function(object, digits = 4, I.max = 5, ...) {
   )
 
   class(summary_obj) <- "summary.LCA"
-  invisible(summary_obj)
+  summary_obj
 }
 
 #' @describeIn summary Summary method for \code{LPA} objects
 #' @importFrom utils tail
-#' @export
+#' @exportS3Method summary LPA
 summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
   call_info <- object$call
   arguments <- object$arguments
@@ -305,7 +394,7 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
   P.Z <- params$P.Z
   class.probs <- data.frame(
     Profile = names(P.Z),
-    Count = as.numeric(table(object$Z)),
+    Count = as.numeric(table(factor(object$Z, levels = seq_len(L)))),
     Proportion = sprintf("%.1f%%", P.Z * 100),
     row.names = NULL,
     stringsAsFactors = FALSE
@@ -331,14 +420,14 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
       convergence <- list(
         algorithm = "Expectation-Maximization (EM)",
         iterations = iter.n,
-        tolerance = tol,
-        loglik_change = ll.delta,
-        loglik_initial = ll.initial,
-        loglik_final = ll.final
+        tol = tol,
+        Log.Lik.change = ll.delta,
+        Log.Lik.initial = ll.initial,
+        Log.Lik.final = ll.final
       )
     } else if (arguments$method == "NNE") {
-      maxiter_early <- if (!is.null(arguments$control.NNE) && !is.null(arguments$control.NNE$maxiter.early)) {
-        arguments$control.NNE$maxiter.early
+      patience.early <- if (!is.null(arguments$control.NNE) && !is.null(arguments$control.NNE$patience.early)) {
+        arguments$control.NNE$patience.early
       } else {
         5
       }
@@ -346,13 +435,51 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
       convergence <- list(
         algorithm = "Neural Network Estimation (NNE)",
         iterations = iter.n,
-        early_stop_threshold = maxiter_early,
-        loglik_change = ll.delta,
-        loglik_initial = ll.initial,
-        loglik_final = ll.final,
+        patience = patience.early,
+        Log.Lik.change = ll.delta,
+        Log.Lik.initial = ll.initial,
+        Log.Lik.final = ll.final,
         hardware = arguments$control.NNE$device
       )
     }
+  } else if (arguments$method == "Rmixmod") {
+    convergence <- .summarize.Rmixmod(object, arguments)
+  } else if (arguments$method == "flexmix") {
+    convergence <- list(
+      algorithm = "Stochastic EM (SEM; flexmix)",
+      iterations = paste0(
+        arguments$maxiter.warmup, " warm-up + ",
+        arguments$control.flexmix$maxiter, " final SEM"
+      ),
+      tol = if (arguments$control.flexmix$tol > 0) {
+        arguments$control.flexmix$tol
+      } else {
+        NULL
+      },
+      initialization = paste0(arguments$starts, " starts -> ", arguments$nrep, " SEM runs"),
+      criterion = "log-likelihood",
+      note = paste0(
+        "Fixed iteration count; likelihood tolerance disabled; ",
+        "one stochastic classification step per SEM iteration"
+      )
+    )
+  } else if (arguments$method == "RMixtComp") {
+    convergence <- list(
+      algorithm = "Stochastic EM (SEM; RMixtComp)",
+      iterations = paste0(
+        arguments$control.RMixtComp$maxiter.burnin, " burn-in + ",
+        arguments$control.RMixtComp$maxiter, " recorded SEM + ",
+        arguments$control.RMixtComp$maxiter.gibbs.burnin, " Gibbs burn-in + ",
+        arguments$control.RMixtComp$maxiter.gibbs, " recorded Gibbs"
+      ),
+      initialization = paste0(
+        arguments$control.RMixtComp$n.init.per.class,
+        " observations per class; ", arguments$control.RMixtComp$nrep,
+        " native run(s)"
+      ),
+      criterion = arguments$control.RMixtComp$criterion,
+      note = "Direct native RMixtComp flow; no LCPA warm-up or nrep promotion"
+    )
   } else if (arguments$method == "Mplus") {
     convergence <- list(
       algorithm = "Mplus (External Estimation)",
@@ -361,10 +488,14 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
   }
 
   # Replication info
-  replication <- if (arguments$nrep > 1 && arguments$method != "Mplus") {
+  replication <- if (arguments$nrep > 1 &&
+                     !arguments$method %in% c("Mplus", "RMixtComp") &&
+                     !(arguments$method == "Rmixmod" &&
+                       identical(arguments$control.Rmixmod$path, "Rmixmod"))) {
+    finite.Log.Lik <- object$Log.Lik.nrep[is.finite(object$Log.Lik.nrep)]
     list(
       nrep = arguments$nrep,
-      best_BIC = min(object$Log.Lik.nrep) * -2 + log(N) * object$npar  # Recalculate BIC from stored log-likelihoods
+      best_BIC = if(length(finite.Log.Lik) > 0) -2 * max(finite.Log.Lik) + log(N) * object$npar else NA_real_
     )
   } else {
     NULL
@@ -372,7 +503,7 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
 
   # Covariance structure description
   if(any(arguments$constraint %in% c("VV", "VE", "EV", "EE", "V0", "E0", "UV", "UE"))){
-    cov_structure <- switch(arguments$constraint,
+    constraint <- switch(arguments$constraint,
                             VV = "   Free variance, free covariance",
                             VE = "   Free variance, shared covariance",
                             EV = "   Shared variance, free covariance",
@@ -404,16 +535,16 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
       if (length(variance_constraints) > 0) variance_constraints else "No shared variance constraints",
       if (length(covariance_constraints) > 0) covariance_constraints else "No shared covariance constraints"
     )
-    cov_structure <- paste(all_constraints, collapse = "\n")
+    constraint <- paste(all_constraints, collapse = "\n")
   }
 
   # Build summary object
   summary_obj <- list(
     call = call_info,
     model.config = list(
-      latent_profiles = L,
+      L = L,
       constraint = arguments$constraint,
-      cov_structure = cov_structure,
+      constraint.description = constraint,
       method = arguments$method
     ),
     data.info = list(
@@ -438,49 +569,153 @@ summary.LPA <- function(object, digits = 4, I.max = 5, ...) {
   )
 
   class(summary_obj) <- "summary.LPA"
-  invisible(summary_obj)
+  summary_obj
+}
+
+.summarize.ZY <- function(object, digits, longitudinal = FALSE) {
+  arguments <- object$arguments
+  times <- length(object$P.Z.Xns)
+  L <- ncol(object$P.Z.Xns[[1L]])
+  class.probs <- lapply(seq_len(times), function(t) {
+    .latent.group.columns(data.frame(
+      Class = .latent.group.names(L, arguments$type.model),
+      Probability = round(object$P.Zs[[t]], digits),
+      Proportion = sprintf("%.1f%%", object$P.Zs[[t]] * 100),
+      Frequency = as.vector(table(factor(object$Zs[[t]], levels = seq_len(L))))
+    ), arguments$type.model)
+  })
+  names(class.probs) <- paste0("Time ", seq_len(times))
+  dependent.model.info <- do.call(rbind, lapply(
+    names(object$dependent.variables), function(group.name) {
+      group <- object$dependent.variables[[group.name]]
+      do.call(rbind, lapply(names(group), function(dependent.variable.name) {
+        model <- group[[dependent.variable.name]]
+        data.frame(
+          Model = group.name,
+          Dependent.Variable = dependent.variable.name,
+          Family = model$family,
+          Observations = model$observations,
+          Omitted = model$omitted,
+          Converged = model$converged,
+          Iterations = model$iterations,
+          stringsAsFactors = FALSE
+        )
+      }))
+    }
+  ))
+  list(
+    call = object$call,
+    type.analysis = "ZY",
+    model.config = list(
+      times = times,
+      L = L,
+      type = ifelse(arguments$type.model == "LCA",
+                    "Latent Class Analysis (categorical)",
+                    "Latent Profile Analysis (continuous)"),
+      type.model = arguments$type.model,
+      method.3step = arguments$method.3step,
+      method.model = arguments$method.model,
+      method.regression = arguments$method.regression,
+      method.SE = arguments$method.SE,
+      dependent.variable.structure = if(longitudinal) {
+        arguments$dependent.variable.structure
+      } else {
+        "State"
+      },
+      dependent.variable.time = if(longitudinal) arguments$dependent.variable.time else 1L,
+      dependent.variable.time.cross = if(longitudinal) arguments$dependent.variable.time.cross else FALSE,
+      step1.source = if (!is.null(arguments$control.model$params)) {
+        "User-supplied fixed parameters"
+      } else if (longitudinal && isTRUE(arguments$step1.pool)) {
+        "Pooled responses across all time points"
+      } else if (longitudinal) {
+        "Time point 1 (default)"
+      } else {
+        "Cross-sectional response data"
+      },
+      npar = object$npar,
+      CEP.handling = ifelse(arguments$CEP.error,
+                            ifelse(longitudinal && arguments$CEP.time.cross,
+                                   "Classification error correction (time-invariant CEP)",
+                                   "Classification error correction"),
+                            "No classification error correction (naive modal assignment)")
+    ),
+    data.info = list(
+      N = nrow(object$P.Z.Xns[[1L]]),
+      variables = if(longitudinal) ncol(arguments$responses[[1L]]) else ncol(arguments$response),
+      times = times,
+      dependent.variable.models = nrow(dependent.model.info)
+    ),
+    class.probs = class.probs,
+    dependent.variables = object$dependent.variables,
+    latent.paths = object$latent.paths,
+    SE.diagnostics = object$SE.diagnostics,
+    diagnostics = object$diagnostics,
+    convergence = list(
+      converged = object$converged,
+      models = dependent.model.info
+    ),
+    digits = digits
+  )
 }
 
 #' @describeIn summary Summary method for \code{LTA} objects
-#' @export
+#' @exportS3Method summary LTA
 summary.LTA <- function(object, digits = 4, ...) {
+  if(identical(object$type.analysis, "ZY")){
+    summary_obj <- .summarize.ZY(object, digits, longitudinal = TRUE)
+    class(summary_obj) <- "summary.LTA"
+    return(summary_obj)
+  }
   arguments <- object$arguments
   times <- length(object$P.Zs)
   L <- ncol(object$beta)
   ref.class <- arguments$ref.class
-  type <- arguments$type
+  type <- arguments$type.model
   N <- nrow(arguments$responses[[1]])
   I <- ncol(arguments$responses[[1]])
-  covariates.timeCross <- arguments$covariates.timeCross
+  covariates.time.cross <- arguments$covariates.time.cross
 
   # Model configuration
   model_config <- list(
-    time_points = times,
-    latent_classes = L,
-    model_type = ifelse(type == "LCA", "Latent Class Analysis (categorical)",
+    times = times,
+    L = L,
+    type.model = type,
+    type = ifelse(type == "LCA", "Latent Class Analysis (categorical)",
                         "Latent Profile Analysis (continuous)"),
-    reference_class = ref.class,
-    covariates_mode = if (!is.null(arguments$covariates)) {
-      if (covariates.timeCross) "Time-invariant covariates" else "Time-varying covariates"
+    method.3step = arguments$method.3step,
+    method.model = arguments$method.model,
+    method.regression = arguments$method.regression,
+    method.SE = arguments$method.SE,
+    step1.source = if (!is.null(arguments$control.model$params)) {
+      "User-supplied fixed parameters"
+    } else if (isTRUE(arguments$step1.pool)) {
+      "Pooled responses across all time points"
+    } else {
+      "Time point 1 (default)"
+    },
+    ref.class = ref.class,
+    covariates.mode = if (!is.null(arguments$covariates)) {
+      if (covariates.time.cross) "Time-invariant covariates" else "Time-varying covariates"
     } else "No covariates",
-    CEP_handling = ifelse(arguments$CEP.error,
-                          ifelse(arguments$CEP.timeCross,
+    CEP.handling = ifelse(arguments$CEP.error,
+                          ifelse(arguments$CEP.time.cross,
                                  "Classification error correction (time-invariant CEP)",
                                  "Classification error correction (time-varying CEP)"),
                           "No classification error correction (naive modal assignment)"),
-    transition_mode = ifelse(covariates.timeCross,
+    transition.mode = ifelse(covariates.time.cross,
                              "Time-invariant transition effects (coefficients constant across time)",
                              "Time-varying transition effects (coefficients differ by time point)")
   )
 
   # Class probabilities over time
   class_probs <- lapply(1:times, function(t) {
-    data.frame(
-      Class = as.character(1:L),
+    .latent.group.columns(data.frame(
+      Class = .latent.group.names(L, type),
       Probability = round(object$P.Zs[[t]], digits),
       Proportion = sprintf("%.1f%%", object$P.Zs[[t]] * 100),
       Frequency = as.vector(table(factor(object$Zs[[t]], levels = 1:L)))
-    )
+    ), type)
   })
   names(class_probs) <- paste0("Time ", 1:times)
 
@@ -499,7 +734,7 @@ summary.LTA <- function(object, digits = 4, ...) {
     cov_names_list[[t]] <- cov_names
   }
 
-  if (covariates.timeCross) {
+  if (covariates.time.cross) {
     # Use first time point's covariate names for all
     cov_names_list <- replicate(times, cov_names_list[[1]], simplify = FALSE)
   }
@@ -512,11 +747,11 @@ summary.LTA <- function(object, digits = 4, ...) {
     Class = character(),
     Covariate = character(),
     Estimate = numeric(),
-    Std_Error = numeric(),
-    lower_95 = numeric(),
-    upper_95 = numeric(),
-    z_value = numeric(),
-    p_value = numeric(),
+    Std.Error = numeric(),
+    lower.95 = numeric(),
+    upper.95 = numeric(),
+    z.value = numeric(),
+    p.value = numeric(),
     stringsAsFactors = FALSE
   )
 
@@ -529,35 +764,36 @@ summary.LTA <- function(object, digits = 4, ...) {
       p_val <- if (!is.null(object$beta.p.value.tail2)) object$beta.p.value.tail2[j, cls] else NA
 
       # Calculate 95% confidence intervals safely
-      lower_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
-      upper_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
+      lower.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
+      upper.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
 
       initial_coef <- rbind(initial_coef, data.frame(
-        Class = paste0("Class ", cls),
+        Class = .latent.group.names(L, type)[cls],
         Covariate = cov_names_initial[j],
         Estimate = round(coef_val, digits),
-        Std_Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
-        lower_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower_95, digits)),
-        upper_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper_95, digits)),
-        z_value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
-        p_value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
+        Std.Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
+        lower.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower.95, digits)),
+        upper.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper.95, digits)),
+        z.value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
+        p.value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
       ))
     }
   }
+  initial_coef <- .latent.group.columns(initial_coef, type)
 
   # Transition coefficients: time-invariant vs time-varying
-  if (covariates.timeCross) {
+  if (covariates.time.cross) {
     # Only one transition model needed (all time points share same coefficients)
     trans_df <- data.frame(
-      From_Class = character(),
-      To_Class = character(),
+      From.Class = character(),
+      To.Class = character(),
       Covariate = character(),
       Estimate = numeric(),
-      Std_Error = numeric(),
-      lower_95 = numeric(),
-      upper_95 = numeric(),
-      z_value = numeric(),
-      p_value = numeric(),
+      Std.Error = numeric(),
+      lower.95 = numeric(),
+      upper.95 = numeric(),
+      z.value = numeric(),
+      p.value = numeric(),
       stringsAsFactors = FALSE
     )
 
@@ -576,26 +812,31 @@ summary.LTA <- function(object, digits = 4, ...) {
           p_val <- if (!is.null(object$gamma.p.value.tail2)) object$gamma.p.value.tail2[[1]][[from_cls]][[to_cls]][j] else NA
 
           # Calculate 95% confidence intervals safely
-          lower_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
-          upper_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
+          lower.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
+          upper.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
 
           trans_df <- rbind(trans_df, data.frame(
-            From_Class = paste0("Class ", from_cls),
-            To_Class = paste0("Class ", to_cls),
+            From.Class = .latent.group.names(L, type)[from_cls],
+            To.Class = .latent.group.names(L, type)[to_cls],
             Covariate = cov_names_trans[j],
             Estimate = round(coef_val, digits),
-            Std_Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
-            lower_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower_95, digits)),
-            upper_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper_95, digits)),
-            z_value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
-            p_value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
+            Std.Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
+            lower.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower.95, digits)),
+            upper.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper.95, digits)),
+            z.value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
+            p.value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
           ))
         }
       }
     }
 
+    trans_df <- .latent.group.columns(trans_df, type)
+
     # Add reference class explanation to dataframe
-    attr(trans_df, "ref_class_note") <- paste0("All transitions are relative to reference destination Class ", ref.class)
+    attr(trans_df, "ref_class_note") <- paste0(
+      "All transitions are relative to reference destination ",
+      .latent.group.names(L, type)[ref.class]
+    )
 
     # Single transition model with special label
     transition_coefs <- list(`Time-invariant effects` = trans_df)
@@ -607,15 +848,15 @@ summary.LTA <- function(object, digits = 4, ...) {
       vars_to_show_trans <- length(cov_names_trans)
 
       trans_df <- data.frame(
-        From_Class = character(),
-        To_Class = character(),
+        From.Class = character(),
+        To.Class = character(),
         Covariate = character(),
         Estimate = numeric(),
-        Std_Error = numeric(),
-        lower_95 = numeric(),
-        upper_95 = numeric(),
-        z_value = numeric(),
-        p_value = numeric(),
+        Std.Error = numeric(),
+        lower.95 = numeric(),
+        upper.95 = numeric(),
+        z.value = numeric(),
+        p.value = numeric(),
         stringsAsFactors = FALSE
       )
 
@@ -629,40 +870,45 @@ summary.LTA <- function(object, digits = 4, ...) {
             p_val <- if (!is.null(object$gamma.p.value.tail2)) object$gamma.p.value.tail2[[t]][[from_cls]][[to_cls]][j] else NA
 
             # Calculate 95% confidence intervals safely
-            lower_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
-            upper_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
+            lower.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
+            upper.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
 
             trans_df <- rbind(trans_df, data.frame(
-              From_Class = paste0("Class ", from_cls),
-              To_Class = paste0("Class ", to_cls),
+              From.Class = .latent.group.names(L, type)[from_cls],
+              To.Class = .latent.group.names(L, type)[to_cls],
               Covariate = cov_names_trans[j],
               Estimate = round(coef_val, digits),
-              Std_Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
-              lower_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower_95, digits)),
-              upper_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper_95, digits)),
-              z_value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
-              p_value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
+              Std.Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
+              lower.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower.95, digits)),
+              upper.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper.95, digits)),
+              z.value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
+              p.value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
             ))
           }
         }
       }
+      trans_df <- .latent.group.columns(trans_df, type)
+
       # Add reference class explanation
-      attr(trans_df, "ref_class_note") <- paste0("All transitions are relative to reference destination Class ", ref.class)
+      attr(trans_df, "ref_class_note") <- paste0(
+        "All transitions are relative to reference destination ",
+        .latent.group.names(L, type)[ref.class]
+      )
       transition_coefs[[t]] <- trans_df
     }
     names(transition_coefs) <- paste0("Time ", 1:(times-1), " -> Time ", 2:times)
   }
 
   # Convergence information
-  log_lik_at_start <- if (length(object$Log.Lik.history) > 0) object$Log.Lik.history[2] else NA
+  log_lik_at_start <- if (length(object$Log.Lik.history) > 0) object$Log.Lik.history[1L] else NA
   log_lik_at_end <- object$Log.Lik
-  loglik_change <- if (!is.na(log_lik_at_start)) round(log_lik_at_end - log_lik_at_start, digits) else NA
+  Log.Lik.change <- if (!is.na(log_lik_at_start)) round(log_lik_at_end - log_lik_at_start, digits) else NA
 
   convergence_info <- list(
     iterations = object$iterations,
-    coveraged = object$coveraged,
-    converg_note = sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
-                           log_lik_at_start, log_lik_at_end, loglik_change)
+    converged = object$converged,
+    note = sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
+                           log_lik_at_start, log_lik_at_end, Log.Lik.change)
   )
 
   # Build summary object
@@ -670,9 +916,9 @@ summary.LTA <- function(object, digits = 4, ...) {
     call = object$call,
     model.config = model_config,
     data.info = list(
-      sample_size = N,
+      N = N,
       variables = I,
-      time_points = times
+      times = times
     ),
     fit.stats = list(
       LogLik = object$Log.Lik,
@@ -681,57 +927,67 @@ summary.LTA <- function(object, digits = 4, ...) {
       npar = object$npar
     ),
     class.probs = class_probs,
-    initial_model = list(
+    initial.model = list(
       coefficients = initial_coef,
-      covariate_names = cov_names_initial,
-      reference_class = ref.class
+      covariates.names = cov_names_initial,
+      ref.class = ref.class
     ),
-    transition_models = transition_coefs,
+    transition.models = transition_coefs,
     convergence = convergence_info,
     digits = digits,
     total.vars = if (!is.null(arguments$covariates)) max(sapply(arguments$covariates, ncol)) else 1,
-    covariates.timeCross = covariates.timeCross,
-    reference_class = ref.class  # Store reference class at top level for easy access
+    covariates.time.cross = covariates.time.cross,
+    ref.class = ref.class  # Store reference class at top level for easy access
   )
 
   class(summary_obj) <- "summary.LTA"
-  invisible(summary_obj)
+  summary_obj
 }
 
 #' @describeIn summary Summary method for \code{LCPA} objects
-#' @export
+#' @exportS3Method summary LCPA
 summary.LCPA <- function(object, digits = 4, ...) {
+  if(identical(object$type.analysis, "ZY")){
+    summary_obj <- .summarize.ZY(object, digits, longitudinal = FALSE)
+    class(summary_obj) <- "summary.LCPA"
+    return(summary_obj)
+  }
   arguments <- object$arguments
   L <- ncol(object$beta)
   ref.class <- arguments$ref.class
-  type <- arguments$type
+  type <- arguments$type.model
   N <- nrow(object$P.Z.Xn)  # Single time point
   I <- ncol(arguments$response)
 
   # Model configuration
   model_config <- list(
-    latent_classes = L,
-    model_type = ifelse(type == "LCA", "Latent Class Analysis (categorical)",
+    L = L,
+    type.model = type,
+    type = ifelse(type == "LCA", "Latent Class Analysis (categorical)",
                         "Latent Profile Analysis (continuous)"),
-    reference_class = ref.class,
-    covariates_mode = if (!is.null(arguments$covariate)) {
+    method.3step = arguments$method.3step,
+    method.model = arguments$method.model,
+    method.regression = arguments$method.regression,
+    method.SE = arguments$method.SE,
+    ref.class = ref.class,
+    covariates.mode = if (!is.null(arguments$covariates)) {
       "Covariates included in class membership model"
     } else "No covariates (intercept-only model)",
-    CEP_handling = ifelse(arguments$CEP.error,
+    CEP.handling = ifelse(arguments$CEP.error,
                           "Classification error correction applied",
                           "No classification error correction (naive modal assignment)")
   )
 
   # Class probabilities (single time point)
-  class_probs_df <- data.frame(
-    Class = as.character(1:L),
+  class_probs_df <- .latent.group.columns(data.frame(
+    Class = .latent.group.names(L, type),
     Probability = round(object$P.Z, digits),
     Proportion = sprintf("%.1f%%", object$P.Z * 100),
     Frequency = as.vector(table(factor(object$Z, levels = 1:L)))
-  )
+  ), type)
 
   # Extract covariate names
-  cov_mat <- arguments$covariate
+  cov_mat <- arguments$covariates
   if (is.null(cov_mat)) {
     cov_names <- "Intercept"
   } else {
@@ -752,11 +1008,11 @@ summary.LCPA <- function(object, digits = 4, ...) {
     Class = character(),
     Covariate = character(),
     Estimate = numeric(),
-    Std_Error = numeric(),
-    lower_95 = numeric(),
-    upper_95 = numeric(),
-    z_value = numeric(),
-    p_value = numeric(),
+    Std.Error = numeric(),
+    lower.95 = numeric(),
+    upper.95 = numeric(),
+    z.value = numeric(),
+    p.value = numeric(),
     stringsAsFactors = FALSE
   )
 
@@ -769,33 +1025,34 @@ summary.LCPA <- function(object, digits = 4, ...) {
       p_val <- if (!is.null(object$beta.p.value.tail2)) object$beta.p.value.tail2[j, cls] else NA
 
       # Calculate 95% confidence intervals safely
-      lower_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
-      upper_95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
+      lower.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val - 1.96 * se_val else NA
+      upper.95 <- if (!is.na(se_val) && is.finite(se_val)) coef_val + 1.96 * se_val else NA
 
       coef_df <- rbind(coef_df, data.frame(
-        Class = paste0("Class ", cls),
+        Class = .latent.group.names(L, type)[cls],
         Covariate = cov_names[j],
         Estimate = round(coef_val, digits),
-        Std_Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
-        lower_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower_95, digits)),
-        upper_95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper_95, digits)),
-        z_value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
-        p_value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
+        Std.Error = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(se_val, digits)),
+        lower.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(lower.95, digits)),
+        upper.95 = ifelse(is.na(se_val) || !is.finite(se_val), NA, round(upper.95, digits)),
+        z.value = ifelse(is.na(z_val) || !is.finite(z_val), NA, round(z_val, digits)),
+        p.value = ifelse(is.na(p_val) || !is.finite(p_val), NA, sprintf("%.4f", p_val))
       ))
     }
   }
+  coef_df <- .latent.group.columns(coef_df, type)
 
   # Convergence information
-  log_lik_at_start <- if (length(object$Log.Lik.history) > 0) object$Log.Lik.history[2] else NA
+  log_lik_at_start <- if (length(object$Log.Lik.history) > 0) object$Log.Lik.history[1L] else NA
   log_lik_at_end <- object$Log.Lik
-  loglik_change <- if (!is.na(log_lik_at_start)) round(log_lik_at_end - log_lik_at_start, digits) else NA
+  Log.Lik.change <- if (!is.na(log_lik_at_start)) round(log_lik_at_end - log_lik_at_start, digits) else NA
 
   convergence_info <- list(
     iterations = object$iterations,
-    coveraged = object$coveraged,
-    converg_note = if (!is.na(loglik_change)) {
+    converged = object$converged,
+    note = if (!is.na(Log.Lik.change)) {
       sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
-              log_lik_at_start, log_lik_at_end, loglik_change)
+              log_lik_at_start, log_lik_at_end, Log.Lik.change)
     } else {
       "  Log-likelihood history unavailable\n"
     }
@@ -806,7 +1063,7 @@ summary.LCPA <- function(object, digits = 4, ...) {
     call = object$call,
     model.config = model_config,
     data.info = list(
-      sample_size = N,
+      N = N,
       variables = I
     ),
     fit.stats = list(
@@ -817,21 +1074,21 @@ summary.LCPA <- function(object, digits = 4, ...) {
     ),
     class.probs = class_probs_df,
     coefficients = coef_df,
-    covariate_names = cov_names,
-    reference_class = ref.class,
+    covariates.names = cov_names,
+    ref.class = ref.class,
     convergence = convergence_info,
     digits = digits,
     vars.to.show = vars_to_show,
     total.vars = length(cov_names),
-    has.covariates = !is.null(arguments$covariate)
+    has.covariates = !is.null(arguments$covariates)
   )
 
   class(summary_obj) <- "summary.LCPA"
-  invisible(summary_obj)
+  summary_obj
 }
 
 #' @describeIn summary Summary method for \code{sim.LCA} objects
-#' @export
+#' @exportS3Method summary sim.LCA
 summary.sim.LCA <- function(object, digits = 4, I.max = 5, ...) {
   N <- nrow(object$response)
   I <- ncol(object$response)
@@ -846,7 +1103,7 @@ summary.sim.LCA <- function(object, digits = 4, I.max = 5, ...) {
       prob_mat[l, ] <- object$par[l, i, 1:object$poly.value[i]]
     }
     dimnames(prob_mat) <- list(
-      paste0("Class ", 1:L),
+      .latent.group.names(L, "LCA"),
       paste0("Cat", 0:(object$poly.value[i]-1))
     )
     item.probs[[i]] <- round(prob_mat, digits)
@@ -859,14 +1116,14 @@ summary.sim.LCA <- function(object, digits = 4, I.max = 5, ...) {
       I = I,
       L = L,
       poly.value = object$poly.value,
-      uniform_categories = length(unique(object$poly.value)) == 1,
+      categories.uniform = length(unique(object$poly.value)) == 1,
       IQ = object$arguments$IQ,
       distribution = object$arguments$distribution
     ),
     class.probs = data.frame(
-      Class = paste0("L", 1:L),
+      Class = .latent.group.names(L, "LCA"),
       Probability = round(object$P.Z, digits),
-      Frequency = as.vector(table(object$Z))
+      Frequency = as.vector(table(factor(object$Z, levels = seq_len(L))))
     ),
     item.probs = item.probs,
     I.max.shown = vars_to_show,
@@ -879,7 +1136,7 @@ summary.sim.LCA <- function(object, digits = 4, I.max = 5, ...) {
 }
 
 #' @describeIn summary Summary method for \code{sim.LPA} objects
-#' @export
+#' @exportS3Method summary sim.LPA
 summary.sim.LPA <- function(object, digits = 4, I.max = 5, ...) {
   N <- nrow(object$response)
   I <- ncol(object$response)
@@ -904,12 +1161,12 @@ summary.sim.LPA <- function(object, digits = 4, I.max = 5, ...) {
       distribution = object$arguments$distribution
     ),
     class.probs = data.frame(
-      Profile = names(object$P.Z),
+      Profile = .latent.group.names(L, "LPA"),
       Probability = object$P.Z,
-      Frequency = as.vector(table(object$Z))
+      Frequency = as.vector(table(factor(object$Z, levels = seq_len(L))))
     ),
     class.means = class.means,
-    cov_structure = constraint_desc$details,
+    constraint = constraint_desc$details,
     I.max.shown = vars_to_show,
     total.vars = I,
     digits = digits
@@ -1005,7 +1262,7 @@ describe_constraint <- function(constraint, I) {
 }
 
 #' @describeIn summary Summary method for \code{sim.LTA} objects
-#' @export
+#' @exportS3Method summary sim.LTA
 summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
   # Extract basic information
   N <- nrow(object$responses[[1]])
@@ -1020,11 +1277,11 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
 
   # Class probabilities at each time point
   class_probs <- lapply(1:times, function(t) {
-    data.frame(
-      Class = paste0("L", 1:L),
+    .latent.group.columns(data.frame(
+      Class = .latent.group.names(L, type),
       Probability = round(object$P.Zs[[t]], digits),
-      Frequency = as.vector(table(object$Zs[[t]]))
-    )
+      Frequency = as.vector(table(factor(object$Zs[[t]], levels = seq_len(L))))
+    ), type)
   })
   names(class_probs) <- paste0("Time ", 1:times)
 
@@ -1039,7 +1296,7 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
           prob_mat[l, ] <- object$par[l, i, 1:object$poly.value[i]]
         }
         dimnames(prob_mat) <- list(
-          paste0("Class ", 1:classes_to_show),
+          .latent.group.names(classes_to_show, type),
           paste0("Cat", 0:(object$poly.value[i]-1))
         )
         item_probs[[t]][[i]] <- round(prob_mat, digits)
@@ -1068,13 +1325,13 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
     transition_info$rate <- lapply(1:(times-1), function(t) {
       rate_mat <- round(object$rate[[t]], digits)
       dimnames(rate_mat) <- list(
-        paste0("From L", 1:L),
-        paste0("To L", 1:L)
+        paste("From", .latent.group.names(L, type)),
+        paste("To", .latent.group.names(L, type))
       )
       rate_mat
     })
     # Store time point indices directly for printing
-    transition_info$time_points <- data.frame(
+    transition_info$times <- data.frame(
       from = 1:(times-1),
       to = 2:times
     )
@@ -1084,7 +1341,7 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
     transition_info$beta <- round(object$beta, digits)
     dimnames(transition_info$beta) <- list(
       colnames(object$covariates[[1]]),
-      paste0("Class ", 1:ncol(object$beta))
+      .latent.group.names(ncol(object$beta), type)
     )
 
     gamma_display <- vector("list", times-1)
@@ -1100,18 +1357,18 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
         }
         gamma_t[[l]] <- round(gamma_mat, digits)
         dimnames(gamma_t[[l]]) <- list(
-          colnames(object$covariates[[t]]),
-          paste0("To L", 1:L)
+          colnames(object$covariates[[t + 1L]]),
+          paste("To", .latent.group.names(L, type))
         )
       }
-      names(gamma_t) <- paste0("From L", 1:L)
+      names(gamma_t) <- paste("From", .latent.group.names(L, type))
       gamma_display[[t]] <- gamma_t
     }
     names(gamma_display) <- paste0("T", 1:(times-1), "->T", 2:times)
     transition_info$gamma <- gamma_display
 
     # Store time point indices directly for printing
-    transition_info$time_points <- data.frame(
+    transition_info$times <- data.frame(
       from = 1:(times-1),
       to = 2:times
     )
@@ -1127,6 +1384,7 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
       times = times,
       type = type,
       distribution = object$arguments$distribution,
+      ref.class = object$ref.class,
       constraint = if (type == "LPA") object$arguments$constraint else NULL
     ),
     class.probs = class_probs,
@@ -1163,8 +1421,8 @@ summary.sim.LTA <- function(object, digits = 4, I.max = 5, L.max = 5, ...) {
   return(summary_obj)
 }
 
-#' @describeIn summary Summary method for \code{fit.index} objects
-#' @export
+#' @describeIn summary Summary method for \code{\link[LCPA:get.fit.index]{fit.index}} objects
+#' @exportS3Method summary fit.index
 summary.fit.index <- function(object, digits = 4, ...) {
 
   N <- object$N
@@ -1205,11 +1463,11 @@ summary.fit.index <- function(object, digits = 4, ...) {
   )
 
   class(res) <- "summary.fit.index"
-  invisible(res)
+  res
 }
 
 #' @describeIn summary Summary method for \code{compare.model} objects
-#' @export
+#' @exportS3Method summary compare.model
 summary.compare.model <- function(object, digits = 4, ...) {
 
   fit.index1 <- object$fit.index$model1
@@ -1257,7 +1515,7 @@ summary.compare.model <- function(object, digits = 4, ...) {
   AvePP <- object$AvePP
   entropy <- object$entropy
 
-  model_comparison <- data.frame(
+  model.comparison <- data.frame(
     Classes = c(L1, L2),
     npar = c(fit.index1$npar, fit.index2$npar),
     AvePP = fmt_num(c(AvePP$model1[L1+1, L1+1], AvePP$model2[L2+1, L2+1])),
@@ -1280,14 +1538,14 @@ summary.compare.model <- function(object, digits = 4, ...) {
     "Bayes factor not available"
   }
 
-  lrt_list <- list()
+  LRT.list <- list()
   test_names <- character(0)
   stats <- numeric(0)
   dfs <- numeric(0)
   pvals <- numeric(0)
 
   if (!is.null(object$LRT.obj)) {
-    lrt_list[["LRT"]] <- object$LRT.obj
+    LRT.list[["LRT"]] <- object$LRT.obj
     test_names <- c(test_names, "Standard LRT")
     stats <- c(stats, object$LRT.obj$statistic)
     dfs <- c(dfs, object$LRT.obj$parameter)
@@ -1295,22 +1553,31 @@ summary.compare.model <- function(object, digits = 4, ...) {
   }
 
   if (!is.null(object$LRT.VLMR.obj)) {
-    lrt_list[["VLMR"]] <- object$LRT.VLMR.obj
-    test_names <- c(test_names, "VLMR-adjusted LRT")
-    stats <- c(stats, object$LRT.VLMR.obj$statistic)
-    dfs <- c(dfs, object$LRT.VLMR.obj$parameter)
-    pvals <- c(pvals, object$LRT.VLMR.obj$p.value)
+    LRT.list[["VLMR"]] <- object$LRT.VLMR.obj
+    test_names <- c(test_names, "VLMR LRT", "Adjusted LMR LRT")
+    stats <- c(
+      stats, object$LRT.VLMR.obj$statistic,
+      object$LRT.VLMR.obj$adjusted.statistic
+    )
+    dfs <- c(
+      dfs, object$LRT.VLMR.obj$parameter,
+      object$LRT.VLMR.obj$parameter
+    )
+    pvals <- c(
+      pvals, object$LRT.VLMR.obj$p.value,
+      object$LRT.VLMR.obj$adjusted.p.value
+    )
   }
 
   if (!is.null(object$LRT.Bootstrap.obj)) {
-    lrt_list[["Bootstrap"]] <- object$LRT.Bootstrap.obj
+    LRT.list[["Bootstrap"]] <- object$LRT.Bootstrap.obj
     test_names <- c(test_names, "Bootstrap LRT")
     stats <- c(stats, object$LRT.Bootstrap.obj$statistic)
     dfs <- c(dfs, object$LRT.Bootstrap.obj$parameter)
     pvals <- c(pvals, object$LRT.Bootstrap.obj$p.value)
   }
 
-  lrt_table <- if (length(test_names) > 0) {
+  LRT.table <- if (length(test_names) > 0) {
     sig_labels <- ifelse(pvals < 0.001, "***",
                          ifelse(pvals < 0.01, "**",
                                 ifelse(pvals < 0.05, "*", "")))
@@ -1331,54 +1598,54 @@ summary.compare.model <- function(object, digits = 4, ...) {
     call = object$call,
     data.info = list(N = N, I = I, L = c(L1, L2)),
     fit.table = fit_stats,
-    model_comparison = model_comparison,
+    model.comparison = model.comparison,
     BF = BF,
-    BF_interpretation = bf_interpretation,
-    lrt_table = lrt_table,
-    lrt_objects = lrt_list,
+    BF.interpretation = bf_interpretation,
+    LRT.table = LRT.table,
+    LRT.objects = LRT.list,
     digits = digits
   )
 
   class(res) <- "summary.compare.model"
-  invisible(res)
+  res
 }
 
-#' @describeIn summary Summary method for \code{summary.SE} objects
-#' @export
+#' @describeIn summary Summary method for \code{\link[LCPA]{summary.SE}} objects
+#' @exportS3Method summary SE
 summary.SE <- function(object, ...) {
   # Determine model type
-  model_type <- if (!is.null(object$se$means)) "LPA" else if (!is.null(object$se$par)) "LCA" else "Unknown"
+  type <- if (!is.null(object$se$means)) "LPA" else if (!is.null(object$se$par)) "LCA" else "Unknown"
 
   # Extract dimensions
   L <- length(object$se$P.Z)
-  I <- if (model_type == "LPA") {
+  I <- if (type == "LPA") {
     ncol(object$se$means)
-  } else if (model_type == "LCA") {
+  } else if (type == "LCA") {
     dim(object$se$par)[2]
   } else {
     NA
   }
 
   # Count non-zero SEs
-  nonzero_counts <- list(
+  nonzero.counts <- list(
     P.Z = sum(object$se$P.Z != 0, na.rm = TRUE)
   )
-  if (model_type == "LPA") {
-    nonzero_counts$means <- sum(object$se$means != 0, na.rm = TRUE)
-    nonzero_counts$covs <- sum(object$se$covs != 0, na.rm = TRUE)
-  } else if (model_type == "LCA") {
-    nonzero_counts$par <- sum(object$se$par != 0, na.rm = TRUE)
+  if (type == "LPA") {
+    nonzero.counts$means <- sum(object$se$means != 0, na.rm = TRUE)
+    nonzero.counts$covs <- sum(object$se$covs != 0, na.rm = TRUE)
+  } else if (type == "LCA") {
+    nonzero.counts$par <- sum(object$se$par != 0, na.rm = TRUE)
   }
 
   res <- list(
     call = object$call,
     method = object$diagnostics$method,
     diagnostics = object$diagnostics,
-    model_type = model_type,
+    type = type,
     L = L,
     I = I,
-    nonzero_counts = nonzero_counts,
-    total_PZ = length(object$se$P.Z)
+    nonzero.counts = nonzero.counts,
+    total.P.Z = length(object$se$P.Z)
   )
   class(res) <- "summary.SE"
   res

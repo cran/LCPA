@@ -1,756 +1,693 @@
-#' Latent Class/Profile Analysis with Covariates
+#' Three-step latent class/profile analysis
 #'
-#' Implements the three-step estimation method (Vermunt, 2010; Liang et al., 2023) for latent class/profile analysis
-#' with covariates, treating latent class membership as an observed variable with measurement error.
-#' This is mathematically equivalent to a latent transition analysis (\code{\link[LCPA]{LTA}}) with \code{times=1}.
+#' Fits one of two independent auxiliary-variable paths. `type.analysis = "XZ"`
+#' estimates the effect of observed covariates on latent class/profile membership.
+#' `type.analysis = "ZY"` estimates class/profile-specific distributions of
+#' external observed dependent variables; these variables are never treated as
+#' indicators.
 #'
-#' @param response A matrix or data frame of observed responses.
-#'                  Rows of the matrix represent individuals/participants/observations (\eqn{N}), columns of the
-#'                  matrix represent observed indicators/items/variables (\eqn{I}).
-#'                  For \code{type = "LCA"}: indicators must be binary or categorical (coded as integers starting from 0).
-#'                  For \code{type = "LPA"}: indicators must be continuous (numeric), and the response matrix must be
-#'                  standardized using \code{\link[base]{scale}} or \code{\link[LCPA]{normalize}} prior to input.
-#' @param L Integer scalar. Number of latent classes/profiles. Must satisfy \eqn{L \geq 2}.
-#' @param ref.class Integer \eqn{L \geq ref.class \geq 1}. Specifies which latent class to use as the reference category.
-#'                  Default is \code{L} (last class). Coefficients for the reference class are fixed to zero.
-#'                  When \code{is.sort=TRUE}, classes are first ordered by decreasing \code{P.Z} (class 1 has highest probability),
-#'                  then \code{ref.class} refers to the position in this sorted order.
-#' @param type Character string. Specifies the type of latent variable model for Step 1:
-#'             \itemize{
-#'               \item \code{"LCA"} — Latent Class Analysis for categorical indicators.
-#'               \item \code{"LPA"} — Latent Profile Analysis for continuous indicators.
-#'             }
-#'             See \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}} for details.
-#' @param covariate Optional. A matrix or data frame of covariates for modeling latent class membership.
-#'                  Must include an intercept column (all 1s) as the first column.
-#'                  If \code{NULL} (default), only intercept terms are used (i.e., no covariates).
-#'                  Dimension is \eqn{N \times p} where \eqn{p} is the number of covariates including intercept.
-#' @param CEP.error Logical. If \code{TRUE} (recommended), incorporates classification uncertainty via
-#'                  estimated Classification Error Probability (\code{\link[LCPA]{get.CEP}}) matrices from Step 1. If \code{FALSE},
-#'                  uses identity CEP matrices (equivalent to naive modal assignment; introduces bias).
-#' @param par.ini Specification for parameter initialization. Options include:
+#' @param response An \eqn{N \times I} numeric matrix or data frame containing
+#'   the Step 1 latent class/profile indicators. For `type.model = "LCA"`, each
+#'   column is a categorical indicator and follows the same category-mapping
+#'   requirements as the `response` argument of \code{\link[LCPA]{LCA}()}. For
+#'   `type.model = "LPA"`, all columns are continuous, missing values are not
+#'   allowed, and the indicators should be standardized with `scale()` or
+#'   \code{\link[LCPA]{normalize}()} before analysis, exactly as required by \code{\link[LCPA]{LPA}()}.
+#' @param L Integer number of latent classes/profiles in the Step 1 measurement
+#'   model (default: 2; must be at least 2). It has the same meaning as `L` in
+#'   \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.
+#' @param type.analysis Character string selecting the independent Step 3 path:
 #'   \itemize{
-#'     \item \code{"random"}: Completely random initialization (default).
-#'     \item \code{"kmeans"}: Initializes parameters via K-means clustering on observed data (McLachlan & Peel, 2004).
-#'     \item A \code{list} for LCA containing:
-#'       \describe{
-#'         \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-#'                           each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
-#'                           number of categories across indicators).}
-#'         \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
-#'       }
-#'     \item A \code{list} for LPA containing:
-#'       \describe{
-#'         \item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-#'         \item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-#'         \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
-#'       }
+#'     \item `"XZ"`: estimate the effect of observed covariates
+#'       \eqn{\boldsymbol{\zeta}} on latent class/profile membership \eqn{Z};
+#'       `covariates` is used and
+#'       `dependent.variables` is ignored.
+#'     \item `"ZY"`: estimate class/profile-specific distributions of external
+#'       observed dependent variables \eqn{\mathbf{Y}}; `dependent.variables`
+#'       and `family` are used and
+#'       `covariates` and `ref.class` are ignored.
 #'   }
-#' @param params Optional \code{list} of pre-estimated Step 1 parameters. If \code{NULL} (default),
-#'               Step 1 models are estimated internally. If provided, no LCA or LPA parameter estimation
-#'               will be performed; instead, the parameters provided in \code{params} will be used as
-#'               fixed values. Additionally, \code{params} must contain:
-#'               \itemize{
-#'                 \item A \code{list} for LCA containing:
-#'                    \describe{
-#'                      \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-#'                                        each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
-#'                                        number of categories across indicators).}
-#'                      \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
-#'                    }
-#'                 \item A \code{list} for LPA containing:
-#'                    \describe{
-#'                      \item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-#'                      \item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-#'                      \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
-#'                    }
-#'               }
-#' @param is.sort A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-#'                order according to \code{P.Z}. All other parameters will be adjusted accordingly
-#'                based on the reordered latent classes.
-#' @param constraint Character (LPA only). Specifies structure of within-class covariance matrices:
-#'                  \itemize{
-#'                    \item \code{"VV"} — Class-varying variances and covariances (unconstrained; default).
-#'                    \item \code{"EE"} — Equal variances and covariances across all classes (homoscedastic).
-#'                  }
-#' @param method Character. Estimation algorithm for Step 1 models:
-#'               \itemize{
-#'                 \item \code{"EM"} — Expectation-Maximization (default; robust and widely used).
-#'                 \item \code{"Mplus"} — Interfaces with Mplus software (requires external installation).
-#'                 \item \code{"NNE"} — Neural Network Estimator (experimental; uses transformer + simulated
-#'                                      annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
-#'               }
-#' @param tol Convergence tolerance for log-likelihood difference (default: 1e-4).
-#' @param lower The upper bound for the estimation of regression coefficients, default is -10
-#' @param upper The lower bound for the estimation of regression coefficients, default is 10
-#' @param method.SE Character. Method for estimating standard errors of parameter estimates:
-#'               \itemize{
-#'                 \item \code{"Obs"} — Approximates the observed information matrix via numerical differentiation (Richardson's method).
-#'                       Standard errors are obtained from the inverse Hessian. May fail or be unreliable in small samples or with
-#'                       complex likelihood surfaces.
-#'                 \item \code{"Bootstrap"} — Uses nonparametric bootstrap resampling to estimate empirical sampling variability.
-#'                       More robust to model misspecification and small-sample bias. Computationally intensive but recommended when
-#'                       asymptotic assumptions are questionable.
-#'               }
-#'               Default is \code{"Bootstrap"}.
-#' @param n.Bootstrap Integer. Number of bootstrap replicates used when \code{method.SE = "Bootstrap"}.
-#'                    Default is 100. McLachlan & Peel (2004) suggest that 50–100 replicates often provide adequate accuracy
-#'                    for practical purposes, though more (e.g., 500–1000) may be preferred for publication-quality inference.
-#'                    Each replicate involves re-estimating the full three-step LTA model on a resampled dataset.
-#' @param maxiter Maximum number of iterations for optimizing the regression coefficients. Default: 5000.
-#' @param nrep Integer controlling replication behavior:
+#'   The default is `"XZ"`.
+#' @param type.model Character string selecting the Step 1 measurement model:
+#'   `"LCA"` for categorical indicators or `"LPA"` for continuous indicators
+#'   (default: `"LCA"`). Its meaning, response-data requirements, and fitted
+#'   measurement parameters are the same as in \code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()},
+#'   respectively.
+#' @param covariates Used only when `type.analysis = "XZ"`. An
+#'   \eqn{N\times(U+1)} numeric matrix/data frame representing
+#'   \eqn{\boldsymbol{\zeta}_n=(1,\zeta_{n1},\ldots,\zeta_{nU})^\top}.
+#'   Its first column is an unstandardized all-ones intercept; standardize the
+#'   \eqn{U} observed covariates before analysis and construct interactions
+#'   from the standardized variables. If `NULL` (default), the
+#'   function automatically creates an \eqn{N \times 1} all-ones design, so an
+#'   intercept-only class-membership model remains estimable. The argument is
+#'   ignored for `"ZY"`; that path automatically uses latent-class-specific
+#'   intercepts as the dependent-variable predictors.
+#' @param ref.class Integer from 1 to `L` selecting the reference category in
+#'   the `X -> Z` multinomial regression (default: `L`). Its coefficient vector
+#'   is fixed to zero. If `control.model$is.sort = TRUE`, the value refers to the class/profile
+#'   position after Step 1 sorting. This argument is not used for `"ZY"` because
+#'   that path estimates a separate dependent-variable distribution for every class.
+#' @param dependent.variables Used only when `type.analysis = "ZY"`. An observed
+#'   dependent-variable vector, or an \eqn{N\times V} matrix/data frame
+#'   representing
+#'   \eqn{\mathbf{Y}_n=(Y_{n1},\ldots,Y_{nV})^\top}, with one dependent variable
+#'   per column and one participant per row. These are external dependent
+#'   variables (for example, depression or anxiety), not Step 1 latent
+#'   class/profile indicators. Missing dependent-variable values are allowed and are
+#'   omitted separately for each dependent variable; the indicator data in `response`
+#'   remain subject to the requirements of \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.
+#'   Before calling `LCPA()`, standardize every continuous dependent-variable
+#'   column assigned `family = "gaussian"` over the \eqn{N} participants,
+#'   preferably with \code{\link[base]{scale}()}, so that its observed sample mean
+#'   is 0 and sample standard deviation is 1. Do not standardize columns assigned
+#'   `family = "categorical"`; retain their original category values.
+#' @param family Used only when `type.analysis = "ZY"`. Either one character
+#'   string applied to every dependent variable or a character vector with one value per
+#'   dependent-variable column. `"gaussian"` (default) estimates class-specific means for
+#'   a standardized numeric continuous dependent variable; `"categorical"` estimates
+#'   class-specific probabilities for the observed categories. Missing values are
+#'   excluded separately for each dependent variable.
+#' @param method.model Character string selecting the Step 1 parameter estimator.
+#'   It has exactly the same meaning and available values as the `method`
+#'   argument of \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}: `"EM"` (default), `"NNE"`, `"Mplus"`,
+#'   `"flexmix"`, `"Rmixmod"`, or `"RMixtComp"`. The corresponding
+#'   `control.*` argument is passed to the selected Step 1 function. It is not
+#'   used to estimate the Step 3 regression/dependent-variable model.
+#' @param control.model Optional named list of common Step 1 measurement-model
+#'   settings. If `NULL` (default), all settings below use their defaults. Supply
+#'   only the elements to override:
+#'   \describe{
+#'     \item{`params`}{Optional fixed Step 1 parameter list (default: `NULL`).
+#'       When supplied, Step 1 fitting is skipped. For LCA it must contain `par`,
+#'       `P.Z`, and `category.levels`; for LPA it must contain `means`, `covs`,
+#'       and `P.Z`, with the definitions and dimensions returned by
+#'       \code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()}.}
+#'     \item{`par.ini`}{Initialization used when `params = NULL` (default:
+#'       `"random"`). It accepts `"random"`, `"kmeans"`, or the model-specific
+#'       parameter-list forms documented for \code{\link[LCPA]{LCA}()} and
+#'       \code{\link[LCPA]{LPA}()}.}
+#'     \item{`constraint`}{LPA covariance structure (default: `"VV"`). It accepts
+#'       `"UE"`, `"UV"`, `"E0"`, `"V0"`, `"EE"`, `"VV"`, `"VE"`, `"EV"`, or
+#'       a custom equality list as documented for \code{\link[LCPA]{LPA}()}.
+#'       It is ignored when `type.model = "LCA"`.}
+#'     \item{`is.sort`}{Logical (default: `TRUE`). Order classes/profiles by
+#'       decreasing Step 1 prior probability and consistently permute Step 1,
+#'       CEP, and Step 3 class-specific results.}
+#'     \item{`starts`}{Positive integer number of independently initialized Step 1
+#'       warm-up analyses (default: 100).}
+#'     \item{`maxiter.warmup`}{Positive integer maximum number of Step 1 iterations
+#'       per warm-up analysis (default: 20).}
+#'     \item{`nrep`}{Positive integer not exceeding `starts` (default: 20). The
+#'       best warm-up states are continued to final Step 1 fits.}
+#'   }
+#'   Element names must be unique; unknown or unnamed elements are rejected.
+#' @param control.EM Optional Step 1 control list for the EM estimator in
+#'   \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}. `maxiter` sets the
+#'   maximum number of EM iterations, `tol` sets the convergence tolerance, and
+#'   the LPA covariance-floor element bounds small covariance eigenvalues away
+#'   from zero. See `control.EM` in those functions for the complete list.
+#' @param control.Mplus Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+#'   Mplus backend. It has the same `maxiter`, `tol`, `files.path`,
+#'   `files.clean`, and LPA covariance-floor semantics documented there.
+#' @param control.NNE Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()} NNE
+#'   backend. Network architecture, attention, annealing, optimizer, plotting,
+#'   and device fields have exactly the meanings documented for `control.NNE`
+#'   in those functions.
+#' @param control.flexmix Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+#'   flexmix SEM backend. `maxiter`, `minprior`, `tol`, and the LPA covariance
+#'   floor have the same meanings as in \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}.
+#' @param control.Rmixmod Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+#'   Rmixmod backend. The `path`, native strategy, algorithm, initialization,
+#'   iteration, tolerance, and replication fields retain the meanings and
+#'   restrictions documented in those functions.
+#' @param control.RMixtComp Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+#'   RMixtComp SEM backend. Burn-in, SEM/Gibbs iterations, stability,
+#'   initialization, criterion, replication, and core controls have the same
+#'   meanings and restrictions documented in those functions.
+#' @param method.3step Character string selecting the Step 2--3 correction:
 #'   \itemize{
-#'     \item If \code{par.ini = "random"}, number of random initializations.
-#'     \item If \code{par.ini = "kmeans"}, number of K-means runs for initialization.
-#'     \item For \code{method="Mplus"}, controls number of random starts in Mplus via \code{STARTS} option.
-#'     \item Best solution is selected by log-likelihood/BIC across replications.
-#'     \item Ignored for user-provided initial parameters.
+#'     \item `"ML"`: maximize a likelihood that treats the modal Step 1 class
+#'       as measured with error through the CEP matrix.
+#'     \item `"BCH"`: invert the CEP matrix and estimate Step 3 with BCH
+#'       pseudo-weights, leaving the Step 1 class/profile definition fixed.
 #'   }
-#' @param starts Number of random initializations to explore during warm-up phase (default: 100).
-#' @param maxiter.wa Maximum number of training iterations allowed per warm-up run. After completion,
-#'                   the top \code{nrep} solutions (by log-likelihood) are promoted to final training phase (default: 20).
-#' @param vis Logical. If \code{TRUE}, displays progress information during estimation (default: \code{TRUE}).
-#' @param control.EM List of control parameters for EM algorithm:
-#'   \describe{
-#'     \item{\code{maxiter}}{Maximum iterations (default: 2000).}
-#'     \item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
+#'   If `NULL` (default), `"ML"` is selected for `"XZ"` and `"BCH"` for
+#'   `"ZY"`. Both methods are available for both paths. ML/CEP estimates a
+#'   classification-error-corrected likelihood, whereas BCH estimates
+#'   inverse-CEP-weighted score equations. BCH is generally preferred for
+#'   distal dependent variables, and ML is generally preferred for
+#'   class-membership regression. Vermunt (2010) develops both BCH and ML
+#'   corrections for covariates predicting class membership, including the
+#'   BCH-XZ specification. Bakk, Tekle, and Vermunt (2013) develop the
+#'   bias-adjusted ML formulation for class membership predicting a distal
+#'   dependent variable; Nylund-Gibson, Grimm, and Masyn (2019) provide a
+#'   worked manual ML three-step distal-outcome analysis.
+#' @param CEP.error Logical. If `TRUE` (default and recommended), Step 2
+#'   estimates the classification-error probability matrix
+#'   \eqn{\mathrm{CEP}(l,k)=P(\widehat{Z}=k\mid Z=l)} using
+#'   \code{\link[LCPA]{get.CEP}()}, and Step 3 applies the selected correction.
+#'   If `FALSE`, an identity CEP matrix is used, reducing the analysis to naive
+#'   modal-class assignment without classification-error correction.
+#' @param method.regression Character string controlling Step 3 point estimation
+#'   (default: `"Analytic"`). For ML-XZ, BCH-XZ, and ML-ZY, `"Analytic"`
+#'   supplies the exact analytic gradient to a numerical optimizer; these models
+#'   do not generally have closed-form coefficient estimates. For BCH-ZY,
+#'   `"Analytic"` directly evaluates the weighted closed-form class means or
+#'   categorical probabilities. `"Numeric"` optimizes the same likelihood
+#'   without the supplied gradient or numerically solves the same BCH estimating
+#'   equations. This choice is independent of `method.SE`.
+#' @param maxiter Positive integer giving the maximum number of Step 3 `"XZ"`
+#'   optimization iterations (default: 5000). It is distinct from Step 1
+#'   `control.*$maxiter` and `control.model$maxiter.warmup`, and is ignored for `"ZY"`.
+#' @param tol Positive finite convergence tolerance for the Step 3 `"XZ"`
+#'   optimization (default: \eqn{10^{-4}}). It is separate from the Step 1
+#'   tolerance in `control.EM`, `control.Mplus`, or another backend control and
+#'   is ignored for `"ZY"`, whose dependent-variable estimators use their own equations.
+#' @param lower,upper Finite lower and upper bounds applied to every `"XZ"`
+#'   multinomial regression coefficient (defaults: -10 and 10). They are ignored
+#'   for `"ZY"`. Inspect the returned bound diagnostics when an estimate reaches
+#'   a limit.
+#' @param method.SE Character string selecting Step 3 uncertainty estimation:
+#'   \itemize{
+#'     \item `"Analytic"`: for ML-XZ, use the analytic observed-information
+#'       bread and an empirical sandwich meat that includes the influence of
+#'       estimating the CEP matrix; for ML-ZY, use Louis observed information;
+#'       for BCH, use the analytic estimating-equation bread and empirical
+#'       sandwich meat.
+#'     \item `"Numeric"`: replace the analytic information/bread with a
+#'       numerical Hessian or Jacobian while retaining the corresponding
+#'       empirical meat and Step 3 estimand.
+#'     \item `"Bootstrap"` (default): resample individuals, keep the Step 1
+#'       measurement parameters fixed, recompute posterior assignments and CEP
+#'       or BCH weights, and re-estimate Step 3.
 #'   }
-#' @param control.NNE List of control parameters for NNE algorithm:
-#'   \describe{
-#'     \item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
-#'     \item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
-#'     \item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
-#'     \item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
-#'     \item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
-#'     \item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
-#'     \item{\code{eps}}{Small constant for numerical stability (default: 1e-8).}
-#'     \item{\code{lambda}}{A factor for slight regularization of all parameters (default: 1e-5).}
-#'     \item{\code{initial.temperature}}{Initial temperature for simulated annealing (default: 1000).}
-#'     \item{\code{cooling.rate}}{Cooling rate per iteration in simulated annealing (default: 0.5).}
-#'     \item{\code{maxiter.sa}}{Maximum iterations for simulated annealing (default: 1000).}
-#'     \item{\code{threshold.sa}}{Minimum temperature threshold for annealing (default: 1e-10).}
-#'     \item{\code{maxiter}}{Maximum training epochs (default: 1000).}
-#'     \item{\code{maxiter.early}}{Patience parameter for early stopping (default: 50).}
-#'     \item{\code{maxcycle}}{Maximum cycles for optimization (default: 10).}
-#'     \item{\code{lr}}{Learning rate, controlling the step size of neural network parameter updates (default: 0.025).}
-#'     \item{\code{scheduler.patience}}{Patience for learning rate decay (if the loss function does not improve for more than `patience` consecutive epochs, the learning rate will be reduced) (default: 10).}
-#'     \item{\code{scheduler.factor}}{Learning rate decay factor; the new learning rate equals the original learning rate multiplied by `scheduler.factor` (default: 0.70).}
-#'     \item{\code{plot.interval}}{Interval (in epochs) for plotting training diagnostics (default: 100).}
-#'     \item{\code{device}}{Specifies the hardware device; can be \code{"CPU"} (default) or \code{"GPU"}. If the GPU is not available, it automatically falls back to CPU.}
-#'   }
-#' @param control.Mplus List of control parameters for Mplus estimation:
-#'   \describe{
-#'     \item{\code{maxiter}}{Maximum iterations for Mplus optimization (default: 2000).}
-#'     \item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-#'     \item{\code{files.path}}{Character string specifying the directory path where Mplus will write its intermediate files
-#'                              (e.g., \code{.inp} model input, \code{.dat} data file, \code{.out} output, and saved posterior probabilities).
-#'                              This argument is \strong{required} — if \code{NULL} (default), the function throws an error.
-#'                              The specified directory must exist and be writable; if it does not exist, the function attempts to create it recursively.
-#'                              A unique timestamped subdirectory (e.g., \code{"Mplus_LPA_YYYY-MM-DD_HH-MM-SS"} or
-#'                              \code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}) will be created within this path
-#'                              to store all run-specific files and avoid naming conflicts. See in \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}}.}
-#'     \item{\code{files.clean}}{Logical. If \code{TRUE} (default), all intermediate files and the temporary working directory
-#'                               created for this run are deleted upon successful completion or error exit (via \code{on.exit()}).
-#'                               If \code{FALSE}, all generated files are retained in \code{files.path} (or the auto-generated temp dir)
-#'                               for inspection or debugging. Note: when \code{files.path = NULL}, even if \code{files.clean = FALSE},
-#'                               the temporary directory may still be cleaned up by the system later — for guaranteed persistence,
-#'                               specify a custom \code{files.path}.}
-#'   }
+#' @param nrep.bootstrap Integer number of nonparametric bootstrap replications
+#'   used only when `method.SE = "Bootstrap"` (default: 100; minimum: 2). Only
+#'   successful Step 3 replications contribute to the empirical covariance;
+#'   larger values such as 500--1000 are advisable for final publication-level
+#'   inference when computationally feasible.
+#' @param vis Logical (default: `TRUE`). If enabled, display the Step 1
+#'   measurement-model progress, Step 2 posterior/CEP preparation, and Step 3
+#'   regression or distal-dependent-variable estimation progress. Each Step 2
+#'   and Step 3 heading identifies the selected `X -> Z` or `Z -> Y` path. For
+#'   `Z -> Y`, the output also gives the number and family of dependent-variable
+#'   models, convergence and iteration information, and the selected
+#'   standard-error or bootstrap progress.
 #'
-#' @return An object of class \code{LCPA}, a named list containing:
-#' \describe{
-#'   \item{\code{beta}}{Matrix of size \eqn{p \times L}. Coefficients for class membership multinomial logit model.
-#'     Columns 1 to \eqn{L-1} are free parameters; column \eqn{L} (reference class) is constrained to \eqn{\boldsymbol{\beta}_L = \mathbf{0}}.}
-#'   \item{\code{beta.se}}{Standard errors for \code{beta} (if Hessian is invertible). Same dimensions as \code{beta}.
-#'     May contain \code{NA} if variance-covariance matrix is not positive definite.}
-#'   \item{\code{beta.Z.sta}}{Z-statistics for testing null hypothesis that each beta coefficient equals zero.
-#'     Computed as \code{beta / beta.se}. Same structure as \code{beta}.}
-#'   \item{\code{beta.p.value.tail1}}{One-tailed p-values based on standard normal distribution: \eqn{P(Z < -|z|)}.
-#'     Useful for directional hypotheses. Same structure as \code{beta}.}
-#'   \item{\code{beta.p.value.tail2}}{Two-tailed p-values: \eqn{2 \times P(Z < -|z|)}.
-#'     Standard test for non-zero effect. Same structure as \code{beta}.}
-#'   \item{\code{P.Z.Xn}}{Matrix of size \eqn{N \times L} of posterior class probabilities
-#'     \eqn{P(Z_n=l \mid \mathbf{X}_n)} for each individual \eqn{n} and class \eqn{l}.}
-#'   \item{\code{P.Z}}{Vector of length \eqn{L} containing prior class proportions
-#'     \eqn{P(Z = l)} estimated at Step 1.}
-#'   \item{\code{Z}}{Vector of length \eqn{N} containing modal class assignments
-#'     (MAP classifications) \eqn{\hat{z}_n} for each individual.}
-#'   \item{\code{npar}}{Number of free parameters in the model (depends on covariates).}
-#'   \item{\code{Log.Lik}}{Observed-data log-likelihood value at convergence.}
-#'   \item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each iteration.}
-#'   \item{\code{AIC}}{Akaike Information Criterion value.}
-#'   \item{\code{BIC}}{Bayesian Information Criterion value.}
-#'   \item{\code{iterations}}{Integer. Number of optimization iterations in Step 3.}
-#'   \item{\code{coveraged}}{Logical. \code{TRUE} if optimization terminated before reaching \code{maxiter} (suggesting convergence).
-#'                           Note: This is a heuristic indicator; formal convergence diagnostics should check Hessian properties.}
-#'   \item{\code{params}}{List. Step 1 model parameters (output from \code{LCA()} or \code{LPA()}).}
-#'   \item{\code{call}}{The matched function call.}
-#'   \item{\code{arguments}}{List of all input arguments passed to the function (useful for reproducibility).}
-#' }
+#' @details
+#' The notation distinguishes the Step 1 indicators from the Step 3 auxiliary
+#' variables. Write the indicator matrix as
+#' \eqn{\mathbf{X}=(X_{ni})_{N\times I}}, where
+#' \eqn{n=1,2,\ldots,N} indexes participants and
+#' \eqn{i=1,2,\ldots,I} indexes observed indicators. Participant \eqn{n}'s
+#' indicator vector is
+#' \eqn{\mathbf{X}_n=(X_{n1},\ldots,X_{nI})^\top}, and
+#' \eqn{Z_n\in\{1,2,\ldots,L\}}, with
+#' \eqn{l=1,2,\ldots,L} indexing latent classes/profiles.
 #'
-#' @section Methodology Overview:
-#' The three-step procedure follows the same principles as LTA but for a single time point:
+#' The covariate vector is
+#' \eqn{\boldsymbol{\zeta}_n=(1,\zeta_{n1},\ldots,\zeta_{nU})^\top}, where
+#' \eqn{u=1,2,\ldots,U} indexes the \eqn{U} observed covariates and the leading
+#' 1 is the intercept. The dependent-variable vector is
+#' \eqn{\mathbf{Y}_n=(Y_{n1},\ldots,Y_{nV})^\top}, where
+#' \eqn{v=1,2,\ldots,V} indexes the \eqn{V} external observed dependent
+#' variables. Neither \eqn{\boldsymbol{\zeta}_n} nor \eqn{\mathbf{Y}_n} is part
+#' of the indicator vector \eqn{\mathbf{X}_n}.
+#' `"XZ"` is the function-interface label for the covariate-to-latent path;
+#' the formulas use \eqn{\boldsymbol{\zeta}} for its covariates because
+#' \eqn{\mathbf{X}} is reserved for the LCA/LPA indicator data.
+#' `type.analysis = "XZ"` uses \eqn{\boldsymbol{\zeta}_n} but not
+#' \eqn{\mathbf{Y}_n}; `type.analysis = "ZY"` uses \eqn{\mathbf{Y}_n} but not
+#' \eqn{\boldsymbol{\zeta}_n}. These are separate Step 3 analyses rather than a
+#' jointly estimated mediation model. Run both analyses when both the
+#' covariate-to-class and class-to-dependent-variable associations are required.
+#' For a ZY analysis, standardization applies to the continuous dependent variables
+#' in \eqn{\mathbf{Y}_n}, not to the Step 1 indicator matrix \eqn{\mathbf{X}}.
+#' Each Gaussian dependent variable must be transformed before model fitting to
+#' have observed sample mean 0 and sample standard deviation 1. Consequently,
+#' its class/profile-specific estimates and standard errors are expressed in
+#' observed-standard-deviation units. Categorical dependent variables retain
+#' their original category values.
 #'
-#' Step 1 — Unconditional Latent Class/Profile Model:
-#' Fit an unconditional LCA or LPA model (ignoring covariates). Obtain posterior class membership probabilities
-#' \eqn{P(Z_n=l \mid \mathbf{X}_n)} for each individual \eqn{n} and class \eqn{l} using Bayes' theorem.
+#' @section Methodology overview:
+#' The cross-sectional three-step analysis proceeds as follows.
 #'
-#' Step 2 — Classification Error Probabilities (equal to \code{\link[LCPA]{get.CEP}}):
-#' Compute the \eqn{L \times L} CEP matrix where element \eqn{(k,l)} estimates:
-#' \deqn{
-#'   \text{CEP}(k,l) = P(\hat{Z}_n = l \mid Z_n = k)
-#' }
-#' using a non-parametric approximation:
-#' \deqn{
-#'   \widehat{\text{CEP}}(k,l) = \frac{ \sum_{n=1}^N \mathbb{I}(\hat{z}_n = l) \cdot P(Z_n=k \mid \mathbf{X}_n) }{ \sum_{n=1}^N P(Z_n=k \mid \mathbf{X}_n) }
-#' }
-#' where \eqn{\hat{z}_n} is the modal class assignment.
+#' Step 1 -- Unconditional measurement model. Fit an unconditional
+#' \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()} to `response`. Let
+#' \eqn{\pi_l=P(Z_n=l)}. For LCA, the Step 1 observed-data log-likelihood is
+#' \deqn{\log\mathcal{L}_{\mathrm{LCA}}=
+#' \sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+#' \prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)\right\}.}
+#' For LPA, it is
+#' \deqn{\log\mathcal{L}_{\mathrm{LPA}}=
+#' \sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+#' \mathcal{N}(\mathbf{X}_n\mid\boldsymbol{\mu}_l,
+#' \boldsymbol{\Sigma}_l)\right\}.}
+#' These are the likelihoods defined in
+#' \code{\link[LCPA]{get.Log.Lik.LCA}()} and
+#' \code{\link[LCPA]{get.Log.Lik.LPA}()}. Bayes' theorem gives
+#' \deqn{\tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+#' \frac{\pi_l\prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)}
+#' {\sum_{h=1}^L\pi_h\prod_{i=1}^I
+#' P(X_{ni}=x_{ni}\mid Z_n=h)}}
+#' for LCA and
+#' \deqn{\tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+#' \frac{\pi_l\mathcal{N}(\mathbf{X}_n\mid\boldsymbol{\mu}_l,
+#' \boldsymbol{\Sigma}_l)}
+#' {\sum_{h=1}^L\pi_h\mathcal{N}(\mathbf{X}_n\mid
+#' \boldsymbol{\mu}_h,\boldsymbol{\Sigma}_h)}}
+#' for LPA.
+#' The modal assignment is
+#' \eqn{\widehat{Z}_n=\arg\max_l\tau_{nl}}. `method.model` selects the estimator of
+#' this measurement model, and `control.model` supplies its initialization,
+#' covariance-constraint, sorting, and replication settings. If
+#' `control.model$params` is supplied, those fixed measurement parameters are
+#' used to calculate \eqn{\tau_{nl}}.
 #'
-#' Step 3 — Class Membership Model with Measurement Error Correction:
-#' Estimate the multinomial logit model for class membership:
-#' \deqn{
-#' P(Z_n = l \mid \mathbf{X}_n) = \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_n)}{\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_n)}
-#' }
-#' where \eqn{\mathbf{X}_n = (1, W_{n1}, \dots, W_{nM})^\top} is the covariate vector for individual \eqn{n}
-#' (with intercept as first column), and \eqn{\boldsymbol{\beta}_l = (\beta_{l0}, \beta_{l1}, \dots, \beta_{lM})^\top}
-#' contains intercept and regression coefficients. Class \eqn{L} is the reference category
-#' (\eqn{\boldsymbol{\beta}_L = \mathbf{0}}).
+#' Step 2 -- Classification-error probabilities. The \eqn{L\times L} CEP matrix
+#' has rows indexed by latent class/profile \eqn{l} and columns indexed by modal
+#' assignment \eqn{k}, so
+#' \eqn{\mathrm{CEP}(l,k)=P(\widehat{Z}_n=k\mid Z_n=l)}. The modal assignment, posterior-weight
+#' estimator, matrix orientation, and pooling rules are defined in
+#' \code{\link[LCPA]{get.CEP}()}. With `CEP.error = FALSE`, \eqn{\mathrm{CEP}}
+#' is replaced
+#' by the identity matrix and Step 3 becomes an uncorrected modal-assignment
+#' analysis. The BCH and ML corrections for this classification error follow
+#' Bolck, Croon, and Hagenaars (2004) and Vermunt (2010).
 #'
-#' The observed-data likelihood integrates over latent classes:
-#' \deqn{
-#' \log \mathcal{L}(\boldsymbol{\beta}) =
-#' \sum_{n=1}^N \log \left[
-#'   \sum_{l=1}^L \text{CEP}(l, \hat{z}_n) \cdot P(Z_n=l \mid \mathbf{X}_n)
-#' \right]
-#' }
-#' Parameters \eqn{\boldsymbol{\beta}} are estimated via maximum likelihood using the BOBYQA algorithm.
+#' Step 3A -- Covariates predicting latent membership (XZ). With reference
+#' class `ref.class` denoted by \eqn{l_0}, the multinomial-logit model is
+#' \deqn{P(Z_n=l\mid\boldsymbol{\zeta}_n)=
+#' \frac{\exp(\boldsymbol{\zeta}_n^\top\boldsymbol{\beta}_l)}
+#' {1+\sum_{h\ne l_0}\exp(\boldsymbol{\zeta}_n^\top
+#' \boldsymbol{\beta}_h)},\quad l\ne l_0,}
+#' with \eqn{\boldsymbol{\beta}_{l_0}=0}. If `covariates = NULL`,
+#' \eqn{\boldsymbol{\zeta}_n=1} and the model
+#' contains class-specific intercepts only. Vermunt's (2010) ML/CEP estimator
+#' maximizes
+#' \deqn{\ell_{\mathrm{ML}}(\boldsymbol{\beta})=\sum_{n=1}^N
+#' \log\left\{\sum_{l=1}^L\mathrm{CEP}(l,\widehat{Z}_n)
+#' P(Z_n=l\mid\boldsymbol{\zeta}_n)\right\}.}
+#' For each non-reference class/profile \eqn{l\ne l_0}, the first derivative of
+#' the observed-data log-likelihood with respect to the coefficient vector
+#' \eqn{\boldsymbol{\beta}_l} is
+#' \deqn{\frac{\partial\ell_{\mathrm{ML}}(\boldsymbol{\beta})}
+#' {\partial\boldsymbol{\beta}_l}=
+#' \sum_{n=1}^N\boldsymbol{\zeta}_n
+#' P(Z_n=l\mid\boldsymbol{\zeta}_n)
+#' \left\{\frac{\mathrm{CEP}(l,\widehat{Z}_n)}
+#' {\sum_{h=1}^L\mathrm{CEP}(h,\widehat{Z}_n)
+#' P(Z_n=h\mid\boldsymbol{\zeta}_n)}-1\right\}.}
+#' This derivative is an \eqn{(U+1)\times 1} vector: its entries correspond to
+#' the intercept and the \eqn{U} covariate coefficients in
+#' \eqn{\boldsymbol{\beta}_l}. At an interior maximum, the ML estimates jointly
+#' satisfy \eqn{\partial\ell_{\mathrm{ML}}/
+#' \partial\boldsymbol{\beta}_l=\mathbf{0}} for every \eqn{l\ne l_0}; `lower`
+#' and `upper` define the permitted coefficient range.
 #'
-#' @section Important Implementation Details:
-#' \itemize{
-#'   \item Reference Class: Coefficients for the reference class (\code{ref.class}) are ALWAYS fixed to
-#'                          zero (\eqn{\boldsymbol{\beta}_{ref.class} = \mathbf{0}}) in the multinomial
-#'                          logit model.
-#'   \item CEP Matrices: When \code{CEP.error = TRUE}, misclassification probabilities are estimated
-#'                       non-parametrically using Step 1 posterior probabilities. This corrects for
-#'                       classification uncertainty. See in \code{\link[LCPA]{get.CEP}}.
-#'   \item Covariate Requirements: Covariate matrix MUST include an intercept column (all 1s) as the first
-#'                                 column. Dimensions must be \eqn{N \times (M+1)}, where \eqn{M} represents
-#'                                 the number of covariate and \eqn{1} is the Intercept.
-#'   \item \strong{Optimization & Standard Errors}:
-#'         \itemize{
-#'           \item Step 3 uses BOBYQA algorithm (\code{nloptr::nloptr}) for stable optimization with box constraints.
-#'           \item For \code{method.SE = "Obs"}: Standard errors derived from inverse Hessian (\code{\link[numDeriv]{hessian}}). If Hessian is singular:
-#'                 \itemize{
-#'                   \item Uses Moore-Penrose pseudoinverse (\code{\link[MASS]{ginv}})
-#'                   \item Sets negative variances to \code{NA}
-#'                 }
-#'           \item For \code{method.SE = "Bootstrap"}: Each replicate independently re-estimates Steps 1-3.
-#'                 Failed bootstrap runs yield \code{NA} in SEs and derived statistics. Progress messages include
-#'                 replicate index and optimization diagnostics.
-#'         }
-#'   \item \strong{Computational Notes}:
-#'         \itemize{
-#'           \item Step 1 complexity increases with \eqn{L} and \eqn{I}.
-#'           \item Bootstrap is computationally intensive: 100 replicates = 100 full re-estimations of Steps 1-3.
-#'         }
-#'   \item \strong{Bootstrap Reproducibility}: Always set a seed (e.g., \code{set.seed(123)}) before
-#'                                             calling \code{LCPA()} when using \code{method.SE = "Bootstrap"}.
-#'                                             Monitor convergence in bootstrap runs via progress messages.
+#' Vermunt's (2010) BCH-XZ estimator instead solves, for class
+#' \eqn{l\ne l_0},
+#' \deqn{\sum_{n=1}^N\boldsymbol{\zeta}_n
+#' \left\{(\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+#' -P(Z_n=l\mid\boldsymbol{\zeta}_n)
+#' \sum_{h=1}^L(\mathrm{CEP}^{-1})_{\widehat{Z}_n,h}
+#' \right\}=\mathbf{0}.}
+#' This is a BCH estimating equation, not the derivative of the ML corrected
+#' likelihood above. Its \eqn{U+1} equations correspond to the intercept and
+#' covariate coefficients in \eqn{\boldsymbol{\beta}_l}.
+#' Thus ML and BCH estimate the same multinomial-logit parameters but use
+#' different corrections for modal-classification error.
+#'
+#' Step 3B -- Latent membership predicting dependent variables (ZY). The
+#' bias-adjusted ML three-step formulation follows Bakk, Tekle, and Vermunt
+#' (2013) and Nylund-Gibson, Grimm, and Masyn (2019), with the BCH
+#' secondary-model formulation described by Asparouhov and Muthén (2014b). The model
+#' estimates the conditional distribution of \eqn{Y_{nv}} given \eqn{Z_n=l}
+#' separately for \eqn{v=1,\ldots,V}. For `family = "gaussian"`,
+#' \eqn{Y_{nv}\mid Z_n=l\sim N(\mu_{lv},\sigma_{lv}^2)}. For
+#' `family = "categorical"`,
+#' \eqn{P(Y_{nv}=q\mid Z_n=l)=p_{lvq}}, where \eqn{q} indexes the observed
+#' categories of dependent variable \eqn{v}. No design matrix is required because the
+#' model contains a separate intercept for every class/profile.
+#'
+#' ML/CEP maximizes
+#' \deqn{\ell_{\mathrm{ML},v}=
+#' \begin{cases}
+#' \sum_{n=1}^N\log\left\{\sum_{l=1}^L
+#' \mathrm{CEP}(l,\widehat{Z}_n)\pi_l
+#' \mathcal{N}(Y_{nv}\mid\mu_{lv},\sigma_{lv}^2)\right\},
+#' & \text{for a Gaussian dependent variable},\\
+#' \sum_{n=1}^N\log\left\{\sum_{l=1}^L
+#' \mathrm{CEP}(l,\widehat{Z}_n)\pi_l
+#' \prod_q p_{lvq}^{\mathbb{1}(Y_{nv}=q)}\right\},
+#' & \text{for a categorical dependent variable},
+#' \end{cases}}
+#' The reported
+#' class-shift rate compares the Step 3 modal class with
+#' \eqn{\widehat{Z}_n} from Step 1.
+#'
+#' BCH Gaussian means solve
+#' \deqn{\sum_{n=1}^N
+#' (\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+#' (Y_{nv}-\mu_{lv})=0,}
+#' and the corresponding Gaussian variances solve
+#' \deqn{\sum_{n=1}^N
+#' (\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+#' \{(Y_{nv}-\mu_{lv})^2-\sigma_{lv}^2\}=0.}
+#' and categorical probabilities solve
+#' \deqn{\sum_{n=1}^N
+#' (\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+#' \{\mathbb{1}(Y_{nv}=q)-p_{lvq}\}=0.}
+#' @section Parameter estimation and uncertainty:
+#' With `method.regression = "Analytic"`, ML-XZ, BCH-XZ, and ML-ZY use their
+#' exact scores or gradients within numerical optimization; BCH-ZY evaluates
+#' the closed-form weighted estimates shown above. `"Numeric"` evaluates the
+#' same likelihoods without supplied gradients or minimizes the squared BCH-ZY
+#' estimating equations numerically.
+#'
+#' For ML-XZ and BCH, the covariance has sandwich form
+#' \eqn{A^{-1}BA^{-\top}}. In ML-XZ, \eqn{A} is the observed information and
+#' \eqn{B} is formed from individual likelihood scores plus the influence
+#' function of the estimated CEP matrix. In BCH, \eqn{A} is the
+#' estimating-equation Jacobian and \eqn{B} is the empirical covariance of
+#' individual estimating-function contributions. For BCH-ZY Gaussian models,
+#' the mean and variance equations are stacked so their sandwich covariance
+#' includes the covariance between \eqn{\widehat{\mu}_{lv}} and
+#' \eqn{\widehat{\sigma}_{lv}^2}. ML-ZY uses the inverse Louis
+#' observed-information matrix; the variance standard error follows by applying
+#' the delta method to the fitted log-standard-deviation parameter.
+#' `method.SE = "Numeric"` evaluates the required
+#' Hessian or Jacobian numerically. `"Bootstrap"` resamples individuals, recalculates posterior
+#' assignments and CEP/BCH weights, and re-estimates Step 3 while holding the
+#' Step 1 measurement parameters fixed. For a Gaussian dependent variable,
+#' `estimate` and `se` report \eqn{\mu_{lv}} and its standard error, whereas
+#' `variance` and `variance.se` report \eqn{\sigma_{lv}^2} and its standard
+#' error. Separate omnibus Wald tests assess equality of the conditional means
+#' and equality of the conditional variances across classes/profiles. For a
+#' categorical dependent variable, `estimate` and `se` report every
+#' class/profile-specific category probability and its standard error; the
+#' omnibus Wald test assesses equality of the complete conditional category
+#' distributions.
+#'
+#' @section Method selection:
+#' ML is the default for XZ because its likelihood directly represents the
+#' error-prone modal assignment through \eqn{\mathrm{CEP}}. BCH is the default for ZY
+#' because its weights are calculated without using \eqn{\mathbf{Y}}, so the Step 1
+#' class/profile definition is not changed by the dependent variable. ML-ZY
+#' provides a corrected-likelihood sensitivity analysis and reports class
+#' shifts. Use a dedicated DCAT procedure when the DCAT estimand is required.
+#'
+#' @return An object of class `"LCPA"`. The selected result is available from
+#'   `analysis$XZ` or `analysis$ZY`; posterior probabilities, modal assignments,
+#'   and CEP matrices use the same list structure as \code{\link[LCPA]{LTA}()}.
+#'   For `type.analysis = "ZY"`, `dependent.variables$t1` contains one fitted
+#'   model per observed dependent variable. A Gaussian model reports
+#'   class/profile-specific `estimate`, `se`, `variance`, `variance.se`, their
+#'   covariance matrices, omnibus Wald tests for both means and variances,
+#'   group weight masses, observations, omitted values, iterations, and
+#'   convergence. A categorical model reports class/profile-by-category
+#'   `estimate` and `se` matrices, their covariance matrix, an omnibus Wald
+#'   test of equality of the conditional category distributions, group weight
+#'   masses, observations, omitted values, iterations, and convergence.
+#'
+#' @examples
+#' \donttest{
+#' library(LCPA)
+#'
+#' set.seed(1245)
+#' N <- 2000
+#' L <- 3
+#' I <- 6
+#'
+#' # Two observed covariates plus the required intercept
+#' covariates <- cbind(
+#'   Intercept = 1,
+#'   Zeta.1 = as.numeric(scale(rnorm(N))),
+#'   Zeta.2 = rbinom(N, 1, 0.5)
+#' )
+#' beta <- matrix(c(
+#'    0.70,  0.30, 0,
+#'    0.40, -0.20, 0,
+#'   -0.30,  0.30, 0
+#' ), ncol = L, byrow = TRUE)
+#' rownames(beta) <- colnames(covariates)
+#'
+#' data.LCPA <- sim.LTA(
+#'   N = N, I = I, L = L, times = 1, type = "LPA",
+#'   constraint = "VE", mean.range = c(-3, 3),
+#'   covs.range = c(0.4, 0.8),
+#'   covariates = list(covariates), ref.class = 3,
+#'   beta = beta, is.sort = TRUE
+#' )
+#' control.model <- list(
+#'   constraint = "VE", is.sort = TRUE,
+#'   starts = 10, maxiter.warmup = 10, nrep = 3
+#' )
+#'
+#' # Covariates predicting latent profiles: XZ analysis
+#' fit.LCPA.XZ <- LCPA(
+#'   response = data.LCPA$responses[[1]], L = L,
+#'   type.analysis = "XZ", type.model = "LPA",
+#'   covariates = covariates, ref.class = 3,
+#'   method.model = "EM", control.model = control.model,
+#'   method.3step = "ML", method.regression = "Analytic",
+#'   method.SE = "Analytic", maxiter = 500, vis = TRUE
+#' )
+#' round(cbind(
+#'   "True Class 1" = beta[, 1],
+#'   "Estimate Class 1" = fit.LCPA.XZ$beta[, 1],
+#'   "True Class 2" = beta[, 2],
+#'   "Estimate Class 2" = fit.LCPA.XZ$beta[, 2]
+#' ), 3)
+#'
+#' # Latent profiles predicting two dependent variables: ZY analysis
+#' true.mean <- rbind(
+#'   "Class 1" = c(Depression = 8, Anxiety = 12),
+#'   "Class 2" = c(Depression = 10, Anxiety = 10),
+#'   "Class 3" = c(Depression = 13, Anxiety = 8)
+#' )
+#' dependent.variables <- scale(
+#'   true.mean[data.LCPA$Zs[[1]], ] +
+#'     matrix(rnorm(N * 2, sd = 1.5), N, 2)
+#' )
+#' true.mean.standardized <- sweep(
+#'   sweep(true.mean, 2, attr(dependent.variables, "scaled:center"), "-"),
+#'   2, attr(dependent.variables, "scaled:scale"), "/"
+#' )
+#' true.variance.standardized <-
+#'   (1.5 / attr(dependent.variables, "scaled:scale"))^2
+#' dependent.variables <- as.data.frame(dependent.variables)
+#' fit.LCPA.ZY <- LCPA(
+#'   response = data.LCPA$responses[[1]], L = L,
+#'   type.analysis = "ZY", type.model = "LPA",
+#'   dependent.variables = dependent.variables,
+#'   family = "gaussian",
+#'   method.model = "EM", control.model = control.model,
+#'   method.3step = "BCH", method.regression = "Analytic",
+#'   method.SE = "Analytic", vis = TRUE
+#' )
+#' round(cbind(
+#'   True.Depression = true.mean.standardized[, "Depression"],
+#'   Estimate.Depression =
+#'     fit.LCPA.ZY$dependent.variables$t1$Depression$estimate,
+#'   True.Anxiety = true.mean.standardized[, "Anxiety"],
+#'   Estimate.Anxiety =
+#'     fit.LCPA.ZY$dependent.variables$t1$Anxiety$estimate
+#' ), 3)
+#' round(cbind(
+#'   True.Variance.Depression = rep(
+#'     true.variance.standardized["Depression"], L
+#'   ),
+#'   Estimate.Variance.Depression =
+#'     fit.LCPA.ZY$dependent.variables$t1$Depression$variance,
+#'   True.Variance.Anxiety = rep(
+#'     true.variance.standardized["Anxiety"], L
+#'   ),
+#'   Estimate.Variance.Anxiety =
+#'     fit.LCPA.ZY$dependent.variables$t1$Anxiety$variance
+#' ), 3)
 #' }
 #'
 #' @references
-#' Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved three-step approaches. Political Analysis, 18(4), 450–469. https://doi.org/10.1093/pan/mpq025
+#' Asparouhov, T., & Muthén, B. (2014a). Auxiliary variables in mixture
+#' modeling: Three-step approaches using Mplus. *Structural Equation Modeling:
+#' A Multidisciplinary Journal, 21*(3), 329--341.
+#' \doi{10.1080/10705511.2014.915181}
 #'
-#' Liang, Q., la Torre, J. d., & Law, N. (2023). Latent Transition Cognitive Diagnosis Model With Covariates: A Three-Step Approach. Journal of Educational and Behavioral Statistics, 48(6), 690-718. https://doi.org/10.3102/10769986231163320
+#' Asparouhov, T., & Muthén, B. (2014b). *Auxiliary variables in mixture
+#' modeling: Using the BCH method in Mplus to estimate a distal outcome model
+#' and an arbitrary secondary model* (Mplus Web Note No. 21, Version 2).
+#' \url{https://www.statmodel.com/examples/webnotes/webnote21.pdf}
 #'
+#' Bakk, Z., Tekle, F. B., & Vermunt, J. K. (2013). Estimating the association
+#' between latent class membership and external variables using bias-adjusted
+#' three-step approaches. *Sociological Methodology, 43*(1), 272--311.
+#' \doi{10.1177/0081175012470644}
 #'
-#' @examples
-#' library(LCPA)
+#' Bolck, A., Croon, M., & Hagenaars, J. (2004). Estimating latent structure
+#' models with categorical variables: One-step versus three-step estimators.
+#' *Political Analysis, 12*(1), 3--27.
+#' \doi{10.1093/pan/mph001}
 #'
-#' set.seed(123)
-#' N <- 2000  # Sample size
-#' L <- 3    # Number of latent classes
-#' I <- 6    # Number of indicators
+#' Nylund-Gibson, K., Grimm, R. P., & Masyn, K. E. (2019). Prediction from
+#' latent classes: A demonstration of different approaches to include distal
+#' outcomes in mixture models. *Structural Equation Modeling: A
+#' Multidisciplinary Journal, 26*(6), 967--985.
+#' \doi{10.1080/10705511.2019.1590146}
 #'
-#' # Create covariates (intercept + 2 covariates + 1 interaction)
-#'  Intercept = rep(1, N)
-#'  X1 <- rnorm(N)
-#'  X2 <- rbinom(N, 1, 0.5)
-#'  X1.X2 <- X1 * X2
-#' covariate <- cbind(Intercept, X1, X2, X1.X2)
+#' Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved
+#' three-step approaches. *Political Analysis, 18*(4), 450--469.
+#' \doi{10.1093/pan/mpq025}
 #'
-#' # Simulate data for LPA
-#' sim_data <- sim.LTA(
-#'   N = N, I = I, L = L, times = 1, type = "LPA",
-#'   covariates = list(covariate), is.sort=TRUE,
-#'   beta = matrix(c(
-#'    -0.2, 0.0, -0.1,  ## fix reference class to class 2
-#'     0.2, 0.0, -0.3,
-#'     0.8, 0.0, -0.6,
-#'    -0.1, 0.0,  0.3
-#'   ), ncol = L, byrow = TRUE)
-#' )
-#' response <- sim_data$responses[[1]]
-#'
-#' ## It is strongly recommended to perform the following
-#' ## standardization to obtain more stable results when LPA.
-#' ## Standardization is not performed here in order to
-#' ## compare estimated values with true values.
-#' # response <- normalize(response)
-#'
-#' # Fit cross-sectional LPA with covariates
-#' ## fix reference class to class 2
-#' # need Mplus
-#' \dontrun{
-#' fit <- LCPA(
-#'   response = response,
-#'   L = L, ref.class = 2,
-#'   type = "LPA", is.sort=TRUE,
-#'   covariate = covariate,
-#'   method.SE = "Obs",
-#'   CEP.error = TRUE,
-#'   method = "Mplus",
-#'   control.Mplus = list(files.path = ""),
-#'   vis = TRUE
-#' )
-#' print(fit)
-#' }
-#'
-#' @importFrom nloptr nloptr
-#' @importFrom Matrix nearPD
-#' @importFrom numDeriv hessian
-#' @importFrom stats pnorm
-#' @importFrom MASS ginv
+#' @seealso \code{\link[LCPA]{LCA}()}, \code{\link[LCPA]{LPA}()}, \code{\link[LCPA]{LTA}()}, \code{\link[LCPA]{get.CEP}()}
 #'
 #' @export
-#'
 LCPA <- function(response, L = 2,
-                 ref.class = L, type = "LCA",
-                 covariate = NULL,
-                 CEP.error = TRUE,
-                 par.ini = "random",
-                 params = NULL, is.sort = TRUE,
-                 constraint = "VV",
-                 method = "EM", tol = 1e-4,
-                 lower=-10, upper=10,
-                 method.SE = "Bootstrap", n.Bootstrap=100,
-                 maxiter = 5000, nrep = 20,
-                 starts = 100, maxiter.wa = 20,
-                 vis = TRUE,
+                 type.analysis = c("XZ", "ZY"),
+                 type.model = c("LCA", "LPA"),
+                 covariates = NULL,
+                 ref.class = L,
+                 dependent.variables = NULL,
+                 family = "gaussian",
+                 method.model = "EM",
+                 control.model = NULL,
                  control.EM = NULL,
                  control.Mplus = NULL,
-                 control.NNE = NULL) {
+                 control.NNE = NULL,
+                 control.flexmix = NULL,
+                 control.Rmixmod = NULL,
+                 control.RMixtComp = NULL,
+                 method.3step = NULL,
+                 CEP.error = TRUE,
+                 method.regression = "Analytic",
+                 maxiter = 5000, tol = 1e-4,
+                 lower = -10, upper = 10,
+                 method.SE = "Bootstrap", nrep.bootstrap = 100,
+                 vis = TRUE) {
 
   call <- match.call()
-
-  if (ref.class < 1 || ref.class > L) {
-    stop("ref.class must be between 1 and L")
-  }
-
-  # Default control parameters
-  default_control.EM <- list(maxiter = 2000, tol = 1e-4)
-  default_control.Mplus <- list(maxiter = 2000, tol = 1e-4, files.path = NULL, files.clean = TRUE)
-  default_control.NNE <- list(
-    hidden.layers = c(16, 16),
-    activation.function = "tanh",
-    use.attention=TRUE,
-    d.model = 8,
-    nhead = 2,
-    dim.feedforward = 16,
-    eps = 1e-8,
-    lambda = 1e-5,
-    initial.temperature = 1000,
-    cooling.rate = 0.5,
-    maxiter.sa = 1000,
-    threshold.sa = 1e-10,
-    maxiter = 1000,
-    maxiter.early = 50,
-    maxcycle = 10,
-    lr = 0.025,
-    scheduler.patience = 10,
-    scheduler.factor = 0.80,
-    plot.interval = 100,
-    device = "CPU"
-  )
-
-  merge_and_clean_control <- function(user_control, default_control) {
-    if (is.null(user_control)) return(default_control)
-    merged <- modifyList(default_control, user_control)
-    merged[names(default_control)]
-  }
-
-  control.EM <- merge_and_clean_control(control.EM, default_control.EM)
-  control.Mplus <- merge_and_clean_control(control.Mplus, default_control.Mplus)
-  control.NNE <- merge_and_clean_control(control.NNE, default_control.NNE)
-
-  # Convert to matrix if needed
-  response <- as.matrix(response)
-  N <- nrow(response)
-  I <- ncol(response)
-
-  if(vis){
-    cat(paste0("Starting the first step for ", type, " ...\n\n"))
-  }
-
-  # Step 1: Unconditional LCA/LPA
-  if (is.null(params)) {
-    if (type == "LCA") {
-      adj <- adjust.response(response)
-      response <- adj$response
-      LCPA.obj <- LCA(response, L = L, par.ini = par.ini,
-                      method = method, is.sort = is.sort, nrep = nrep,
-                      starts = starts, maxiter.wa = maxiter.wa,
-                      vis = vis,
-                      control.EM = control.EM,
-                      control.Mplus = control.Mplus,
-                      control.NNE = control.NNE)
-    } else {
-      LCPA.obj <- LPA(response, L = L, par.ini = par.ini,
-                      constraint = constraint,
-                      method = method, is.sort = is.sort, nrep = nrep,
-                      starts = starts, maxiter.wa = maxiter.wa,
-                      vis = vis,
-                      control.EM = control.EM,
-                      control.Mplus = control.Mplus,
-                      control.NNE = control.NNE)
-    }
-    params <- LCPA.obj$params
-  }
-
-  if(vis){
-    cat(paste0("Starting the second step for ", type, " ...\n\n"))
-  }
-  if (type == "LCA") {
-    P.Z.Xns <- list(get.P.Z.Xn.LCA(response = response, par = params$par, P.Z=params$P.Z))
-  } else {
-    P.Z.Xns <- list(get.P.Z.Xn.LPA(response = response, means = params$means, covs = params$covs, P.Z=params$P.Z))
-  }
-  P.Zs <- list(colSums(P.Z.Xns[[1]]) / sum(P.Z.Xns[[1]]))
-  Zs <- list(apply(P.Z.Xns[[1]], 1, which.max))
-
-  if (CEP.error) {
-    CEP <- get.CEP(P.Z.Xns, time.cross=FALSE)
-  } else {
-    CEP <- list(diag(L))
-  }
-
-  if (is.null(covariate)) {
-    covariate <- matrix(1, nrow = N, ncol = 1)
-    colnames(covariate) <- "Intercept"
-  } else {
-    covariate <- as.matrix(covariate)
-    if (ncol(covariate) == 0) {
-      covariate <- matrix(1, nrow = N, ncol = 1)
-      colnames(covariate) <- "Intercept"
-    }
-  }
-  covariates <- list(covariate)
-  p <- ncol(covariate)
-  num_beta <- p * (L - 1)
-  num_gamma <- 0
-  init.par <- rep(0, num_beta + num_gamma)
-
-  if(vis){
-    cat(paste0("Starting the third step for ", type, " ...\n\n"))
-  }
-
-  npar <- length(init.par)
-  lb <- rep(lower, npar)
-  ub <- rep(upper, npar)
-
-  int_width <- ceiling(log10(N * I * L))
-  total_width <- int_width + 5
-  fmt_string_maxchg <- sprintf("%%%d.%df", total_width, 5)
-
-  int_width <- ceiling(log10(N * I * L)) + 1L
-  total_width <- int_width + 3
-  fmt_string_BIC <- sprintf("%%%d.%df", total_width, 2)
-
-  Log.Lik.history <- c(0)
-  make_loglik_with_print <- function(vis, ref.class) {
-    iter <- 0
-    function(par, CEP, P.Z.Xns, Zs, covariates, covariates.timeCross) {
-      iter <<- iter + 1
-      Log.Lik <- get.Log.Lik.LTA.optim(par, CEP, P.Z.Xns, Zs, covariates, FALSE, ref.class)
-
-      Log.Lik.history <<- c(Log.Lik.history, -Log.Lik)
-      maxchg <- abs(Log.Lik.history[iter+1] - Log.Lik.history[iter])
-      BIC <- -2 * Log.Lik.history[iter+1] + npar * log(N)
-      if(vis){
-        cat('\r  Iter =', sprintf("%4d", iter), '  \u0394Log.Lik =', sprintf(fmt_string_maxchg, maxchg),
-            '  BIC =', sprintf(fmt_string_BIC, BIC))
-      }
-      return(Log.Lik)
-    }
-  }
-  get.Log.Lik.LTA.print <- make_loglik_with_print(vis, ref.class)
-
-  nlopt_res <- nloptr::nloptr(
-    x0 = init.par,
-    eval_f = function(x) get.Log.Lik.LTA.print(x, CEP, P.Z.Xns, Zs, covariates, FALSE),
-    lb = lb,
-    ub = ub,
-    opts = list(
-      algorithm = "NLOPT_LN_BOBYQA",
-      initial_step = rep(0.5, length(init.par)),
-      xtol_rel = 1e-8,
-      ftol_rel = 1e-8,
-      maxeval = maxiter,
-      print_level = 0
-    )
-  )
-  if(vis){
-    cat("\n\n")
-  }
-
-  refined_init <- nlopt_res$solution
-
-  if(method.SE == "Obs"){
-    if(vis){
-      cat("  Calculating Observed Information Matrix for Standard Errors ...\n")
-    }
-    h <- tryCatch({
-      base_eps <- .Machine$double.eps^(1/3)
-      adaptive_eps <- base_eps * pmax(1, abs(refined_init))
-      numDeriv::hessian(
-        func = function(x) {
-          get.Log.Lik.LTA.optim(
-            x,
-            CEP,
-            P.Z.Xns,
-            Zs,
-            covariates,
-            FALSE,
-            ref.class
-          )
-        },
-        x = refined_init,
-        method = "Richardson",
-        method.args = list(
-          eps = adaptive_eps,
-          r   = 6,
-          v   = 2,
-          zero.tol = .Machine$double.eps * 100
-        )
-      )
-
-    }, error = function(e1) {
-      tryCatch({
-        warning("Hessian (r = 6) failed: ", conditionMessage(e1),
-                ". Retrying with r = 4.")
-        numDeriv::hessian(
-          func = function(x) {
-            get.Log.Lik.LTA.optim(
-              x,
-              CEP,
-              P.Z.Xns,
-              Zs,
-              covariates,
-              FALSE,
-              ref.class
-            )
-          },
-          x = refined_init,
-          method = "Richardson",
-          method.args = list(
-            eps = adaptive_eps,
-            r   = 4,
-            v   = 2,
-            zero.tol = .Machine$double.eps * 100
-          )
-        )
-
-      }, error = function(e2) {
-        tryCatch({
-          warning("Hessian (r = 4) failed: ", conditionMessage(e2),
-                  ". Retrying with r = 2.")
-          numDeriv::hessian(
-            func = function(x) {
-              get.Log.Lik.LTA.optim(
-                x,
-                CEP,
-                P.Z.Xns,
-                Zs,
-                covariates,
-                FALSE,
-                ref.class
-              )
-            },
-            x = refined_init,
-            method = "Richardson",
-            method.args = list(
-              eps = adaptive_eps,
-              r   = 2,
-              v   = 2,
-              zero.tol = .Machine$double.eps * 100
-            )
-          )
-
-        }, error = function(e3) {
-          warning("All Hessian attempts failed: ", conditionMessage(e3))
-          message(
-            "Suggestions:\n",
-            "1. Check local identifiability / label switching\n",
-            "2. Inspect parameter scaling (very large |theta|)\n",
-            "3. Try profile likelihood or reparameterization\n",
-            "4. Consider observed information via EM if applicable\n",
-            "Current parameters:\n",
-            paste(round(refined_init, 4), collapse = ", ")
-          )
-          NULL
-        })
-      })
-    })
-
-    if (!is.null(h)) {
-      near_h <- Matrix::nearPD(h, corr = FALSE,
-                               eig.tol = 1e-10,
-                               conv.tol = 1e-8)$mat
-      vcov <- tryCatch({
-        solve(near_h)
-      }, error = function(e) {
-        MASS::ginv(as.matrix(near_h))
-      })
-      diag_vcov <- diag(vcov)
-      if (any(diag_vcov < 0)) {
-        diag_vcov[diag_vcov < 0] <- NA
-      }
-
-      se.vec <- sqrt(diag_vcov)
-    }else{
-      se.vec <- NULL
-    }
+  type.analysis <- match.arg(type.analysis)
+  type.model <- match.arg(type.model)
+  control.model <- .three.step.control.model(control.model)
+  params <- control.model$params
+  constraint <- control.model$constraint
+  is.sort <- control.model$is.sort
+  par.ini <- control.model$par.ini
+  starts <- control.model$starts
+  maxiter.warmup <- control.model$maxiter.warmup
+  nrep <- control.model$nrep
+  if(is.null(method.3step)){
+    method.3step <- if(type.analysis == "XZ") "ML" else "BCH"
   }else{
-    if(vis){
-      cat("  Bootstrapping for Standard Errors ...\n")
-    }
-    par.Bootstrap <- matrix(0, n.Bootstrap, npar)
-    for(bs in 1:n.Bootstrap){
-      covariates.cur <- vector("list", 1)
-      samples.cur <- sample(1:N, N, replace = TRUE)
-      covariates.cur[[1]] <- covariates[[1]][samples.cur, , drop=FALSE]
-
-      P.Z.Xns.cur <- Zs.cur <- P.Zs.cur <- vector("list", 1)
-      if(type == "LCA"){
-        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LCA(response=response[samples.cur, ], par=params$par, P.Z=params$P.Z)
-      } else {
-        P.Z.Xns.cur[[1]] <- get.P.Z.Xn.LPA(response=response[samples.cur, ], means=params$means, covs=params$covs, P.Z=params$P.Z)
-      }
-
-      P.Zs.cur[[1]] <- colSums(P.Z.Xns.cur[[1]]) / sum(P.Z.Xns.cur[[1]])
-      Zs.cur[[1]] <- apply(P.Z.Xns.cur[[1]], 1, which.max)
-
-      if(CEP.error){
-        CEP.cur <- get.CEP(P.Z.Xns.cur, time.cross=FALSE)
-      } else {
-        CEP.cur <- replicate(1, diag(L), simplify=FALSE)
-      }
-
-      init.par <- rnorm(npar, mean=0, sd=abs(refined_init) * 0.1)
-      Log.Lik.history.cur <- c(0)
-      make_loglik_with_print_Bootstrap <- function(vis, ref.class, bs, n.Bootstrap) {
-        iter <- 0
-        function(par, CEP.cur, P.Z.Xns.cur, Zs.cur, covariates.cur, covariates.timeCross, bs, n.Bootstrap) {
-          iter <<- iter + 1
-          Log.Lik <- get.Log.Lik.LTA.optim(par, CEP.cur, P.Z.Xns.cur, Zs.cur, covariates.cur, FALSE, ref.class)
-
-          Log.Lik.history.cur <<- c(Log.Lik.history.cur, -Log.Lik)
-          maxchg <- abs(Log.Lik.history.cur[iter+1] - Log.Lik.history.cur[iter])
-          BIC <- -2 * Log.Lik.history.cur[iter+1] + npar * log(N)
-          if(vis){
-            cat('\r  Bootstrap =', sprintf("%4d/%4d", bs, n.Bootstrap), ' | Iter =', sprintf("%4d", iter),
-                '  \u0394Log.Lik =', sprintf(fmt_string_maxchg, maxchg),
-                '  BIC =', sprintf(fmt_string_BIC, BIC))
-          }
-          return(Log.Lik)
-        }
-      }
-      get.Log.Lik.LTA.print <- make_loglik_with_print_Bootstrap(vis, ref.class, bs, n.Bootstrap)
-      nlopt_res <- nloptr::nloptr(
-        x0 = init.par,
-        eval_f = function(x) get.Log.Lik.LTA.print(x, CEP.cur, P.Z.Xns.cur, Zs.cur, covariates.cur, FALSE, bs, n.Bootstrap),
-        lb = lb,
-        ub = ub,
-        opts = list(
-          algorithm = "NLOPT_LN_BOBYQA",
-          initial_step = rep(0.5, length(init.par)),
-          xtol_rel = 1e-8,
-          ftol_rel = 1e-8,
-          maxeval = maxiter,
-          print_level = 0
-        )
-      )
-      par.Bootstrap[bs, ] <- nlopt_res$solution
-    }
-
-    se.vec <- apply(par.Bootstrap, 2, sd, na.rm = TRUE)
-    if(vis){
-      cat("\n\n")
-    }
+    method.3step <- match.arg(method.3step, c("ML", "BCH"))
   }
+  method.regression <- match.arg(method.regression, c("Analytic", "Numeric"))
+  method.SE <- match.arg(method.SE, c("Analytic", "Numeric", "Bootstrap"))
 
-  params.LTA.obj <- LTA.vector.to.parameters(refined_init, covariates, L, ref.class)
-
-  if(!is.null(se.vec)){
-    se.obj <- LTA.vector.to.parameters(se.vec, covariates, L, ref.class)
-    Z.sta.vec <- refined_init/se.vec
-    p.value.tail1 <- pnorm(-abs(Z.sta.vec))
-    p.value.tail2 <- pnorm(-abs(Z.sta.vec)) * 2
-    Z.sta.obj <- LTA.vector.to.parameters(Z.sta.vec, covariates, L, ref.class)
-    p.value.tail1.obj <- LTA.vector.to.parameters(p.value.tail1, covariates, L, ref.class)
-    p.value.tail2.obj <- LTA.vector.to.parameters(p.value.tail1, covariates, L, ref.class)
-  }
-
-  beta <- params.LTA.obj$beta
-  beta.se <- se.obj$beta
-  beta.Z.sta <- Z.sta.obj$beta
-  beta.p.value.tail1 <- p.value.tail1.obj$beta
-  beta.p.value.tail2 <- p.value.tail2.obj$beta
-
-  covariates.ncol <- unlist(lapply(covariates, ncol))
-  npar <- get.npar.LTA(covariates.ncol, L, FALSE)
-
-  Log.Lik = -get.Log.Lik.LTA.optim(refined_init, CEP, P.Z.Xns, Zs, covariates, FALSE, ref.class)
-  AIC <- -2 * Log.Lik + 2 * npar
-  BIC <- -2 * Log.Lik + npar * log(N)
-
-  # Prepare result object
-  res <- list(
-    beta = beta,
-    beta.se = beta.se,
-    beta.Z.sta = beta.Z.sta,
-    beta.p.value.tail1 = beta.p.value.tail1,
-    beta.p.value.tail2 = beta.p.value.tail2,
-    npar = npar,
-    Log.Lik = Log.Lik,
-    AIC = AIC,
-    BIC = BIC,
-    P.Z.Xn = P.Z.Xns[[1]],
-    P.Z = P.Zs[[1]],
-    Z = Zs[[1]],
-    Log.Lik.history = Log.Lik.history[1:nlopt_res$iterations],
-    iterations = nlopt_res$iterations,
-    coveraged = nlopt_res$iterations < maxiter,
-    params = params,
-    call = call,
-    arguments = list(
-      response = response, L = L, type = type,
-      covariate = covariate,
-      CEP.error = CEP.error,
-      par.ini = par.ini,
-      params = params,
+  if(type.analysis == "XZ"){
+    res <- XZ.LCPA(
+      response = response, L = L,
+      ref.class = ref.class, type.model = type.model,
+      covariates = covariates, CEP.error = CEP.error,
+      par.ini = par.ini, params = params, is.sort = is.sort,
       constraint = constraint,
-      method = method, tol = tol,
-      maxiter = maxiter, is.sort = is.sort,
-      nrep = nrep, starts = starts, maxiter.wa = maxiter.wa,
+      method.model = method.model, tol = tol,
+      method.regression = method.regression,
+      lower = lower, upper = upper,
+      method.SE = method.SE, nrep.bootstrap = nrep.bootstrap,
+      maxiter = maxiter, starts = starts,
+      maxiter.warmup = maxiter.warmup, nrep = nrep,
       vis = vis,
-      control.EM = control.EM,
-      control.Mplus = control.Mplus,
-      control.NNE = control.NNE,
-      ref.class = ref.class
+      control.EM = control.EM, control.Mplus = control.Mplus,
+      control.NNE = control.NNE, control.flexmix = control.flexmix,
+      control.Rmixmod = control.Rmixmod,
+      control.RMixtComp = control.RMixtComp,
+      method.3step = method.3step
     )
-  )
+    res$P.Z.Xns <- list(res$P.Z.Xn)
+    res$P.Zs <- list(res$P.Z)
+    res$Zs <- list(res$Z)
+    if(is.null(res$CEP)){
+      res$CEP <- if(CEP.error){
+        get.CEP(res$P.Z.Xns, CEP.time.cross = FALSE)
+      }else list(diag(L))
+    }
+    res$XZ <- list(
+      beta = res$beta,
+      beta.se = res$beta.se,
+      beta.Z.sta = res$beta.Z.sta,
+      beta.p.value.tail1 = res$beta.p.value.tail1,
+      beta.p.value.tail2 = res$beta.p.value.tail2,
+      vcov = res$vcov,
+      information = res$information,
+      SE.diagnostics = res$SE.diagnostics
+    )
+    res$ZY <- NULL
+  }else{
+    if(is.null(dependent.variables)){
+      stop("dependent.variables must be supplied when type.analysis = 'ZY'")
+    }
+    res <- ZY.LCPA(
+      response = response, dependent.variables = dependent.variables, L = L,
+      type.model = type.model, family = family,
+      CEP.error = CEP.error,
+      par.ini = par.ini, params = params, is.sort = is.sort,
+      constraint = constraint, method.model = method.model,
+      method.regression = method.regression,
+      method.SE = method.SE, nrep.bootstrap = nrep.bootstrap,
+      starts = starts, maxiter.warmup = maxiter.warmup, nrep = nrep,
+      vis = vis,
+      control.EM = control.EM, control.Mplus = control.Mplus,
+      control.NNE = control.NNE, control.flexmix = control.flexmix,
+      control.Rmixmod = control.Rmixmod,
+      control.RMixtComp = control.RMixtComp,
+      method.3step = method.3step
+    )
+    res$XZ <- NULL
+    res$ZY <- res$dependent.variables
+  }
 
+  res$type.analysis <- type.analysis
+  res$type.model <- type.model
+  res$method.3step <- method.3step
+  res$analysis <- list(type = type.analysis, XZ = res$XZ, ZY = res$ZY)
+  dependent.variables.stored <- if(type.analysis == "ZY"){
+    res$arguments$dependent.variables
+  }else dependent.variables
+  covariates.stored <- if(type.analysis == "XZ"){
+    res$arguments$covariates
+  }else covariates
+  family.stored <- if(type.analysis == "ZY") res$arguments$family else family
+  res$arguments <- list(
+    response = response,
+    L = L,
+    type.analysis = type.analysis,
+    type.model = type.model,
+    covariates = covariates.stored,
+    ref.class = ref.class,
+    dependent.variables = dependent.variables.stored,
+    family = family.stored,
+    method.model = method.model,
+    control.model = control.model,
+    control.EM = control.EM,
+    control.Mplus = control.Mplus,
+    control.NNE = control.NNE,
+    control.flexmix = control.flexmix,
+    control.Rmixmod = control.Rmixmod,
+    control.RMixtComp = control.RMixtComp,
+    method.3step = method.3step,
+    CEP.error = CEP.error,
+    method.regression = method.regression,
+    maxiter = maxiter,
+    tol = tol,
+    lower = lower,
+    upper = upper,
+    method.SE = method.SE,
+    nrep.bootstrap = nrep.bootstrap,
+    vis = vis
+  )
+  res$call <- call
   class(res) <- "LCPA"
-  return(res)
+  res
 }

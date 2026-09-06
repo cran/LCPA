@@ -28,7 +28,7 @@ These values are used directly without re-estimation.}
 }
 \value{
 Numeric matrix (\eqn{N \times L}) of posterior probabilities.
-Rows sum to 1. Columns are named "Class.1", "Class.2", etc.
+Rows sum to 1. Columns are named \code{"Profile 1"}, \code{"Profile 2"}, and so on.
 }
 \description{
 Computes posterior probabilities of latent profile membership for each observation
@@ -38,11 +38,14 @@ using fixed profile parameters (means, covariances) and fixed prior probabilitie
 Unlike an EM algorithm, this function does NOT iteratively update profile prevalences.
 It performs a single E-step calculation:
 \deqn{
-  P(Z_n = l \mid \mathbf{x}_n) =
-  \frac{\pi_l \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_l, \boldsymbol{\Sigma}_l)}
-       {\sum_{k=1}^L \pi_k \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k)}
+  \tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+  \frac{\pi_l\mathcal{N}(\mathbf{X}_n\mid
+  \boldsymbol{\mu}_l,\boldsymbol{\Sigma}_l)}
+  {\sum_{h=1}^L\pi_h\mathcal{N}(\mathbf{X}_n\mid
+  \boldsymbol{\mu}_h,\boldsymbol{\Sigma}_h)}
 }
-where \eqn{\pi_l} are the fixed priors provided in the \code{P.Z} argument.
+where the profile probabilities, means, and covariance matrices are fixed by
+the \code{P.Z}, \code{means}, and \code{covs} arguments.
 }
 \examples{
 \donttest{

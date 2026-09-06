@@ -10,25 +10,32 @@
 #' generalization of the beta distribution and is commonly used as a conjugate prior
 #' to the multinomial distribution in Bayesian statistics.
 #'
-#' \bold{Probability Density Function:}
+#' Probability density function:
 #'
-#' For a vector \eqn{x = (x_1, \dots, x_K)} on the unit simplex (where \eqn{\sum x_i = 1}
-#' and \eqn{x_i \ge 0}), the density is given by:
+#' For a vector
+#' \eqn{\boldsymbol{\omega}=(\omega_1,\ldots,\omega_K)} on the unit simplex,
+#' where \eqn{\sum_{q=1}^K\omega_q=1} and \eqn{\omega_q\geq0}, the density is
 #'
-#' \deqn{f(x_1, \dots, x_K; \alpha_1, \dots, \alpha_K) = \frac{1}{B(\alpha)} \prod_{i=1}^{K} x_i^{\alpha_i - 1}}
+#' \deqn{f(\boldsymbol{\omega};\boldsymbol{\alpha})=
+#' \frac{1}{B(\boldsymbol{\alpha})}
+#' \prod_{q=1}^{K}\omega_q^{\alpha_q-1}.}
 #'
 #' where the normalizing constant \eqn{B(\alpha)} is the multivariate beta function:
 #'
-#' \deqn{B(\alpha) = \frac{\prod_{i=1}^{K} \Gamma(\alpha_i)}{\Gamma(\sum_{i=1}^{K} \alpha_i)}}
+#' \deqn{B(\boldsymbol{\alpha})=
+#' \frac{\prod_{q=1}^{K}\Gamma(\alpha_q)}
+#' {\Gamma(\sum_{q=1}^{K}\alpha_q)}.}
 #'
-#' \bold{Simulation Method:}
+#' Simulation method:
 #'
-#' The function utilizes the property that if \eqn{Y_1, \dots, Y_K} are independent
-#' Gamma random variables such that \eqn{Y_i \sim Gamma(shape = \alpha_i, rate = 1)}, then:
+#' The function uses independent Gamma random variables
+#' \eqn{G_q\sim\mathrm{Gamma}(\mathrm{shape}=\alpha_q,\mathrm{rate}=1)}:
 #'
-#' \deqn{X_i = \frac{Y_i}{\sum_{j=1}^{K} Y_j}}
+#' \deqn{\omega_q=\frac{G_q}{\sum_{h=1}^{K}G_h},
+#' \qquad q=1,\ldots,K.}
 #'
-#' The resulting vector \eqn{(X_1, \dots, X_K)} follows a Dirichlet distribution with parameters \eqn{\alpha}.
+#' The resulting vector \eqn{\boldsymbol{\omega}} follows a Dirichlet
+#' distribution with parameter vector \eqn{\boldsymbol{\alpha}}.
 #'
 #' @param n Integer. The number of random vectors to generate.
 #' @param alpha Numeric vector. The concentration parameters (must be positive).

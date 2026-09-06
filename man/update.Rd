@@ -11,24 +11,24 @@
 \alias{update.sim.LTA}
 \title{S3 Methods: update}
 \usage{
-update(x, ...)
+update(object, ...)
 
-\method{update}{LCA}(x, ...)
+\method{update}{LCA}(object, ...)
 
-\method{update}{LPA}(x, ...)
+\method{update}{LPA}(object, ...)
 
-\method{update}{LCPA}(x, ...)
+\method{update}{LCPA}(object, ...)
 
-\method{update}{LTA}(x, ...)
+\method{update}{LTA}(object, ...)
 
-\method{update}{sim.LCA}(x, ...)
+\method{update}{sim.LCA}(object, ...)
 
-\method{update}{sim.LPA}(x, ...)
+\method{update}{sim.LPA}(object, ...)
 
-\method{update}{sim.LTA}(x, ...)
+\method{update}{sim.LTA}(object, ...)
 }
 \arguments{
-\item{x}{An object of one of the following classes:
+\item{object}{An object of one of the following classes:
 \itemize{
 \item \code{\link[LCPA]{LCA}} — Latent Class Analysis model.
 \item \code{\link[LCPA]{LPA}} — Latent Profile Analysis model.
@@ -39,47 +39,70 @@ update(x, ...)
 \item \code{\link[LCPA]{sim.LTA}} — Simulated LTA dataset.
 }}
 
-\item{...}{Additional named arguments passed to override or extend the original call.
-Valid arguments depend on the class of \code{x}:
+\item{...}{Named arguments that override values in the original call.
+Every argument must be named, unique, and present in the formal arguments
+of the corresponding constructor. Valid arguments depend on the class of
+\code{object}:
 \describe{
-\item{\strong{\code{LCA}}}{\code{response}, \code{L}, \code{par.ini}, \code{method},
-\code{is.sort}, \code{nrep}, \code{vis}, \code{control.EM}, \code{control.Mplus}, \code{control.NNE}}
-\item{\strong{\code{LPA}}}{\code{response}, \code{L}, \code{par.ini}, \code{constraint},
-\code{method}, \code{is.sort}, \code{nrep}, \code{vis}, \code{control.EM}, \code{control.Mplus}, \code{control.NNE}}
-\item{\strong{\code{LCPA}}}{\code{response}, \code{L}, \code{ref.class}, \code{type}, \code{covariates},
-\code{CEP.error}, \code{par.ini}, \code{params}, \code{is.sort}, \code{constraint}, \code{method},
-\code{tol}, \code{maxiter}, \code{nrep}, \code{starts}, \code{maxiter.wa}, \code{vis},
-\code{control.EM}, \code{control.Mplus}, \code{control.NNE}}
-\item{\strong{\code{LTA}}}{\code{responses}, \code{L}, \code{ref.class}, \code{type}, \code{covariates},
-\code{CEP.timeCross}, \code{CEP.error}, \code{covariates.timeCross}, \code{par.ini}, \code{params},
-\code{is.sort}, \code{constraint}, \code{method}, \code{tol}, \code{maxiter}, \code{nrep}, \code{starts},
-\code{maxiter.wa}, \code{vis}, \code{control.EM}, \code{control.Mplus}, \code{control.NNE}}
-\item{\strong{\code{sim.LCA}}}{\code{N}, \code{I}, \code{L}, \code{poly.value}, \code{IQ},
+\item{\code{\link[LCPA]{LCA}}}{\code{response}, \code{L},
+\code{category.levels}, \code{method}, \code{par.ini}, \code{is.sort},
+\code{starts}, \code{maxiter.warmup}, \code{nrep}, \code{vis},
+\code{control.EM}, \code{control.Mplus}, \code{control.NNE},
+\code{control.flexmix}, \code{control.Rmixmod}, \code{control.RMixtComp}}
+\item{\code{\link[LCPA]{LPA}}}{\code{response}, \code{L},
+\code{constraint}, \code{method}, \code{par.ini}, \code{is.sort},
+\code{starts}, \code{maxiter.warmup}, \code{nrep}, \code{vis},
+\code{control.EM}, \code{control.Mplus}, \code{control.NNE},
+\code{control.flexmix}, \code{control.Rmixmod}, \code{control.RMixtComp}}
+\item{\code{\link[LCPA]{LCPA}}}{\code{response}, \code{L}, \code{type.analysis},
+\code{type.model}, \code{covariates}, \code{ref.class}, \code{dependent.variables},
+\code{family}, \code{method.model}, \code{control.model},
+\code{control.EM}, \code{control.Mplus}, \code{control.NNE},
+\code{control.flexmix}, \code{control.Rmixmod}, \code{control.RMixtComp},
+\code{method.3step}, \code{CEP.error}, \code{method.regression},
+\code{maxiter}, \code{tol}, \code{lower}, \code{upper}, \code{method.SE},
+\code{nrep.bootstrap}, \code{vis}}
+\item{\code{\link[LCPA]{LTA}}}{\code{responses}, \code{L}, \code{type.analysis},
+\code{type.model}, \code{covariates}, \code{covariates.time.cross},
+\code{ref.class}, \code{dependent.variables}, \code{family},
+\code{dependent.variable.structure}, \code{dependent.variable.time},
+\code{dependent.variable.time.cross},
+\code{method.model}, \code{step1.pool}, \code{control.model},
+\code{control.EM}, \code{control.Mplus}, \code{control.NNE},
+\code{control.Rmixmod}, \code{method.3step}, \code{CEP.error},
+\code{CEP.time.cross}, \code{method.regression}, \code{maxiter},
+\code{tol}, \code{lower}, \code{upper}, \code{method.SE},
+\code{nrep.bootstrap}, \code{vis}}
+\item{\code{\link[LCPA]{sim.LCA}}}{\code{N}, \code{I}, \code{L}, \code{poly.value}, \code{IQ},
 \code{distribution}, \code{params}, \code{is.sort}}
-\item{\strong{\code{sim.LPA}}}{\code{N}, \code{I}, \code{L}, \code{constraint}, \code{distribution},
+\item{\code{\link[LCPA]{sim.LPA}}}{\code{N}, \code{I}, \code{L}, \code{constraint}, \code{distribution},
 \code{mean.range}, \code{covs.range}, \code{params}, \code{is.sort}}
-\item{\strong{\code{sim.LTA}}}{\code{N}, \code{I}, \code{L}, \code{times}, \code{type}, \code{rate},
-\code{constraint}, \code{distribution}, \code{mean.range}, \code{covs.range}, \code{poly.value},
-\code{IQ}, \code{covariates}, \code{beta}, \code{gamma}, \code{params}, \code{is.sort}}
+\item{\code{\link[LCPA]{sim.LTA}}}{\code{N}, \code{I}, \code{L},
+\code{times}, \code{type}, \code{distribution}, \code{constraint},
+\code{poly.value}, \code{IQ}, \code{mean.range}, \code{covs.range},
+\code{params}, \code{is.sort}, \code{rate}, \code{covariates},
+\code{ref.class}, \code{beta}, \code{gamma}}
 }}
 }
 \value{
-An object of the same class as \code{x}, reconstructed using the original arguments
+An object of the same class as \code{object}, reconstructed using the original arguments
 updated with any provided in \code{...}. All unchanged parameters are preserved from the original call.
 }
 \description{
 The \code{update} function provides a unified and convenient interface to refresh or modify
-existing objects generated by the \code{LCPA} package. It allows users to re-run model fitting
+existing objects generated by the \code{\link[LCPA]{LCPA}} package. It allows users to re-run model fitting
 or data simulation with new parameter settings while preserving all other original configurations.
 Supported classes include: \code{\link[LCPA]{LCA}}, \code{\link[LCPA]{LPA}},
 \code{\link[LCPA]{LCPA}}, \code{\link[LCPA]{LTA}}, \code{\link[LCPA]{sim.LCA}},
 \code{\link[LCPA]{sim.LPA}}, and \code{\link[LCPA]{sim.LTA}}.
 }
 \details{
-Internally, each method extracts the stored \code{arguments} list from the input object \code{x},
+Internally, each method extracts the stored \code{arguments} list from the input object \code{object},
 merges it with user-provided \code{...} using \code{\link[utils]{modifyList}}, then re-invokes
-the corresponding constructor function (\code{LCA()}, \code{LPA()}, \code{LCPA()}, \code{LTA()},
-\code{sim.LCA()}, etc.) with the merged argument list.
+the corresponding constructor function (\code{\link[LCPA]{LCA}()},
+\code{\link[LCPA]{LPA}()}, \code{\link[LCPA]{LCPA}()},
+\code{\link[LCPA]{LTA}()}, \code{\link[LCPA]{sim.LCA}()}, etc.) with the
+merged argument list.
 
 This ensures that:
 \itemize{
@@ -88,8 +111,9 @@ This ensures that:
 \item Complex nested structures (e.g., control lists) can be partially updated.
 }
 
-Note: If an invalid argument is passed (e.g., \code{constraint} to \code{LCA}), it will be silently ignored
-unless the underlying constructor validates inputs.
+Invalid, unnamed, or duplicated arguments are rejected before the
+constructor is called. This prevents a misspelled option from appearing to
+update an object while leaving the fitted model unchanged.
 }
 \section{Methods (by class)}{
 \itemize{

@@ -2,431 +2,920 @@
 % Please edit documentation in R/LTA.R
 \name{LTA}
 \alias{LTA}
-\title{Latent Transition Analysis (LTA)}
+\title{Latent Transition Analysis}
 \usage{
 LTA(
   responses,
   L = 2,
-  ref.class = L,
-  type = "LCA",
+  type.analysis = c("XZ", "ZY"),
+  type.model = c("LCA", "LPA"),
   covariates = NULL,
-  CEP.timeCross = FALSE,
+  covariates.time.cross = FALSE,
+  ref.class = L,
+  dependent.variables = NULL,
+  family = "gaussian",
+  dependent.variable.structure = c("State", "Path"),
+  dependent.variable.time = NULL,
+  dependent.variable.time.cross = FALSE,
+  method.model = "EM",
+  step1.pool = FALSE,
+  control.model = NULL,
+  control.EM = NULL,
+  control.Mplus = NULL,
+  control.NNE = NULL,
+  control.Rmixmod = NULL,
+  method.3step = NULL,
   CEP.error = TRUE,
-  covariates.timeCross = FALSE,
-  par.ini = "random",
-  params = NULL,
-  is.sort = TRUE,
-  constraint = "VV",
-  method = "EM",
+  CEP.time.cross = FALSE,
+  method.regression = "Analytic",
+  maxiter = 5000,
   tol = 1e-04,
   lower = -10,
   upper = 10,
   method.SE = "Bootstrap",
-  n.Bootstrap = 100,
-  maxiter = 5000,
-  nrep = 20,
-  starts = 100,
-  maxiter.wa = 20,
-  vis = TRUE,
-  control.EM = NULL,
-  control.Mplus = NULL,
-  control.NNE = NULL
+  nrep.bootstrap = 100,
+  vis = TRUE
 )
 }
 \arguments{
-\item{responses}{A \code{list} of response matrices or data frames. Each matrix corresponds to one time point.
-Rows of each matrix represent individuals/participants/observations (\eqn{N}), columns of each
-matrix represent observed items/variables (\eqn{I}).
-For \code{type = "LCA"}: items must be binary or categorical (coded as integers starting from 0).
-For \code{type = "LPA"}: items must be continuous (numeric), and each response matrix must be
-standardized using \code{\link[base]{scale}} or \code{\link[LCPA]{normalize}} prior to input.}
+\item{responses}{A non-empty list of \eqn{N \times I} numeric response
+matrices/data frames, one per time point. All elements must contain the
+same participants in the same row order and have identical numbers of rows
+and indicators. For \code{type.model = "LCA"}, columns are categorical and
+follow the same requirements as \code{response} in \code{\link[LCPA]{LCA}()}. For
+\code{type.model = "LPA"}, columns are continuous, contain no missing values,
+and should be standardized with \code{scale()} or \code{\link[LCPA]{normalize}()} as for \code{\link[LCPA]{LPA}()}.}
 
-\item{L}{Integer scalar. Number of latent classes/profiles at each time point. Must satisfy \eqn{L \geq 2}.}
+\item{L}{Integer number of latent classes/profiles at every time point
+(default: 2; must be at least 2). It has the same meaning as \code{L} in
+\code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()} and is held constant over time.}
 
-\item{ref.class}{Integer \eqn{L \geq ref.class \geq 1}. Specifies which latent class to use as the reference category.
-Default is \code{L} (last class). Coefficients for the reference class are fixed to zero.
-When \code{is.sort=TRUE}, classes are first ordered by decreasing \code{P.Z} (class 1 has highest probability),
-then \code{ref.class} refers to the position in this sorted order.}
-
-\item{type}{Character string. Specifies the type of latent variable model for Step 1:
+\item{type.analysis}{Character string selecting the analysis path:
 \itemize{
-\item \code{"LCA"} — Latent Class Analysis for categorical items.
-\item \code{"LPA"} — Latent Profile Analysis for continuous items.
+\item \code{"XZ"}: estimate covariate effects on initial latent status and
+subsequent latent transitions; \code{covariates} is used and \code{dependent.variables} is
+ignored.
+\item \code{"ZY"}: estimate distributions of external observed dependent
+variables conditional on a selected latent state or on the complete
+latent-state path; \code{dependent.variables}, \code{family},
+\code{dependent.variable.structure}, \code{dependent.variable.time}, and
+\code{dependent.variable.time.cross} are used, while \code{covariates},
+\code{covariates.time.cross}, and \code{ref.class} are ignored.
 }
-See \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}} for details.}
+The default is \code{"XZ"}.}
 
-\item{covariates}{Optional. A \code{list} of matrices/data frames (length = number of time points).
-Each matrix contains covariates for modeling transitions or initial status.
-Must include an intercept column (all 1s) as the first column.
-If \code{NULL} (default), only intercept terms are used (i.e., no covariates).
-For time \eqn{t}, dimension is \eqn{N \times p_t}. Covariates can vary across time.}
+\item{type.model}{Character string selecting the common Step 1 measurement
+model: \code{"LCA"} for categorical indicators or \code{"LPA"} for continuous
+indicators (default: \code{"LCA"}). Its meaning, response-data requirements,
+and fitted parameters are the same as in \code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()}, respectively.}
 
-\item{CEP.timeCross}{Logical. If \code{TRUE}, assumes measurement invariance and uses the same
-Classification Error Probability (\code{\link[LCPA]{get.CEP}}) matrix across all time points.
-Requires that item parameters are invariant over time (not checked internally).
-Default is \code{FALSE}.}
+\item{covariates}{Used only when \code{type.analysis = "XZ"}. A list with one
+\eqn{N\times(U_t+1)} numeric matrix/data frame per time point, representing
+\eqn{\boldsymbol{\zeta}_{nt}=
+(1,\zeta_{nt1},\ldots,\zeta_{ntU_t})^\top}. Each first
+column must be an unstandardized all-ones intercept; standardize all other
+covariates before analysis. The first element models initial status and
+later elements model transitions into their corresponding time points. If
+\code{NULL} (default), an all-ones design is created at every time point, giving
+an intercept-only initial/transition model. This argument is ignored for
+\code{"ZY"}, which uses implicit latent-state-specific dependent-variable intercepts.}
 
-\item{CEP.error}{Logical. If \code{TRUE} (recommended), incorporates classification uncertainty via
-estimated CEP matrices from Step 1. If \code{FALSE}, uses identity CEP matrices
-(equivalent to naive modal assignment; introduces bias and not recommended).}
+\item{covariates.time.cross}{Logical used only for \code{"XZ"} (default: \code{FALSE}).
+If \code{TRUE}, constrain the transition-regression coefficients to be equal at
+times 2, ..., \eqn{T}; those transition design matrices must have identical
+column structures. The initial-state coefficients remain a separate block.
+If \code{FALSE}, estimate time-specific transition effects. Ignored for \code{"ZY"}.}
 
-\item{covariates.timeCross}{Logical. If \code{TRUE}, forces the use of identical \eqn{\gamma} parameters
-across all time points (i.e., a time-invariant probability transition matrix).
-In this case, users should ensure that the covariate matrices at different time points
-have the same dimensions (values may differ) to match the fixed form of the \eqn{\gamma_{lkt}} coefficients.
-Default is \code{FALSE}, allowing for potentially different probability transition matrices across time points.}
+\item{ref.class}{Integer from 1 to \code{L} selecting the reference destination
+class in the \code{X -> Z} initial-state and transition multinomial regressions
+(default: \code{L}). The corresponding coefficient vectors are fixed to zero.
+If \code{control.model$is.sort = TRUE}, it refers to the common class order established after
+Step 1 sorting. It is not used for \code{"ZY"}.}
 
-\item{par.ini}{Specification for parameter initialization. Options include:
-\itemize{
-\item \code{"random"}: Completely random initialization (default).
-\item \code{"kmeans"}: Initializes parameters via K-means clustering on observed data (McLachlan & Peel, 2004).
-\item A \code{list} for LCA containing:
+\item{dependent.variables}{Used only when \code{type.analysis = "ZY"}. Supply
+either one dependent-variable vector/matrix/data frame or a list having the
+same length as \code{responses}. Each supplied object must have \eqn{N} rows;
+at time \eqn{t}, its \eqn{V_t} columns represent
+\eqn{\mathbf{Y}_{nt}=(Y_{nt1},\ldots,Y_{ntV_t})^\top}. They are external
+observed dependent variables, not latent-class indicators.
+Elements of a longitudinal list may be \code{NULL} at unmeasured time points.
+Missing values are allowed and are omitted separately by dependent variable.
+Before calling \code{LTA()}, standardize every continuous dependent-variable
+column assigned \code{family = "gaussian"}, preferably with
+\code{\link[base]{scale}()}, so that its observed sample mean is 0 and sample
+standard deviation is 1. Do not standardize columns assigned
+\code{family = "categorical"}; retain their original category values.}
+
+\item{family}{Used only for \code{"ZY"}. \code{"gaussian"} (default) estimates
+class-specific means for standardized numeric continuous dependent variables;
+\code{"categorical"} estimates class-specific probabilities for observed categories. Supply one
+value for all dependent-variable columns, one value per column, or a list aligned with
+\code{responses} whose selected elements follow either rule. For categorical
+BCH analyses, the reported probabilities are class-specific conditional
+distributions of the dependent variable.}
+
+\item{dependent.variable.structure}{Used only for \code{"ZY"}. \code{"State"}
+(default) estimates the distribution of each dependent variable
+conditional on the latent state at its selected time. \code{"Path"} estimates
+the distribution conditional on each complete latent-state path
+\eqn{(Z_{n1},\ldots,Z_{nT})}, giving \eqn{L^T} path-specific groups.}
+
+\item{dependent.variable.time}{Used only for \code{"ZY"}. Integer time-point
+index/indices. For a longitudinal \code{dependent.variables} list, \code{NULL} (default) selects every non-\code{NULL}
+element; an explicit vector selects distinct non-\code{NULL} elements. When
+\code{dependent.variables} is a single vector/matrix/data frame, exactly one time must be
+selected and \code{NULL} assigns it to the final time point.}
+
+\item{dependent.variable.time.cross}{Logical used only for \code{"ZY"} (default:
+\code{FALSE}). If \code{FALSE}, fit a separate class-specific dependent-variable model at each selected time.
+If \code{TRUE}, stack the selected records and constrain their class-specific
+dependent-variable parameters to equality over time. Pooled times must have
+identical dependent-variable column names and families. BCH analytic/numeric inference uses a
+participant-cluster sandwich; for pooled ML, use
+\code{method.SE = "Bootstrap"} to retain within-participant dependence.}
+
+\item{method.model}{Character string selecting the Step 1 parameter estimator.
+It has the same meaning as the \code{method} argument of \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.
+Longitudinal three-step models support \code{"EM"} (default), \code{"NNE"},
+\code{"Mplus"}, and \code{"Rmixmod"}; the corresponding \verb{control.*} list is passed
+to the Step 1 function. It does not control Step 3 estimation.}
+
+\item{step1.pool}{Logical (default: \code{FALSE}). If \code{FALSE}, estimate the common
+Step 1 measurement model from \code{responses[[1]]} and apply it at all times.
+If \code{TRUE}, row-bind all response matrices, estimate one common model from
+the pooled records, and then split posterior probabilities back by time.
+This argument is ignored when fixed \code{control.model$params} are supplied.}
+
+\item{control.model}{Optional named list of common Step 1 measurement-model
+settings. If \code{NULL} (default), all settings below use their defaults. Supply
+only the elements to override:
 \describe{
-\item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-each latent class, item, and response category (where \eqn{K_{\max}} is the maximum
-number of categories across items).}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
+\item{\code{params}}{Optional fixed Step 1 parameter list (default: \code{NULL}).
+When supplied, Step 1 fitting is skipped. For LCA it must contain \code{par},
+\code{P.Z}, and \code{category.levels}; for LPA it must contain \code{means}, \code{covs},
+and \code{P.Z}, with the definitions and dimensions returned by
+\code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()}.}
+\item{\code{par.ini}}{Initialization used when \code{params = NULL} (default:
+\code{"random"}). It accepts \code{"random"}, \code{"kmeans"}, or the model-specific
+parameter-list forms documented for \code{\link[LCPA]{LCA}()} and
+\code{\link[LCPA]{LPA}()}.}
+\item{\code{constraint}}{LPA covariance structure (default: \code{"VV"}). It accepts
+\code{"UE"}, \code{"UV"}, \code{"E0"}, \code{"V0"}, \code{"EE"}, \code{"VV"}, \code{"VE"}, \code{"EV"}, or
+a custom equality list as documented for \code{\link[LCPA]{LPA}()}.
+It is ignored when \code{type.model = "LCA"}.}
+\item{\code{is.sort}}{Logical (default: \code{TRUE}). Order classes/profiles by
+decreasing Step 1 prior probability and consistently permute Step 1,
+CEP, and Step 3 class-specific results.}
+\item{\code{starts}}{Positive integer number of independently initialized Step 1
+warm-up analyses (default: 100).}
+\item{\code{maxiter.warmup}}{Positive integer maximum number of Step 1 iterations
+per warm-up analysis (default: 20).}
+\item{\code{nrep}}{Positive integer not exceeding \code{starts} (default: 20). The
+best warm-up states are continued to final Step 1 fits.}
 }
-\item A \code{list} for LPA containing:
-\describe{
-\item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-\item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
+Element names must be unique; unknown or unnamed elements are rejected.}
+
+\item{control.EM}{Optional Step 1 control list for the EM estimator in
+\code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}. \code{maxiter} sets the
+maximum number of EM iterations, \code{tol} sets the convergence tolerance, and
+the LPA covariance-floor element bounds small covariance eigenvalues away
+from zero. See \code{control.EM} in those functions for the complete list.}
+
+\item{control.Mplus}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+Mplus backend. \code{maxiter}, \code{tol}, \code{files.path}, \code{files.clean}, and the LPA
+covariance-floor option have the meanings documented there.}
+
+\item{control.NNE}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()} NNE
+backend. Its network, attention, annealing, optimizer, plotting, and device
+fields have exactly the meanings documented for those functions.}
+
+\item{control.Rmixmod}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+Rmixmod backend. Its package-staged/native \code{path}, algorithm, strategy,
+initialization, iteration, tolerance, and replication fields retain the
+meanings and restrictions documented there.}
+
+\item{method.3step}{Character string selecting the Step 2--3 correction:
+\itemize{
+\item \code{"ML"}: use the classification-error-corrected likelihood. For
+\code{"XZ"}, the full latent path is evaluated by forward--backward
+recursion rather than independent pairwise regressions.
+\item \code{"BCH"}: invert each CEP matrix and fit Step 3 using BCH
+pseudo-weights. For transitions, joint weights are formed under
+conditional independence of time-specific classification errors.
 }
-}}
+If \code{NULL} (default), \code{"ML"} is selected for \code{"XZ"} and \code{"BCH"} for
+\code{"ZY"}. Both choices are available for both paths. The longitudinal use
+of ML three-step and BCH auxiliary-variable models is demonstrated by
+Nylund-Gibson, Arch, and Carter (2026). For the underlying cross-sectional
+corrections, BCH-XZ follows Vermunt (2010), whereas ML-ZY follows Bakk,
+Tekle, and Vermunt (2013) and Nylund-Gibson, Grimm, and Masyn (2019).}
 
-\item{params}{Optional \code{list} of pre-estimated Step 1 parameters. If \code{NULL} (default),
-Step 1 models are estimated internally. If provided, no LCA or LPA parameter estimation
-will be performed; instead, the parameters provided in \code{params} will be used as
-fixed values. Additionally, \code{params} must contain:
+\item{CEP.error}{Logical. If \code{TRUE} (default and recommended), estimate CEP
+matrices with \code{\link[LCPA]{get.CEP}()} and apply the selected ML or
+BCH classification-error correction.
+If \code{FALSE}, use identity matrices, reducing Step 3 to naive modal-state
+assignment.}
+
+\item{CEP.time.cross}{Logical. If \code{FALSE} (default), estimate a separate CEP
+matrix at every time. If \code{TRUE}, use one posterior-mass-weighted common CEP
+matrix across time, which assumes invariant measurement and classification
+error; measurement invariance is not tested internally. The option applies
+to both \code{"XZ"} and \code{"ZY"}. The estimator and pooling rule are documented
+in \code{\link[LCPA]{get.CEP}()}.}
+
+\item{method.regression}{Character string controlling Step 3 point estimation
+(default: \code{"Analytic"}). For ML-XZ, BCH-XZ, and ML-ZY State/Path models, \code{"Analytic"}
+supplies the exact analytic gradient to a numerical optimizer; these models
+do not generally have closed-form coefficient estimates. For BCH-ZY,
+\code{"Analytic"} directly evaluates the weighted closed-form class-specific
+means or categorical probabilities, separately or under the requested
+cross-time equality constraint. \code{"Numeric"} optimizes the same likelihood
+without the supplied gradient or numerically solves the same BCH estimating
+equations for either the selected-state or complete-path groups. This
+choice is independent of \code{method.SE}.}
+
+\item{maxiter}{Positive integer giving the maximum number of Step 3 \code{"XZ"}
+optimization iterations (default: 5000). It is distinct from Step 1
+\verb{control.*$maxiter} and \code{control.model$maxiter.warmup}, and is ignored for \code{"ZY"}.}
+
+\item{tol}{Positive finite convergence tolerance for the Step 3 \code{"XZ"}
+optimization (default: \eqn{10^{-4}}). It is separate from the Step 1
+backend tolerance and is ignored for \code{"ZY"}.}
+
+\item{lower, upper}{Finite lower and upper bounds applied to each \code{"XZ"}
+initial-state or transition-regression coefficient (defaults: -10 and 10).
+They are ignored for \code{"ZY"}.}
+
+\item{method.SE}{Character string selecting Step 3 uncertainty estimation:
 \itemize{
-\item A \code{list} for LCA containing:
-\describe{
-\item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-each latent class, item, and response category (where \eqn{K_{\max}} is the maximum
-number of categories across items).}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
-}
-\item A \code{list} for LPA containing:
-\describe{
-\item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-\item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
-}
+\item \code{"Analytic"}: for ML-XZ, use the analytic observed-information
+bread and a participant-level sandwich meat that includes CEP
+estimation; for ML-ZY, use Louis observed information; for BCH, use
+the analytic estimating-equation bread and participant-cluster
+sandwich meat.
+\item \code{"Numeric"}: replace the analytic information/bread with a
+numerical Hessian or Jacobian while retaining the corresponding
+participant-level meat and Step 3 estimand.
+\item \code{"Bootstrap"} (default): jointly resample participants over all
+times, keep Step 1 measurement parameters fixed, recompute posterior
+assignments and CEP/BCH weights, and re-estimate Step 3.
 }}
 
-\item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-order according to \code{P.Z}. All other parameters will be adjusted accordingly
-based on the reordered latent classes.}
+\item{nrep.bootstrap}{Integer number of bootstrap replications used only when
+\code{method.SE = "Bootstrap"} (default: 100; minimum: 2). Only successful Step 3
+fits enter the empirical covariance; consider 500--1000 replications for
+final publication-level inference when feasible.}
 
-\item{constraint}{Character (LPA only). Specifies structure of within-class covariance matrices:
-\itemize{
-\item \code{"VV"} — Class-varying variances and covariances (unconstrained; default).
-\item \code{"EE"} — Equal variances and covariances across all classes (homoscedastic).
-}}
-
-\item{method}{Character. Estimation algorithm for Step 1 models:
-\itemize{
-\item \code{"EM"} — Expectation-Maximization (default; robust and widely used).
-\item \code{"Mplus"} — Interfaces with Mplus software (requires external installation).
-\item \code{"NNE"} — Neural Network Estimator (experimental; uses transformer + simulated
-annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
-}}
-
-\item{tol}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-
-\item{lower}{The upper bound for the estimation of regression coefficients, default is -10}
-
-\item{upper}{The lower bound for the estimation of regression coefficients, default is 10}
-
-\item{method.SE}{Character. Method for estimating standard errors of parameter estimates:
-\itemize{
-\item \code{"Obs"} — Approximates the observed information matrix via numerical differentiation (Richardson's method).
-Standard errors are obtained from the inverse Hessian. May fail or be unreliable in small samples or with complex likelihood surfaces.
-\item \code{"Bootstrap"} — Uses nonparametric bootstrap resampling to estimate empirical sampling variability.
-More robust to model misspecification and small-sample bias. Computationally intensive but recommended when asymptotic assumptions are questionable.
-}
-Default is \code{"Bootstrap"}.}
-
-\item{n.Bootstrap}{Integer. Number of bootstrap replicates used when \code{method.SE = "Bootstrap"}.
-Default is 100. McLachlan & Peel (2004) suggest that 50–100 replicates often provide adequate accuracy
-for practical purposes, though more (e.g., 500–1000) may be preferred for publication-quality inference.
-Each replicate involves re-estimating the full three-step LTA model on a resampled dataset.}
-
-\item{maxiter}{Maximum number of iterations for optimizing the regression coefficients. Default: 5000.}
-
-\item{nrep}{Integer controlling replication behavior:
-\itemize{
-\item If \code{par.ini = "random"}, number of random initializations.
-\item If \code{par.ini = "kmeans"}, number of K-means runs for initialization.
-\item For \code{method="Mplus"}, controls number of random starts in Mplus via \code{STARTS} option.
-\item Best solution is selected by log-likelihood/BIC across replications.
-\item Ignored for user-provided initial parameters.
-}}
-
-\item{starts}{Number of random initializations to explore during warm-up phase (default: 100).}
-
-\item{maxiter.wa}{Maximum number of training iterations allowed per warm-up run. After completion,
-the top \code{nrep} solutions (by log-likelihood) are promoted to final training phase (default: 20).}
-
-\item{vis}{Logical. If \code{TRUE}, displays progress information during estimation (default: \code{TRUE}).}
-
-\item{control.EM}{List of control parameters for EM algorithm:
-\describe{
-\item{\code{maxiter}}{Maximum iterations (default: 2000).}
-\item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-}}
-
-\item{control.Mplus}{List of control parameters for Mplus estimation:
-\describe{
-\item{\code{maxiter}}{Maximum iterations for Mplus optimization (default: 2000).}
-\item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-\item{\code{files.path}}{Character string specifying the directory path where Mplus will write its intermediate files
-(e.g., \code{.inp} model input, \code{.dat} data file, \code{.out} output, and saved posterior probabilities).
-This argument is \strong{required} — if \code{NULL} (default), the function throws an error.
-The specified directory must exist and be writable; if it does not exist, the function attempts to create it recursively.
-A unique timestamped subdirectory (e.g., \code{"Mplus_LPA_YYYY-MM-DD_HH-MM-SS"} or
-\code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}) will be created within this path
-to store all run-specific files and avoid naming conflicts. See in \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}}.}
-\item{\code{files.clean}}{Logical. If \code{TRUE} (default), all intermediate files and the temporary working directory
-created for this run are deleted upon successful completion or error exit (via \code{on.exit()}).
-If \code{FALSE}, all generated files are retained in \code{files.path} (or the auto-generated temp dir)
-for inspection or debugging. Note: when \code{files.path = NULL}, even if \code{files.clean = FALSE},
-the temporary directory may still be cleaned up by the system later — for guaranteed persistence,
-specify a custom \code{files.path}.}
-}}
-
-\item{control.NNE}{List of control parameters for NNE algorithm:
-\describe{
-\item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
-\item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
-\item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
-\item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
-\item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
-\item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
-\item{\code{eps}}{Small constant for numerical stability (default: 1e-8).}
-\item{\code{lambda}}{A factor for slight regularization of all parameters (default: 1e-5).}
-\item{\code{initial.temperature}}{Initial temperature for simulated annealing (default: 1000).}
-\item{\code{cooling.rate}}{Cooling rate per iteration in simulated annealing (default: 0.5).}
-\item{\code{maxiter.sa}}{Maximum iterations for simulated annealing (default: 1000).}
-\item{\code{threshold.sa}}{Minimum temperature threshold for annealing (default: 1e-10).}
-\item{\code{maxiter}}{Maximum training epochs (default: 1000).}
-\item{\code{maxiter.early}}{Patience parameter for early stopping (default: 50).}
-\item{\code{maxcycle}}{Maximum cycles for optimization (default: 10).}
-\item{\code{lr}}{Learning rate, controlling the step size of neural network parameter updates (default: 0.025).}
-\item{\code{scheduler.patience}}{Patience for learning rate decay (if the loss function does not improve for more than \code{patience} consecutive epochs, the learning rate will be reduced) (default: 10).}
-\item{\code{scheduler.factor}}{Learning rate decay factor; the new learning rate equals the original learning rate multiplied by \code{scheduler.factor} (default: 0.70).}
-\item{\code{plot.interval}}{Interval (in epochs) for plotting training diagnostics (default: 100).}
-\item{\code{device}}{Specifies the hardware device; can be \code{"CPU"} (default) or \code{"GPU"}. If the GPU is not available, it automatically falls back to CPU.}
-}}
+\item{vis}{Logical (default: \code{TRUE}). If enabled, display Step 1 measurement
+estimation, time-specific Step 2 posterior/CEP preparation, and Step 3
+transition-regression or distal-dependent-variable progress. Each Step 2
+and Step 3 heading identifies the selected \code{X -> Z} or \code{Z -> Y} path. For
+\code{Z -> Y}, the output also gives the number and family of dependent-variable
+models, convergence and iteration information, and the selected
+standard-error or bootstrap progress.}
 }
 \value{
-An object of class \code{LTA}, a named list containing:
+An object of class \code{"LTA"}, organized by analysis stage:
 \describe{
-\item{\code{beta}}{Matrix of size \eqn{p_1 \times L}. Coefficients for initial class membership multinomial logit model.
-Columns 1 to \eqn{L-1} are free parameters; column \eqn{L} (reference class) is constrained to \eqn{\boldsymbol{\beta}_L = \mathbf{0}}.}
-\item{\code{gamma}}{List of length \eqn{T-1}. Each element \code{gamma[[t]]} (for transition from time \eqn{t} to \eqn{t+1})
-is a nested list: \code{gamma[[t]][[from_class]][[to_class]]} returns coefficient vector of length \eqn{p_{t+1}}.
-The last class (\eqn{L}) is reference → coefficients fixed to \eqn{\boldsymbol{\gamma}_{kl,t+1} = \mathbf{0}} for all \eqn{k}.}
-\item{\code{beta.se}}{Standard errors for \code{beta} (if Hessian is invertible). Same dimensions as \code{beta}.
-May contain \code{NA} if variance-covariance matrix is not positive definite.}
-\item{\code{gamma.se}}{Standard errors for \code{gamma}, same nested structure. May contain \code{NA}s.}
-\item{\code{beta.Z.sta}}{Z-statistics for testing null hypothesis that each beta coefficient equals zero.
-Computed as \code{beta / beta.se}. Same structure as \code{beta}.}
-\item{\code{gamma.Z.sta}}{Z-statistics for gamma coefficients. Same nested structure as \code{gamma}.
-Used for testing significance of transition effects.}
-\item{\code{beta.p.value.tail1}}{One-tailed p-values based on standard normal distribution: \eqn{P(Z < -|z|)}.
-Useful for directional hypotheses. Same structure as \code{beta}.}
-\item{\code{gamma.p.value.tail1}}{One-tailed p-values for gamma coefficients. Same nested structure as \code{gamma}.}
-\item{\code{beta.p.value.tail2}}{Two-tailed p-values: \eqn{2 \times P(Z < -|z|)}.
-Standard test for non-zero effect. Same structure as \code{beta}.}
-\item{\code{gamma.p.value.tail2}}{Two-tailed p-values for gamma coefficients. Same nested structure as \code{gamma}.}
-\item{\code{P.Z.Xns}}{List of length \eqn{T}. Each element is an \eqn{N \times L} matrix of posterior class probabilities
-\eqn{P(Z_{nt}=l \mid \mathbf{X}_{nt})} for each individual \eqn{n} at time \eqn{t}.}
-\item{\code{P.Zs}}{List of length \eqn{T}. Each element is a vector of length \eqn{L} containing prior class proportions
-\eqn{P(Z_t = l)} estimated at Step 1 for time \eqn{t}.}
-\item{\code{Zs}}{List of length \eqn{T}. Each element is a vector of length \eqn{N} containing modal class assignments
-(MAP classifications) \eqn{\hat{z}_{nt}} for each individual at time \eqn{t}.}
-\item{\code{npar}}{Number of free parameters in the model (depends on \code{covariates}).}
-\item{\code{Log.Lik}}{Observed-data log-likelihood value at convergence.}
-\item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each iteration.}
-\item{\code{AIC}}{Akaike Information Criterion value.}
-\item{\code{BIC}}{Bayesian Information Criterion value.}
-\item{\code{iterations}}{Integer. Number of optimization iterations in Step 3.}
-\item{\code{coveraged}}{Logical. \code{TRUE} if optimization terminated before reaching \code{maxiter} (suggesting convergence).
-Note: This is a heuristic indicator; formal convergence diagnostics should check Hessian properties.}
-\item{\code{params}}{List. Step 1 model parameters (output from \code{LCA()} or \code{LPA()}).}
-\item{\code{call}}{The matched function call.}
-\item{\code{arguments}}{List of all input arguments passed to the function (useful for reproducibility).}
+\item{Analysis identity}{\code{type.analysis}, \code{type.model}, \code{method.3step},
+\code{dependent.variable.structure}, and
+\code{analysis}. \code{analysis$type} records the selected path; exactly one of
+\code{analysis$XZ} and \code{analysis$ZY} is non-\code{NULL}. The same selected result
+is also available from the top-level \code{XZ} or \code{ZY} component.}
+\item{Initial-state and transition model}{When
+\code{type.analysis = "XZ"}, \code{beta[, l]} is
+\eqn{\boldsymbol{\beta}_l}, and
+\code{gamma[[t - 1]][[k]][[l]]} is
+\eqn{\boldsymbol{\gamma}_{klt}}, the coefficient vector defining row
+\eqn{k}, column \eqn{l} of \eqn{\mathbf{P}_{nt}}. \code{beta.se},
+\code{gamma.se}, z statistics, p-values, \code{vcov}, \code{information}, and
+\code{SE.diagnostics} provide the corresponding inference. \code{Log.Lik}, \code{AIC},
+\code{BIC}, \code{iterations}, \code{converged}, \code{Log.Lik.history}, and
+\code{bound.diagnostics} describe estimation of the initial-state and
+transition likelihood. These fields are available both in \code{XZ} and at
+the top level; \code{ZY} is \code{NULL}.}
+\item{Measurement model and classification}{\code{params} contains the common
+fitted or supplied LCA/LPA measurement parameters. \code{P.Z.Xns}, \code{P.Zs},
+and \code{Zs} are time-indexed posterior probabilities, marginal
+latent-state proportions, and modal assignments. \code{CEP} is the
+corresponding list of time-specific or constrained classification-error
+matrices, and \code{step1.pool} records the measurement-model data source.}
+\item{ZY Step 3 result}{When \code{type.analysis = "ZY"},
+\code{dependent.variables} is nested by selected measurement time and
+observed dependent variable. Each fitted variable contains its
+\code{family}, state- or path-specific \code{estimate} and \code{se}, convergence
+status, and method-specific diagnostics. Gaussian models additionally
+contain \code{variance}, \code{variance.se}, \code{variance.vcov},
+\code{mean.variance.vcov}, and separate \code{omnibus} and \code{omnibus.variance}
+Wald tests. Categorical models contain class-by-category probability
+\code{estimate} and \code{se} matrices and an omnibus test of their complete
+conditional distributions. \code{vcov},
+\code{SE.diagnostics}, \code{classification}, \code{case.weights} where applicable,
+and \code{diagnostics} provide the associated inference and correction
+information. With \code{dependent.variable.structure = "Path"},
+\code{latent.paths} gives the \eqn{L^T\times T} matrix that maps each
+reported path name to its time-specific latent states. ML path models
+also report their fitted initial-state and transition parameters within
+each dependent-variable model. \code{XZ} is \code{NULL}, and \code{ZY}
+points to \code{dependent.variables}.}
+\item{Reproducibility}{\code{call} stores the matched call and \code{arguments}
+stores the normalized public arguments, including \code{step1.pool} and the
+expanded \code{control.model} defaults.}
 }
 }
 \description{
-Implements the three-step estimation method (Vermunt, 2010; Liang et al., 2023) for Latent Transition Analysis (LTA),
-treating latent class memberships at each time point as observed variables with measurement error.
-Classification uncertainty from Step 1 (latent class/profile analysis) is explicitly incorporated
-into the transition model estimation in Step 3, ensuring asymptotically unbiased estimates of
-transition probabilities and covariate effects. This avoids the bias introduced by "hard" modal-class assignment.
+Estimates initial latent-state probabilities and conditional transition
+matrices across repeated LCA/LPA measurements. \code{type.analysis = "XZ"}
+estimates covariate effects on initial status and transitions; \code{"ZY"}
+estimates external observed dependent-variable distributions conditional on
+a latent state at a selected time or on the complete longitudinal
+latent-state path. These auxiliary variables are not included among the
+indicators.
 }
-\section{Methodology Overview}{
+\details{
+At time \eqn{t=1,2,\ldots,T}, write the indicator matrix as
+\eqn{\mathbf{X}_t=(X_{nti})_{N\times I}}, where
+\eqn{n=1,2,\ldots,N} indexes participants and
+\eqn{i=1,2,\ldots,I} indexes observed indicators. Participant \eqn{n}'s
+indicator vector is
+\eqn{\mathbf{X}_{nt}=(X_{nt1},\ldots,X_{ntI})^\top}, and
+\eqn{Z_{nt}\in\{1,2,\ldots,L\}}, with
+\eqn{l=1,2,\ldots,L} indexing latent states.
 
-The three-step LTA proceeds as follows:
-
-Step 1 — Unconditional Latent Class/Profile Model:
-At each time point \eqn{t}, fit an unconditional LCA or LPA model (ignoring transitions and covariates).
-Obtain posterior class membership probabilities \eqn{P(Z_{nt}=l \mid \mathbf{X}_{nt})} for each individual \eqn{n}
-and class \eqn{l} using Bayes' theorem.
-
-Step 2 — Classification Error Probabilities (equal to \code{\link[LCPA]{get.CEP}}):
-Compute the \eqn{L \times L} CEP matrix for each time point \eqn{t}, where element \eqn{(k,l)} estimates:
-\deqn{
-  \text{CEP}_t(k,l) = P(\hat{Z}_{nt} = l \mid Z_{nt} = k)
+The covariate vector is
+\eqn{\boldsymbol{\zeta}_{nt}=
+(1,\zeta_{nt1},\ldots,\zeta_{ntU_t})^\top}, where
+\eqn{u=1,2,\ldots,U_t} indexes the observed covariates available at time
+\eqn{t}, and \eqn{U=\max_t U_t}. The leading 1 is the intercept. The
+dependent-variable vector is
+\eqn{\mathbf{Y}_{nt}=(Y_{nt1},\ldots,Y_{ntV_t})^\top}, where
+\eqn{v=1,2,\ldots,V_t} indexes external observed dependent variables and
+\eqn{V=\max_t V_t}. Neither \eqn{\boldsymbol{\zeta}_{nt}} nor
+\eqn{\mathbf{Y}_{nt}} is part of \eqn{\mathbf{X}_{nt}}.
+\code{"XZ"} is the function-interface label for the covariate-to-latent path;
+the formulas use \eqn{\boldsymbol{\zeta}} for its covariates because
+\eqn{\mathbf{X}} is reserved for the LCA/LPA indicator data.
+\code{type.analysis = "XZ"} uses \eqn{\boldsymbol{\zeta}_{nt}} but not
+\eqn{\mathbf{Y}_{nt}}; \code{type.analysis = "ZY"} uses \eqn{\mathbf{Y}_{nt}} but
+not \eqn{\boldsymbol{\zeta}_{nt}}. These are separate Step 3 analyses rather
+than one jointly estimated longitudinal mediation model.
+For a ZY analysis, standardization applies to the continuous dependent variables
+in \eqn{\mathbf{Y}_{nt}}, not to the Step 1 indicator matrices
+\eqn{\mathbf{X}_t}. When \code{dependent.variable.time.cross = FALSE}, standardize
+each Gaussian dependent-variable column separately within its supplied time
+point. When \code{dependent.variable.time.cross = TRUE}, apply one common centering
+and scaling transformation to the corresponding Gaussian column pooled over
+all selected time points. The resulting estimates and standard errors are
+expressed in observed-standard-deviation units. Categorical dependent variables
+retain their original category values.
 }
-using a non-parametric approximation based on posterior weights:
-\deqn{
-  \widehat{\text{CEP}}_t(k,l) = \frac{ \sum_{n=1}^N \mathbb{I}(\hat{z}_{nt} = l) \cdot P(Z_{nt}=k \mid \mathbf{X}_{nt}) }{ \sum_{n=1}^N P(Z_{nt}=k \mid \mathbf{X}_{nt}) }
-}
-where \eqn{\hat{z}_{nt}} is the modal (most likely) class assignment for individual \eqn{n} at time \eqn{t}.
+\section{Latent transition model}{
 
-Step 3 — Transition Model with Measurement Error Correction:
-Estimate the multinomial logit models for:
-\itemize{
-\item Initial class membership (time 1): \eqn{P(Z_{n1} = l \mid \mathbf{X}_{n1}) = \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_{n1})}{\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_{n1})}}
-\item Transitions (time \eqn{t > 1}): \eqn{P(Z_{nt} = l \mid Z_{n,t-1} = k, \mathbf{X}_{nt}) = \frac{\exp(\boldsymbol{\gamma}_{kl t}^\top \mathbf{X}_{nt})}{\sum_{j=1}^L \exp(\boldsymbol{\gamma}_{kj t}^\top \mathbf{X}_{nt})}}
-}
-where \eqn{\mathbf{X}_{n1} = (X_{n10}, X_{n11}, \dots, X_{n1M})^\top} is the covariate vector for observation/participant \eqn{n} at time 1,
-with \eqn{X_{n10} = 1} (intercept term) and \eqn{X_{n1m}} (\eqn{m=1,\dots,M}) representing the value of the \eqn{m}-th covariate.
-The coefficient vector \eqn{\boldsymbol{\beta}_l = (\beta_{l0}, \beta_{l1}, \dots, \beta_{lM})^\top} corresponds element-wise to \eqn{\mathbf{X}_{n1}},
-where \eqn{\beta_{l0}} is the intercept and \eqn{\beta_{lm}} (\eqn{m \geq 1}) are regression coefficients for covariates.
-Class \eqn{L} is the reference class (\eqn{\boldsymbol{\beta}_L = \mathbf{0}}).
-\eqn{\mathbf{X}_{nt} = (X_{nt0}, X_{nt1}, \dots, X_{ntM})^\top} is the covariate vector at time \eqn{t},
-with \eqn{X_{nt0} = 1} (intercept) and \eqn{X_{ntm}} (\eqn{m=1,\dots,M}) as the \eqn{m}-th covariate value.
-The coefficient vector \eqn{\boldsymbol{\gamma}_{lkt} = (\gamma_{lkt0}, \gamma_{lkt1}, \dots, \gamma_{lktM})^\top}
-corresponds element-wise to \eqn{\mathbf{X}_{nt}}, where \eqn{\gamma_{lkt0}} is the intercept and \eqn{\gamma_{lktm}} (\eqn{m \geq 1})
-are regression coefficients. Class \eqn{L} is the reference class (\eqn{\boldsymbol{\gamma}_{lLt} = \mathbf{0}} for all \eqn{l}).
+For \code{type.analysis = "XZ"}, the central model is the evolution of
+\eqn{Z_{n1},Z_{n2},\ldots,Z_{nT}}. Let \code{ref.class} be the reference
+destination state \eqn{l_0}. The initial-state probabilities are
+\deqn{\begin{aligned}
+\pi_{n1l}=P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1})
+&=\frac{\exp(\boldsymbol{\zeta}_{n1}^{\top}\boldsymbol{\beta}_l)}
+{\sum_{h=1}^L\exp(\boldsymbol{\zeta}_{n1}^{\top}
+\boldsymbol{\beta}_h)},\\
+\boldsymbol{\beta}_{l_0}&=0.
+\end{aligned}}
 
-The full observed-data likelihood integrates over all possible latent class paths \eqn{\mathbf{z}_n = (z_{n1},\dots,z_{nT})}:
-\deqn{
-\begin{aligned}
-\log \mathcal{L}(\boldsymbol{\theta}) &=
-\sum_{n=1}^N \log \Biggl[
-  \sum_{\mathbf{z}_n \in \{1,\dots,L\}^T}
-  \Bigl( \prod_{t=1}^T \text{CEP}_t(z_{nt}, \hat{z}_{nt}) \Bigr) \cdot \\
-  &\quad P(Z_{n1}=z_{n1} \mid \mathbf{X}_{n1}) \cdot \\
-  &\quad \prod_{t=2}^T P(Z_{nt}=z_{nt} \mid Z_{n,t-1}=z_{n,t-1}, \mathbf{X}_{nt})
-\Biggr]
-\end{aligned}
-}
-Parameters \eqn{\boldsymbol{\theta} = \{\boldsymbol{\beta}, \boldsymbol{\gamma}\}} are estimated via maximum likelihood using
-the BOBYQA algorithm (box-constrained derivative-free optimization). Reference class \eqn{L} satisfies \eqn{\boldsymbol{\beta}_L = \mathbf{0}} and \eqn{\boldsymbol{\gamma}_{kl t} = \mathbf{0}} for all \eqn{k} when \eqn{l = L}.
+For each \eqn{t=2,\ldots,T}, participant \eqn{n}'s conditional transition
+matrix is
+\deqn{\mathbf{P}_{nt}=
+\left[P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt})
+\right]_{k,l=1}^L.}
+Its row \eqn{k} gives the destination-state distribution conditional on
+origin state \eqn{k}; its column \eqn{l} corresponds to destination state
+\eqn{l}. Every row therefore sums to 1. The \eqn{(k,l)} entry is
+\deqn{P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt})=
+\frac{\exp(\boldsymbol{\zeta}_{nt}^{\top}\boldsymbol{\gamma}_{klt})}
+{\sum_{h=1}^L\exp(\boldsymbol{\zeta}_{nt}^{\top}
+\boldsymbol{\gamma}_{kht})},\qquad
+\boldsymbol{\gamma}_{k,l_0,t}=0.}
+Equivalently, for \eqn{l\ne l_0},
+\deqn{\log\frac{P(Z_{nt}=l\mid Z_{n,t-1}=k,
+\boldsymbol{\zeta}_{nt})}
+{P(Z_{nt}=l_0\mid Z_{n,t-1}=k,
+\boldsymbol{\zeta}_{nt})}
+=\boldsymbol{\zeta}_{nt}^{\top}\boldsymbol{\gamma}_{klt}.}
+Thus, \eqn{\gamma_{klt0}} is the intercept for the transition from origin
+state \eqn{k} to destination state \eqn{l}, relative to destination
+\eqn{l_0}; \eqn{\gamma_{kltu}} is the corresponding change in log relative
+transition odds for a one-unit increase in covariate \eqn{u}.
+
+When \code{covariates = NULL}, every \eqn{\boldsymbol{\zeta}_{nt}} contains only
+the intercept, so \eqn{\mathbf{P}_{nt}} is a population transition matrix
+rather than a participant-specific matrix. When
+\code{covariates.time.cross = TRUE},
+\eqn{\boldsymbol{\gamma}_{kl2}=\cdots=
+\boldsymbol{\gamma}_{klT}}; the coefficient structure is time-invariant,
+although transition probabilities may still differ between participants or
+times when their covariate values differ.
+
+Conditional on the covariates, the probability of one latent-state path is
+\deqn{\begin{aligned}
+&P(Z_{n1}=z_1,\ldots,Z_{nT}=z_T\\
+&\qquad\mid\boldsymbol{\zeta}_{n1},\ldots,
+\boldsymbol{\zeta}_{nT})\\
+&\quad=P(Z_{n1}=z_1\mid\boldsymbol{\zeta}_{n1})\\
+&\qquad\times\prod_{t=2}^T
+P(Z_{nt}=z_t\mid Z_{n,t-1}=z_{t-1},
+\boldsymbol{\zeta}_{nt}).
+\end{aligned}}
+If the latent states were observed, the transition-model log-likelihood
+would be
+\deqn{\begin{aligned}
+\ell_{\mathrm{path}}={}&
+\sum_{n=1}^N\sum_{l=1}^L
+\mathbb{1}(Z_{n1}=l)\log\pi_{n1l}\\
+&+\sum_{n=1}^N\sum_{t=2}^T\sum_{k=1}^L\sum_{l=1}^L
+\mathbb{1}(Z_{n,t-1}=k,Z_{nt}=l)\\
+&\qquad\times\log P(Z_{nt}=l\mid Z_{n,t-1}=k,
+\boldsymbol{\zeta}_{nt}).
+\end{aligned}}
 }
 
-\section{Bootstrap Standard Error Estimation}{
+\section{Corrected observed transition likelihood}{
 
-When \code{method.SE = "Bootstrap"}, standard errors are estimated using a nonparametric bootstrap procedure:
-\enumerate{
-\item Draw \eqn{B} (=\code{n.Bootstrap}) independent samples of size \eqn{N} with replacement from the original data.
-\item For each bootstrap sample \eqn{b=1,\dots,B}, re-estimate the full three-step LTA model (Steps 1–3), yielding parameter vector \eqn{\hat{\boldsymbol{\theta}}^{(b)}}.
-\item Compute the bootstrap standard error for each parameter as the sample standard deviation across replicates:
-\deqn{
-          \widehat{\mathrm{SE}}_{\mathrm{boot}}(\hat{\theta}_j) = \sqrt{ \frac{1}{B-1} \sum_{b=1}^B \left( \hat{\theta}_j^{(b)} - \bar{\theta}_j \right)^2 },
-        }
-where \eqn{\bar{\theta}_j = \frac{1}{B}\sum_{b=1}^B \hat{\theta}_j^{(b)}}.
-}
-This approach does not rely on large-sample normality or correct specification of the information matrix,
-making it particularly suitable for complex models like LTA where analytic derivatives are difficult or unstable.
-However, it increases computational cost linearly with \eqn{B}.
+The measurement and classification stages follow the same three-step
+principles as \code{\link[LCPA]{LCPA}()}. A common unconditional
+\code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()} measurement model is
+fitted at the first time point or to the pooled time points according to
+\code{step1.pool}; \code{control.model$params} may instead supply fixed common
+measurement parameters. This assumes measurement invariance over the
+analyzed times. At each time, posterior classification produces
+\eqn{\widehat{Z}_{nt}} and an \eqn{L\times L} matrix with entries
+\eqn{\mathrm{CEP}_t(l,k)=P(\widehat{Z}_{nt}=k\mid Z_{nt}=l)}. See
+\code{\link[LCPA]{get.CEP}()} for its estimator and orientation. This
+longitudinal three-step construction follows the latent Markov/LTA
+developments of Bartolucci, Montanari, and Pandolfi (2015), Di Mari,
+Oberski, and Vermunt (2016), and Liang, de la Torre, and Law (2023).
+
+The bias-adjusted ML approach of Di Mari et al. (2016) combines those
+classification-error probabilities with the complete transition model and
+sums over every possible latent-state path:
+\deqn{\begin{aligned}
+\ell_{\mathrm{ML}}(\boldsymbol{\beta},\boldsymbol{\gamma})
+={}&\sum_{n=1}^N\log\Biggl[
+\sum_{z_1=1}^L\cdots\sum_{z_T=1}^L
+\mathrm{CEP}_1(z_1,\widehat{Z}_{n1})\\
+&\quad\times P(Z_{n1}=z_1\mid\boldsymbol{\zeta}_{n1})\\
+&\quad\times\prod_{t=2}^T\Bigl\{
+\mathrm{CEP}_t(z_t,\widehat{Z}_{nt})\\
+&\qquad\times P(Z_{nt}=z_t\mid
+Z_{n,t-1}=z_{t-1},\boldsymbol{\zeta}_{nt})
+\Bigr\}\Biggr].
+\end{aligned}}
+The CEP term is the conditional probability of the observed modal state
+given the corresponding latent state. With \code{CEP.error = FALSE}, every CEP
+matrix is the identity matrix and the likelihood reduces to the likelihood
+of the modal state sequence.
+
+The likelihood is evaluated by the forward recursion
+\deqn{\alpha_{n1}(l)=
+\mathrm{CEP}_1(l,\widehat{Z}_{n1})\pi_{n1l},}
+\deqn{\alpha_{nt}(l)=
+\mathrm{CEP}_t(l,\widehat{Z}_{nt})
+\sum_{k=1}^L\alpha_{n,t-1}(k)
+P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt}),}
+so that
+\deqn{\ell_{\mathrm{ML}}=
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L\alpha_{nT}(l)\right\}.}
+A backward recursion supplies the posterior initial-state and adjacent-state
+probabilities used by the analytic score.
 }
 
-\section{Important Implementation Details}{
+\section{Optimization of the transition model}{
 
-\itemize{
-\item Reference Class: The last latent class (\eqn{L}) is always treated as the reference category.
-All corresponding coefficients in \code{beta} and \code{gamma} are fixed to zero (\eqn{\boldsymbol{\beta}_L = \mathbf{0}}, \eqn{\boldsymbol{\gamma}_{kl t} = \mathbf{0}} for \eqn{l=L}).
-\item CEP Matrices: When \code{CEP.error = TRUE}, misclassification probabilities are estimated
-non-parametrically using Step 1 posterior probabilities. This corrects for
-classification uncertainty. Setting \code{CEP.timeCross = TRUE} assumes these
-error structures are identical across time (measurement invariance).
-See in \code{\link[LCPA]{get.CEP}}.
-\item Covariate Handling: Covariates for initial status (time 1) and transitions (time \eqn{t \geq 2}) can differ.
-For transitions to time \eqn{t}, the covariate matrix must have dimensions \eqn{N \times (M_{t}+1)},
-i.e., an intercept column of all \eqn{1} plus \eqn{M_{t}} columns of covariates in time \eqn{t}.
-\item Optimization: Step 3 uses L-BFGS-B via \code{\link[nloptr]{nloptr}} to ensure numerical stability.
-Standard errors are derived from the inverse Hessian (via \code{\link[numDeriv]{hessian}}). If singular,
-Moore-Penrose pseudoinverse (\code{\link[MASS]{ginv}}) is used, and negative variances are set to \code{NA}.
-\item Computational Complexity: Likelihood evaluation requires enumerating \eqn{L^T} possible latent paths.
-\item Bootstrap Computation: Each bootstrap iteration re-fits Steps 1–3 independently, including re-estimation of
-\code{P.Z.Xns}, \code{CEP} matrices and transition parameters.
-To ensure reproducibility, set a seed before calling \code{LTA()} when using \code{method.SE = "Bootstrap"}.
-Progress messages during bootstrapping include current replicate index and optimization diagnostics.
-Users should monitor convergence in each bootstrap run; failed runs will result in \code{NA} entries in SEs and derived statistics.
+The free parameter vector contains \eqn{\boldsymbol{\beta}_l} and
+\eqn{\boldsymbol{\gamma}_{klt}} for \eqn{l\ne l_0}; all reference-state
+coefficient vectors are fixed at zero. ML minimizes
+\eqn{-\ell_{\mathrm{ML}}(\boldsymbol{\beta},\boldsymbol{\gamma})} subject to
+\code{lower} and \code{upper}. All latent-state posterior probabilities in the score
+below are conditional on the complete modal-state sequence and the supplied
+covariates. For \eqn{l\ne l_0}, the first derivative with respect to the
+initial-state coefficient vector \eqn{\boldsymbol{\beta}_l} is
+\deqn{\frac{\partial
+\ell_{\mathrm{ML}}(\boldsymbol{\beta},\boldsymbol{\gamma})}
+{\partial\boldsymbol{\beta}_l}=
+\sum_{n=1}^N\boldsymbol{\zeta}_{n1}
+\left\{P(Z_{n1}=l\mid\widehat{Z}_{n1},\ldots,
+\widehat{Z}_{nT})-\pi_{n1l}\right\}.}
+This is an \eqn{(U_1+1)\times 1} derivative vector whose entries correspond
+to the intercept and the \eqn{U_1} covariate coefficients in
+\eqn{\boldsymbol{\beta}_l}.
+Let
+\eqn{\xi_{ntkl}=P(Z_{n,t-1}=k,Z_{nt}=l\mid
+\widehat{Z}_{n1},\ldots,\widehat{Z}_{nT})}. Here \eqn{k} indexes the origin
+state at time \eqn{t-1}, \eqn{l} indexes the destination state at time
+\eqn{t}, and \eqn{t} identifies the transition from time \eqn{t-1} to time
+\eqn{t}. The first derivative with respect to
+\eqn{\boldsymbol{\gamma}_{klt}} is
+\deqn{\frac{\partial
+\ell_{\mathrm{ML}}(\boldsymbol{\beta},\boldsymbol{\gamma})}
+{\partial\boldsymbol{\gamma}_{klt}}=
+\sum_{n=1}^N\boldsymbol{\zeta}_{nt}
+\left\{\xi_{ntkl}-
+P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt})
+\sum_{h=1}^L\xi_{ntkh}\right\},\qquad l\ne l_0.}
+This is an \eqn{(U_t+1)\times 1} derivative vector whose entries correspond
+to the intercept and the \eqn{U_t} covariate coefficients in
+\eqn{\boldsymbol{\gamma}_{klt}}. At an interior maximum, these derivatives
+and the derivatives with respect to \eqn{\boldsymbol{\beta}_l} jointly equal
+\eqn{\mathbf{0}}. If \code{covariates.time.cross = TRUE}, the derivatives are
+summed over \eqn{t=2,\ldots,T} for the transition coefficient vector shared
+across time. With
+\code{method.regression = "Analytic"}, the exact forward--backward score is
+supplied to box-constrained L-BFGS optimization. With \code{"Numeric"}, the same
+corrected log-likelihood is optimized using its numerical gradient. \code{tol}
+and \code{maxiter} control this Step 3 optimization.
+
+With \code{method.3step = "BCH"}, the modified inverse-CEP weighting of Vermunt
+(2010) and Bakk, Tekle, and Vermunt (2013) extends to multiple latent states
+when the time-specific classification errors are conditionally independent
+given the latent-state path. Bakk, Tekle, and Vermunt (2013) describe the
+multiple-latent-variable extension, and Nylund-Gibson, Arch, and Carter
+(2026) apply BCH to auxiliary-variable analysis in LTA. The resulting
+criterion is
+\deqn{\begin{aligned}
+\ell_{\mathrm{BCH}}={}&
+\sum_{n=1}^N\sum_{l=1}^L
+(\mathrm{CEP}_1^{-1})_{\widehat{Z}_{n1},l}
+\log P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1})\\
+&+\sum_{n=1}^N\sum_{t=2}^T\sum_{k=1}^L\sum_{l=1}^L
+(\mathrm{CEP}_{t-1}^{-1})_{\widehat{Z}_{n,t-1},k}
+(\mathrm{CEP}_t^{-1})_{\widehat{Z}_{nt},l}
+\log P(Z_{nt}=l\mid Z_{n,t-1}=k,
+\boldsymbol{\zeta}_{nt}).
+\end{aligned}}
+It decomposes into one initial-state multinomial model and
+origin-state-specific transition multinomial models. Analytic estimation
+supplies their exact scores to L-BFGS-B; numeric estimation optimizes the
+same criterion without a supplied score. The adjacent-state BCH correction
+assumes that classification errors are conditionally independent across
+times given the latent-state path.
 }
+
+\section{Dependent variables at selected times}{
+
+\code{type.analysis = "ZY"} relates the external observed
+\eqn{\mathbf{Y}_{nt}} to the latent states without treating any
+\eqn{Y_{ntv}} as an indicator in \eqn{\mathbf{X}_{nt}}. The Gaussian and
+categorical conditional distributions have the same definitions as in
+\code{\link[LCPA]{LCPA}()}; see Nylund-Gibson et al. (2014), Asparouhov and
+Muthén (2014a), and Nylund-Gibson, Arch, and Carter (2026) for longitudinal
+auxiliary-variable models. The longitudinal model offers the following two
+structures. Here \eqn{t} denotes a selected dependent-variable time,
+\eqn{r=1,2,\ldots,T} indexes all measurement times, and \eqn{q} indexes the
+observed categories of a categorical dependent variable.
+
+With \code{dependent.variable.structure = "State"}, each selected
+\eqn{Y_{ntv}} is conditional only on the latent state at the same selected
+time. Then
+\deqn{Y_{ntv}\mid Z_{nt}=l\sim
+\mathcal{N}(\mu_{tlv},\sigma_{tlv}^2)}
+for a Gaussian dependent variable, or
+\deqn{P(Y_{ntv}=q\mid Z_{nt}=l)=p_{tlvq}}
+for a categorical dependent variable. Following the manual ML
+distal-outcome formulation of Bakk, Tekle, and Vermunt (2013) and
+Nylund-Gibson, Grimm, and Masyn (2019), the LTA State model sums over all
+complete latent-state paths while constraining paths with the same state at
+selected time \eqn{t} to share the same dependent-variable parameters. For
+a Gaussian dependent variable,
+\deqn{\begin{aligned}
+\ell_{\mathrm{ML},tv}
+=\sum_{n=1}^N\log\Biggl[&
+\sum_{z_1=1}^L\cdots\sum_{z_T=1}^L
+\left\{\prod_{r=1}^T
+\mathrm{CEP}_r(z_r,\widehat{Z}_{nr})\right\}\\
+&\times P(Z_{n1}=z_1)
+\prod_{r=2}^T
+P(Z_{nr}=z_r\mid Z_{n,r-1}=z_{r-1})\\
+&\times\mathcal{N}(Y_{ntv}\mid
+\mu_{t,z_t,v},\sigma_{t,z_t,v}^2)
+\Biggr].
+\end{aligned}}
+For a categorical dependent variable, the normal density is replaced by
+\eqn{\prod_q p_{t,z_t,vq}^{\mathbb{1}(Y_{ntv}=q)}}. Selecting \eqn{t=T}
+therefore estimates the commonly used final-state model
+\eqn{\mathbf{Y}_{nT}\mid Z_{nT}}.
+
+With \code{dependent.variable.structure = "Path"}, each dependent-variable
+distribution is conditional on the complete latent-state path, where every
+\eqn{z_r\in\{1,2,\ldots,L\}}:
+\deqn{Y_{ntv}\mid Z_{n1}=z_1,\ldots,Z_{nT}=z_T\sim
+\mathcal{N}(\mu_{t,z_1\ldots z_T,v},
+\sigma_{t,z_1\ldots z_T,v}^2),}
+with an analogous path-specific categorical probability
+\eqn{p_{t,z_1\ldots z_T,vq}}. This gives \eqn{L^T} dependent-variable
+distributions for all latent-state combinations or transition patterns.
+Nylund-Gibson, Arch, and Carter (2026) describe distal analyses by transition
+pattern in LTA, and Bakk, Tekle, and Vermunt (2013) provide the
+multiple-latent-variable correction underlying this construction. ML
+estimates an intercept-only initial-state distribution,
+time-specific first-order transition matrices, and the path-specific
+dependent-variable distributions jointly. For a Gaussian dependent variable,
+\deqn{\begin{aligned}
+\ell_{\mathrm{ML},tv}
+=\sum_{n=1}^N\log\Biggl[&
+\sum_{z_1=1}^L\cdots\sum_{z_T=1}^L
+\left\{\prod_{r=1}^T
+\mathrm{CEP}_r(z_r,\widehat{Z}_{nr})\right\}\\
+&\times P(Z_{n1}=z_1)
+\prod_{r=2}^T
+P(Z_{nr}=z_r\mid Z_{n,r-1}=z_{r-1})\\
+&\times\mathcal{N}(Y_{ntv}\mid
+\mu_{t,z_1\ldots z_T,v},\sigma_{t,z_1\ldots z_T,v}^2)
+\Biggr].
+\end{aligned}}
+For a categorical dependent variable, the final normal density is replaced
+by
+\eqn{\prod_q p_{t,z_1\ldots z_T,vq}^{\mathbb{1}(Y_{ntv}=q)}}.
+
+BCH uses the inverse CEP entries directly. In the State model, summing the
+complete-path BCH weights over every state other than the state at selected
+time \eqn{t} gives the selected-time equations used in the BCH
+distal-dependent-variable construction of Asparouhov and Muthén (2014b).
+The Gaussian mean and variance satisfy
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}_t^{-1})_{\widehat{Z}_{nt},l}
+(Y_{ntv}-\mu_{tlv})=0,}
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}_t^{-1})_{\widehat{Z}_{nt},l}
+\{(Y_{ntv}-\mu_{tlv})^2-\sigma_{tlv}^2\}=0,}
+and the categorical probability satisfies
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}_t^{-1})_{\widehat{Z}_{nt},l}
+\{\mathbb{1}(Y_{ntv}=q)-p_{tlvq}\}=0.}
+In the Path model, the corresponding equations are
+\deqn{\sum_{n=1}^N
+\left\{\prod_{r=1}^T
+(\mathrm{CEP}_r^{-1})_{\widehat{Z}_{nr},z_r}\right\}
+(Y_{ntv}-\mu_{t,z_1\ldots z_T,v})=0,}
+\deqn{\sum_{n=1}^N
+\left\{\prod_{r=1}^T
+(\mathrm{CEP}_r^{-1})_{\widehat{Z}_{nr},z_r}\right\}
+\{(Y_{ntv}-\mu_{t,z_1\ldots z_T,v})^2-
+\sigma_{t,z_1\ldots z_T,v}^2\}=0,}
+\deqn{\sum_{n=1}^N
+\left\{\prod_{r=1}^T
+(\mathrm{CEP}_r^{-1})_{\widehat{Z}_{nr},z_r}\right\}
+\{\mathbb{1}(Y_{ntv}=q)-p_{t,z_1\ldots z_T,vq}\}=0.}
+The products across time assume conditionally independent classification
+errors given the latent-state path. When
+\code{dependent.variable.time.cross = TRUE}, the selected times share the
+same state- or path-specific dependent-variable parameters.
+}
+
+\section{Uncertainty estimation}{
+
+For ML-XZ and BCH-XZ, \code{method.SE = "Analytic"} uses the analytic
+information or estimating-equation derivative with participant-level score
+contributions. \code{"Numeric"} evaluates the corresponding Hessian or Jacobian
+numerically. \code{"Bootstrap"} resamples participants jointly across all times,
+recalculates the posterior classifications and CEP matrices, and re-estimates
+the initial-state and transition model while holding the common measurement
+parameters fixed. The ML-XZ covariance also includes the sampling influence
+of the estimated CEP matrices. State-ZY uncertainty estimation follows
+\code{\link[LCPA]{LCPA}()}. Path-ML uses Louis observed information for the
+jointly estimated initial-state, transition, and dependent-variable
+parameters. State-ML imposes equality of the dependent-variable parameters
+across complete paths sharing the selected state; Path-ML leaves them
+path-specific. Path-BCH uses the estimating-equation sandwich formed from the
+complete-path BCH products. The ZY bootstrap resamples each participant's
+complete longitudinal record. Gaussian ZY models report the state- or
+path-specific conditional means and variances, their respective standard
+errors and covariance matrices, and separate omnibus Wald tests for equality
+of means and variances. Categorical ZY models report every state- or
+path-specific category probability, its standard error and covariance
+matrix, and an omnibus Wald test of equality of the complete conditional
+category distributions.
 }
 
 \examples{
-
 \donttest{
-
 library(LCPA)
 
-set.seed(123)
-N <- 2000 ## sample size
-L <- 3   ## number of latent class
-I <- 6   ## number of variables/items
+set.seed(1245)
+N <- 2000
+L <- 3
+I <- 6
+times <- 2
 
-## Covariates at time point T1
-covariates.inter <- rep(1, N)                 # Intercept term is always 1 for each individual
-covariates.X11 <- rnorm(N)                    # Covariate X1 is a continuous variable
-# Combine into covariates at T1
-covariates.T1 <- cbind(Intercept=covariates.inter, X1=covariates.X11)
-## Covariates at time point T2
-covariates.inter <- rep(1, N)                 # Intercept term is always 1 for each individual
-covariates.X21 <- rnorm(N)                    # Covariate X1 is a continuous variable
-# Combine into covariates at T1
-covariates.T2 <- cbind(Intercept=covariates.inter, X1=covariates.X21)
+# Two observed covariates plus the required intercept at both times
+zeta.1 <- as.numeric(scale(rnorm(N)))
+zeta.2 <- rbinom(N, 1, 0.5)
+covariates <- list(
+  cbind(Intercept = 1, Zeta.1 = zeta.1, Zeta.2 = zeta.2),
+  cbind(Intercept = 1, Zeta.1 = zeta.1, Zeta.2 = zeta.2)
+)
+beta <- matrix(c(
+   0.70,  0.30, 0,
+   0.40, -0.20, 0,
+  -0.30,  0.30, 0
+), ncol = L, byrow = TRUE)
+rownames(beta) <- colnames(covariates[[1]])
+gamma <- list(list(
+  list(c( 0.90,  0.25, -0.15), c( 0.20, -0.15,  0.20), c(0, 0, 0)),
+  list(c( 0.10,  0.20,  0.10), c( 0.80, -0.20, -0.15), c(0, 0, 0)),
+  list(c(-0.10,  0.15, -0.10), c( 0.20,  0.10,  0.15), c(0, 0, 0))
+))
 
-# Combine into final covariates list
-covariates <- list(t1=covariates.T1, t2=covariates.T2)
-
-## Simulate beta coefficients
-# last column is zero because the last category is used as reference
-## fix reference class to class 2
-beta <- matrix(c( 0.8, 0.0,  0.1,
-                 -0.3, 0.0, -0.5), ncol=L, byrow=TRUE)
-
-## Simulate gamma coefficients
-gamma <- list(
-  lapply(1:L, function(l) {
-    lapply(1:L, function(k) if(k < L)
-           runif(2, -2.0, 2.0) else c(0, 0)) # Last class as reference
-  })
+data.LTA <- sim.LTA(
+  N = N, I = I, L = L, times = times, type = "LCA",
+  poly.value = 2, IQ = 0.95, distribution = "uniform",
+  covariates = covariates, ref.class = 3,
+  beta = beta, gamma = gamma, is.sort = TRUE
+)
+control.model <- list(
+  is.sort = TRUE, starts = 10, maxiter.warmup = 10, nrep = 3
 )
 
-## Simulate the data
-sim_custom <- sim.LTA(
-  N=N, I=I, L=L, times=2, type="LCA", IQ=0.9,
-  covariates=covariates,
-  beta=beta,
-  gamma=gamma
+# Covariates predicting initial states and transitions: XZ analysis
+fit.LTA.XZ <- LTA(
+  responses = data.LTA$responses, L = L,
+  type.analysis = "XZ", type.model = "LCA",
+  covariates = covariates, ref.class = 3,
+  method.model = "EM", control.model = control.model,
+  method.3step = "ML", method.regression = "Analytic",
+  method.SE = "Analytic", maxiter = 500, vis = TRUE
 )
-summary(sim_custom)
-responses <- sim_custom$responses
-covariates <- sim_custom$covariates
+round(cbind(
+  "True Class 1" = beta[, 1],
+  "Estimate Class 1" = fit.LTA.XZ$beta[, 1],
+  "True Class 2" = beta[, 2],
+  "Estimate Class 2" = fit.LTA.XZ$beta[, 2]
+), 3)
+gamma.matrix <- function(value) {
+  do.call(rbind, lapply(seq_len(L), function(k) {
+    do.call(rbind, value[[1]][[k]][seq_len(L - 1)])
+  }))
+}
+gamma.true <- gamma.matrix(gamma)
+gamma.estimate <- gamma.matrix(fit.LTA.XZ$gamma)
+rownames(gamma.true) <- rownames(gamma.estimate) <- paste0(
+  "Origin.", rep(seq_len(L), each = L - 1),
+  ".To.", rep(seq_len(L - 1), times = L)
+)
+colnames(gamma.true) <- paste0("True.", colnames(covariates[[2]]))
+colnames(gamma.estimate) <- paste0("Estimate.", colnames(covariates[[2]]))
+round(cbind(gamma.true, gamma.estimate), 3)
 
-## fix reference class to class 2
-LTA.obj <- LTA(responses, L=L, ref.class=2, type="LCA",
-               covariates=covariates,
-               method.SE="Bootstrap", n.Bootstrap=10,
-               CEP.timeCross=FALSE, CEP.error=TRUE, covariates.timeCross=FALSE,
-               par.ini = "random", method="EM", vis = TRUE)
+# Final latent state predicting two dependent variables: ZY-State
+true.state.mean <- rbind(
+  "Class 1" = c(Depression = 8, Anxiety = 12),
+  "Class 2" = c(Depression = 10, Anxiety = 10),
+  "Class 3" = c(Depression = 13, Anxiety = 8)
+)
+dependent.variables <- scale(
+  true.state.mean[data.LTA$Zs[[times]], ] +
+    matrix(rnorm(N * 2, sd = 1.5), N, 2)
+)
+true.state.mean.standardized <- sweep(
+  sweep(true.state.mean, 2, attr(dependent.variables, "scaled:center"), "-"),
+  2, attr(dependent.variables, "scaled:scale"), "/"
+)
+true.state.variance.standardized <-
+  (1.5 / attr(dependent.variables, "scaled:scale"))^2
+dependent.variables <- as.data.frame(dependent.variables)
+fit.LTA.ZY <- LTA(
+  responses = data.LTA$responses, L = L,
+  type.analysis = "ZY", type.model = "LCA",
+  dependent.variables = dependent.variables,
+  family = "gaussian", dependent.variable.structure = "State",
+  dependent.variable.time = times,
+  method.model = "EM", control.model = control.model,
+  method.3step = "BCH", method.regression = "Analytic",
+  method.SE = "Analytic", vis = TRUE
+)
+round(cbind(
+  True.Depression = true.state.mean.standardized[, "Depression"],
+  Estimate.Depression =
+    fit.LTA.ZY$dependent.variables$t2$Depression$estimate,
+  True.Anxiety = true.state.mean.standardized[, "Anxiety"],
+  Estimate.Anxiety =
+    fit.LTA.ZY$dependent.variables$t2$Anxiety$estimate
+), 3)
+round(cbind(
+  True.Variance.Depression = rep(
+    true.state.variance.standardized["Depression"], L
+  ),
+  Estimate.Variance.Depression =
+    fit.LTA.ZY$dependent.variables$t2$Depression$variance,
+  True.Variance.Anxiety = rep(
+    true.state.variance.standardized["Anxiety"], L
+  ),
+  Estimate.Variance.Anxiety =
+    fit.LTA.ZY$dependent.variables$t2$Anxiety$variance
+), 3)
 
-print(LTA.obj)
+# Complete latent-state paths predicting two dependent variables: ZY-Path
+paths <- expand.grid(t1 = seq_len(L), t2 = seq_len(L))
+true.path.mean <- cbind(
+  Wellbeing = 16 - paths$t1 - 2 * paths$t2,
+  Stress = 5 + paths$t2 + 1.5 * (paths$t1 != paths$t2)
+)
+rownames(true.path.mean) <- paste("Path", paste(paths$t1, paths$t2, sep = "-"))
+path.index <- data.LTA$Zs[[1]] + L * (data.LTA$Zs[[2]] - 1L)
+dependent.variables.path <- scale(
+  true.path.mean[path.index, ] +
+    matrix(rnorm(N * 2, sd = 1.5), N, 2)
+)
+true.path.mean.standardized <- sweep(
+  sweep(true.path.mean, 2,
+    attr(dependent.variables.path, "scaled:center"), "-"),
+  2, attr(dependent.variables.path, "scaled:scale"), "/"
+)
+true.path.variance.standardized <-
+  (1.5 / attr(dependent.variables.path, "scaled:scale"))^2
+dependent.variables.path <- as.data.frame(dependent.variables.path)
+fit.LTA.ZY.path <- LTA(
+  responses = data.LTA$responses, L = L,
+  type.analysis = "ZY", type.model = "LCA",
+  dependent.variables = dependent.variables.path,
+  family = "gaussian", dependent.variable.structure = "Path",
+  dependent.variable.time = times,
+  method.model = "EM", control.model = control.model,
+  method.3step = "BCH", method.regression = "Analytic",
+  method.SE = "Analytic", vis = TRUE
+)
+round(cbind(
+  True.Wellbeing = true.path.mean.standardized[, "Wellbeing"],
+  Estimate.Wellbeing =
+    fit.LTA.ZY.path$dependent.variables$t2$Wellbeing$estimate,
+  True.Stress = true.path.mean.standardized[, "Stress"],
+  Estimate.Stress =
+    fit.LTA.ZY.path$dependent.variables$t2$Stress$estimate
+), 3)
+round(cbind(
+  True.Variance.Wellbeing = rep(
+    true.path.variance.standardized["Wellbeing"], L^times
+  ),
+  Estimate.Variance.Wellbeing =
+    fit.LTA.ZY.path$dependent.variables$t2$Wellbeing$variance,
+  True.Variance.Stress = rep(
+    true.path.variance.standardized["Stress"], L^times
+  ),
+  Estimate.Variance.Stress =
+    fit.LTA.ZY.path$dependent.variables$t2$Stress$variance
+), 3)
 }
 
 }
 \references{
-Liang, Q., la Torre, J. d., & Law, N. (2023). Latent Transition Cognitive Diagnosis Model With Covariates: A Three-Step Approach. Journal of Educational and Behavioral Statistics, 48(6), 690-718. https://doi.org/10.3102/10769986231163320
+Asparouhov, T., & Muthén, B. (2014a). Auxiliary variables in mixture
+modeling: Three-step approaches using Mplus. \emph{Structural Equation Modeling:
+A Multidisciplinary Journal, 21}(3), 329--341.
+\doi{10.1080/10705511.2014.915181}
 
-McLachlan, G. J., & Peel, D. (2004). Finite Mixture Models. Wiley. https://books.google.com.sg/books?id=c2_fAox0DQoC
+Asparouhov, T., & Muthén, B. (2014b). \emph{Auxiliary variables in mixture
+modeling: Using the BCH method in Mplus to estimate a distal outcome model
+and an arbitrary secondary model} (Mplus Web Note No. 21, Version 2).
+\url{https://www.statmodel.com/examples/webnotes/webnote21.pdf}
 
-Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved three-step approaches. Political Analysis, 18(4), 450–469. https://doi.org/10.1093/pan/mpq025
+Bakk, Z., Tekle, F. B., & Vermunt, J. K. (2013). Estimating the association
+between latent class membership and external variables using bias-adjusted
+three-step approaches. \emph{Sociological Methodology, 43}(1), 272--311.
+\doi{10.1177/0081175012470644}
+
+Bartolucci, F., Montanari, G. E., & Pandolfi, S. (2015). Three-step
+estimation of latent Markov models with covariates. \emph{Computational
+Statistics & Data Analysis, 83}, 287--301.
+\doi{10.1016/j.csda.2014.10.017}
+
+Di Mari, R., Oberski, D. L., & Vermunt, J. K. (2016). Bias-adjusted
+three-step latent Markov modeling with covariates. \emph{Structural Equation
+Modeling: A Multidisciplinary Journal, 23}(5), 649--660.
+\doi{10.1080/10705511.2016.1191015}
+
+Liang, Q., de la Torre, J., & Law, N. (2023). Latent transition cognitive
+diagnosis model with covariates: A three-step approach. \emph{Journal of
+Educational and Behavioral Statistics, 48}(6), 690--718.
+\doi{10.3102/10769986231163320}
+
+Nylund-Gibson, K., Grimm, R., Quirk, M., & Furlong, M. (2014). A latent
+transition mixture model using the three-step specification. \emph{Structural
+Equation Modeling: A Multidisciplinary Journal, 21}(3), 439--454.
+\doi{10.1080/10705511.2014.915375}
+
+Nylund-Gibson, K., Grimm, R. P., & Masyn, K. E. (2019). Prediction from
+latent classes: A demonstration of different approaches to include distal
+outcomes in mixture models. \emph{Structural Equation Modeling: A
+Multidisciplinary Journal, 26}(6), 967--985.
+\doi{10.1080/10705511.2019.1590146}
+
+Nylund-Gibson, K., Arch, D. A. N., & Carter, D. (2026). Latent transition
+analysis with auxiliary variables: A demonstration of the ML 3-step and BCH
+in Mplus. \emph{The Quantitative Methods for Psychology, 22}(1), 1--8.
+\doi{10.20982/tqmp.22.1.p001}
+
+Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved
+three-step approaches. \emph{Political Analysis, 18}(4), 450--469.
+\doi{10.1093/pan/mpq025}
+}
+\seealso{
+\code{\link[LCPA]{LCA}()}, \code{\link[LCPA]{LPA}()}, \code{\link[LCPA]{LCPA}()}, \code{\link[LCPA]{get.CEP}()}
 }

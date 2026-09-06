@@ -38,7 +38,7 @@ get.index.LCA <- function(res.t, res.e){
   if(!is.null(res.e$P.Z.Xn)){
     Z.t <- res.t$Z
     P.Z.Xn <- res.e$P.Z.Xn[, as.numeric(assignment)]
-    Z.e <- apply(P.Z.Xn, 1, which.max)
+    Z.e <- max.col(P.Z.Xn, ties.method = "first")
     Z.dif <- Z.t != Z.e
     acc <- 1 - mean(Z.dif)
     res <- c(par.MSE, acc)
@@ -88,7 +88,7 @@ get.index.LCA <- function(res.t, res.e){
   if(!is.null(res.e$P.Z.Xn) & !is.null(means.e)){
     Z.t <- res.t$Z
     P.Z.Xn <- res.e$P.Z.Xn[, as.numeric(assignment)]
-    Z.e <- apply(P.Z.Xn, 1, which.max)
+    Z.e <- max.col(P.Z.Xn, ties.method = "first")
     Z.dif <- Z.t != Z.e
     acc <- 1 - mean(Z.dif)
     res <- c(MSE.m, MSE.c, acc)
@@ -134,11 +134,11 @@ get.runs <- function(posi, trial.list){
   return(runs)
 }
 
-is.valid.params <- function(params, model.type) {
+is.valid.params <- function(params, type) {
   if (any(params$P.Z <= 0) || any(params$P.Z >= 1) || abs(sum(params$P.Z) - 1) > 1e-6) {
     return(FALSE)
   }
-  if (model.type == "LPA") {
+  if (type == "LPA") {
     L <- length(params$P.Z)
     I <- ncol(params$means)
     if (!is.numeric(params$means) || any(is.na(params$means))) {
@@ -150,7 +150,7 @@ is.valid.params <- function(params, model.type) {
         return(FALSE)
       }
     }
-  } else if (model.type == "LCA") {
+  } else if (type == "LCA") {
     L <- length(params$P.Z)
     I <- dim(params$par)[2]
     poly.max <- dim(params$par)[3]
@@ -169,8 +169,8 @@ is.valid.params <- function(params, model.type) {
   return(TRUE)
 }
 
-params.to.row <- function(params, model.type, poly.value = NULL) {
-  if (model.type == "LPA") {
+params.to.row <- function(params, type, poly.value = NULL) {
+  if (type == "LPA") {
     means <- params$means
     covs <- params$covs
     pz <- params$P.Z
@@ -187,7 +187,7 @@ params.to.row <- function(params, model.type, poly.value = NULL) {
 
     return(c(means.vec, covs.vec, pz.vec))
 
-  } else if (model.type == "LCA") {
+  } else if (type == "LCA") {
     if (is.null(poly.value)) {
       stop("poly.value must be provided for LCA model")
     }
@@ -211,15 +211,15 @@ params.to.row <- function(params, model.type, poly.value = NULL) {
 
     return(c(pz.vec, par.vec))
   } else {
-    stop("Unsupported model type: ", model.type)
+    stop("Unsupported model type: ", type)
   }
 }
 
-row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = FALSE) {
+row.to.params <- function(vec, type, I, L, poly.value = NULL, validate = FALSE) {
   # +++ ONLY CHANGE: Handle complex numbers safely +++
   vec <- Re(vec)
 
-  if (model.type == "LPA") {
+  if (type == "LPA") {
     num_means <- L * I
     num_cov_elements <- I * (I + 1) / 2
     num_covs <- L * num_cov_elements
@@ -257,7 +257,13 @@ row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = F
           return(NULL)  # Trigger invalid parameter handling
         }
         warning(sprintf("Covariance matrix for class %d is not positive definite. Correcting...", class.idx))
-        suppressWarnings(pd <- Matrix::nearPD(mat, corr = FALSE, maxit = 1000))
+        suppressWarnings(pd <- Matrix::nearPD(
+          mat, corr = FALSE,
+          eig.tol = .Machine$double.eps^(2 / 3),
+          conv.tol = sqrt(.Machine$double.eps),
+          posd.tol = sqrt(.Machine$double.eps),
+          maxit = 1000
+        ))
         mat <- as.matrix(pd$mat)
       }
 
@@ -276,7 +282,7 @@ row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = F
       pz.vec[pz.vec <= 0] <- .Machine$double.eps
       pz.vec <- pz.vec / sum(pz.vec)
     }
-    pz.named <- setNames(pz.vec, paste0("Class.", 1:L))
+    pz.named <- setNames(pz.vec, .latent.group.names(L, "LPA"))
 
     return(list(
       means = means.mat,
@@ -284,7 +290,7 @@ row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = F
       P.Z = pz.named
     ))
 
-  } else if (model.type == "LCA") {
+  } else if (type == "LCA") {
     if (is.null(poly.value)) {
       stop("poly.value must be provided for LCA model")
     }
@@ -310,7 +316,7 @@ row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = F
     } else {
       pz.vec <- 1  # Only one class
     }
-    pz.named <- setNames(pz.vec, paste0("Class.", 1:L))
+    pz.named <- setNames(pz.vec, .latent.group.names(L, "LCA"))
     poly.max <- max(poly.value)
     par.array <- array(NA, dim = c(L, I, poly.max))
 
@@ -346,7 +352,7 @@ row.to.params <- function(vec, model.type, I, L, poly.value = NULL, validate = F
       P.Z = pz.named
     ))
   } else {
-    stop("Unsupported model type: ", model.type)
+    stop("Unsupported model type: ", type)
   }
 }
 

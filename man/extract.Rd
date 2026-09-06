@@ -51,10 +51,11 @@ extract(object, what, ...)
 \item \code{\link[LCPA]{get.SE}} — Standard error estimation results.
 }}
 
-\item{what}{A character string specifying the name of the component to extract.
-Valid choices depend on the class of \code{object}. See Details section for full listings.}
+\item{what}{One non-missing, non-empty character string specifying the
+component to extract. Valid choices depend on the class of \code{object};
+see Details for the complete class-specific listings.}
 
-\item{...}{Additional arguments passed to methods (currently ignored).}
+\item{...}{Reserved for S3 method compatibility; no additional arguments are used.}
 }
 \value{
 The requested component. Return type varies depending on \code{what} and the class of \code{object}.
@@ -69,11 +70,12 @@ allowing users to access estimated parameters, fit statistics, simulation truths
 This function supports extraction from ten primary object classes. Below are available components for each:
 
 \describe{
-\item{\strong{\code{LCA}}}{Latent Class Analysis model results. Available components:
+\item{\code{LCA}}{Latent Class Analysis model results. Available components:
 \describe{
 \item{\code{params}}{List containing all estimated model parameters.}
 \item{\code{par}}{3D array (\eqn{L \times I \times K_{\max}}) of conditional response probabilities.}
 \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
+\item{\code{category.levels}}{List of the ordered observed response categories for each indicator.}
 \item{\code{npar}}{Number of free parameters in the model.}
 \item{\code{Log.Lik}}{Log-likelihood of the final model.}
 \item{\code{AIC}}{Akaike Information Criterion.}
@@ -84,12 +86,12 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{probability}}{List of formatted conditional probability matrices per item.}
 \item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each EM iteration.}
 \item{\code{Log.Lik.nrep}}{Vector of log-likelihoods from each replication run.}
-\item{\code{model}}{Trained neural network model object (only when \code{method="NNE"}).}
+\item{\code{model}}{Backend model object for \code{method="NNE"}, \code{method="Mplus"}, \code{method="flexmix"}, \code{method="Rmixmod"}, or \code{method="RMixtComp"}. The latter three are SEM fits only.}
 \item{\code{call}}{The original function call used for model estimation.}
 \item{\code{arguments}}{List containing all input arguments passed to the \code{LCA} function.}
 }}
 
-\item{\strong{\code{LPA}}}{Latent Profile Analysis model results. Available components:
+\item{\code{LPA}}{Latent Profile Analysis model results. Available components:
 \describe{
 \item{\code{params}}{List containing all estimated model parameters.}
 \item{\code{means}}{\eqn{L \times I} matrix of estimated mean vectors for each profile.}
@@ -104,13 +106,13 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{Z}}{Vector of length \eqn{N} with MAP-classified profile memberships.}
 \item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each EM iteration.}
 \item{\code{Log.Lik.nrep}}{Vector of log-likelihoods from each replication run.}
-\item{\code{model}}{Trained model object (neural network or Mplus).}
+\item{\code{model}}{Backend model object (neural network, Mplus, flexmix SEM, Rmixmod SEM, or RMixtComp SEM).}
 \item{\code{call}}{The original function call used for model estimation.}
 \item{\code{arguments}}{List containing all input arguments passed to the \code{LPA} function.}
 \item{\code{constraint}}{Covariance structure constraints applied during estimation (from original arguments).}
 }}
 
-\item{\strong{\code{LCPA}}}{Latent Class/Profile Analysis (with covariates). Available components:
+\item{\code{LCPA}}{Latent Class/Profile Analysis (with covariates). Available components:
 \describe{
 \item{\code{beta}}{Initial class coefficients (p1 x L matrix).}
 \item{\code{beta.se}}{Standard errors for beta.}
@@ -124,17 +126,23 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{Log.Lik}}{Log-likelihood.}
 \item{\code{AIC}}{AIC.}
 \item{\code{BIC}}{BIC.}
+\item{\code{vcov}}{Variance-covariance matrix of the free Step 3 coefficients.}
+\item{\code{information}}{Observed information matrix for \code{method.SE="Numeric"} or \code{"Analytic"}; otherwise \code{NULL}.}
+\item{\code{SE.diagnostics}}{Diagnostics for the selected standard-error method.}
+\item{\code{bound.diagnostics}}{Indices of Step 3 coefficients at or near an optimization bound.}
 \item{\code{iterations}}{Optimization iterations in Step 3.}
-\item{\code{coveraged}}{Logical: did optimization converge early?}
+\item{\code{converged}}{Logical indicator of successful NLopt termination.}
+\item{\code{Log.Lik.history}}{Step 3 log-likelihood history.}
 \item{\code{params}}{Step 1 model parameters (LCA/LPA output).}
 \item{\code{call}}{Function call.}
 \item{\code{arguments}}{Input arguments list.}
 }}
 
-\item{\strong{\code{LTA}}}{Latent Transition Analysis model results. Available components:
+\item{\code{LTA}}{Latent Transition Analysis model results. Available components:
 \describe{
 \item{\code{beta}}{Initial class coefficients (p1 x L matrix).}
 \item{\code{gamma}}{Transition coefficients (nested list).}
+\item{\code{step1.pool}}{Logical indicating whether Step 1 used the row-bound responses from all time points.}
 \item{\code{beta.se}}{Standard errors for beta.}
 \item{\code{gamma.se}}{Standard errors for gamma.}
 \item{\code{beta.Z.sta}}{Z-statistics for beta.}
@@ -150,14 +158,19 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{Log.Lik}}{Log-likelihood.}
 \item{\code{AIC}}{AIC.}
 \item{\code{BIC}}{BIC.}
+\item{\code{vcov}}{Variance-covariance matrix of the free Step 3 coefficients.}
+\item{\code{information}}{Observed information matrix for \code{method.SE="Numeric"} or \code{"Analytic"}; otherwise \code{NULL}.}
+\item{\code{SE.diagnostics}}{Diagnostics for the selected standard-error method.}
+\item{\code{bound.diagnostics}}{Indices of Step 3 coefficients at or near an optimization bound.}
 \item{\code{iterations}}{Optimization iterations in Step 3.}
-\item{\code{coveraged}}{Logical: did optimization converge early?}
+\item{\code{converged}}{Logical indicator of successful NLopt termination.}
+\item{\code{Log.Lik.history}}{Step 3 log-likelihood history.}
 \item{\code{params}}{Step 1 model parameters (LCA/LPA output).}
 \item{\code{call}}{Function call.}
 \item{\code{arguments}}{Input arguments list.}
 }}
 
-\item{\strong{\code{sim.LCA}}}{Simulated Latent Class Analysis data. Available components:
+\item{\code{sim.LCA}}{Simulated Latent Class Analysis data. Available components:
 \describe{
 \item{\code{response}}{Integer matrix (\eqn{N \times I}) of simulated categorical observations.}
 \item{\code{par}}{Array (\eqn{L \times I \times P_{\max}}) of true class-specific category probabilities.}
@@ -169,7 +182,7 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{arguments}}{List containing all input arguments passed to \code{\link[LCPA]{sim.LCA}}.}
 }}
 
-\item{\strong{\code{sim.LPA}}}{Simulated Latent Profile Analysis data. Available components:
+\item{\code{sim.LPA}}{Simulated Latent Profile Analysis data. Available components:
 \describe{
 \item{\code{response}}{Numeric matrix (\eqn{N \times I}) of simulated continuous observations.}
 \item{\code{means}}{\eqn{L \times I} matrix of true class-specific means.}
@@ -182,7 +195,7 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{arguments}}{List containing all input arguments passed to \code{\link[LCPA]{sim.LPA}}.}
 }}
 
-\item{\strong{\code{sim.LTA}}}{Simulated Latent Transition Analysis data. Available components:
+\item{\code{sim.LTA}}{Simulated Latent Transition Analysis data. Available components:
 \describe{
 \item{\code{responses}}{List of response matrices per time point.}
 \item{\code{Zs}}{List of true latent class assignments per time.}
@@ -195,18 +208,20 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{covariates}}{Simulated covariate matrix.}
 \item{\code{beta}}{True initial class coefficients.}
 \item{\code{gamma}}{True transition coefficients.}
+\item{\code{ref.class}}{Reference class for the true regression coefficients.}
 \item{\code{call}}{Original simulation function call.}
 \item{\code{arguments}}{Input arguments used in simulation.}
 }}
 
-\item{\strong{\code{fit.index}}}{Model fit indices object. Available components:
+\item{\code{\link[LCPA:get.fit.index]{fit.index}}}{Model fit indices object. Available components:
 \describe{
+\item{\code{N}}{Sample size used to compute sample-size-dependent indices.}
 \item{\code{npar}}{Number of free parameters in the model.}
 \item{\code{Log.Lik}}{Log-likelihood of the model.}
 \item{\code{-2LL}}{Deviance statistic (-2 times log-likelihood).}
 \item{\code{AIC}}{Akaike Information Criterion.}
 \item{\code{BIC}}{Bayesian Information Criterion.}
-\item{\code{SIC}}{Sample-Size Adjusted BIC (-0.5 * BIC).}
+\item{\code{SIC}}{Schwarz information criterion on the log-likelihood scale (\eqn{-0.5 \times BIC}).}
 \item{\code{CAIC}}{Consistent AIC.}
 \item{\code{AWE}}{Approximate Weight of Evidence.}
 \item{\code{SABIC}}{Sample-Size Adjusted BIC (alternative formulation).}
@@ -214,25 +229,26 @@ This function supports extraction from ten primary object classes. Below are ava
 \item{\code{arguments}}{List containing input arguments (includes original model object).}
 }}
 
-\item{\strong{\code{compare.model}}}{Model comparison results. Available components:
+\item{\code{compare.model}}{Model comparison results. Available components:
 \describe{
+\item{\code{N}, \code{I}, \code{L}}{Named vectors giving sample size, indicator count, and class count for each model.}
 \item{\code{npar}}{Named numeric vector with free parameters for each model (\code{model1}, \code{model2}).}
 \item{\code{entropy}}{Named numeric vector with entropy values for each model.}
 \item{\code{AvePP}}{List of average posterior probabilities per class/profile for each model.}
 \item{\code{fit.index}}{List of \code{\link[LCPA]{get.fit.index}} objects for both models.}
 \item{\code{BF}}{Bayes Factor comparing models (based on SIC differences).}
 \item{\code{LRT.obj}}{Standard likelihood ratio test results (requires nested models).}
-\item{\code{LRT.VLMR.obj}}{Vuong-Lo-Mendell-Rubin adjusted likelihood ratio test results.}
-\item{\code{LRT.Bootstrap.obj}}{Parametric bootstrap likelihood ratio test results (if \code{n.Bootstrap > 0}).}
+\item{\code{LRT.VLMR.obj}}{Mplus TECH11 VLMR and adjusted LMR test results.}
+\item{\code{LRT.Bootstrap.obj}}{Parametric bootstrap likelihood ratio test results (if \code{nrep.bootstrap > 0}).}
 \item{\code{call}}{The matched function call used for comparison.}
-\item{\code{arguments}}{List containing original input arguments (\code{object1}, \code{object2}, \code{n.Bootstrap}).}
+\item{\code{arguments}}{List containing original input arguments (\code{object1}, \code{object2}, \code{nrep.bootstrap}).}
 }}
 
-\item{\strong{\code{SE}}}{Standard error estimation results. Available components:
+\item{\code{\link[LCPA:get.SE]{SE}}}{Standard error estimation results. Available components:
 \describe{
 \item{\code{se}}{List containing standard errors for parameters (components depend on model type).}
-\item{\code{vcov}}{Variance-covariance matrix (only for \code{method="Obs"}).}
-\item{\code{hessian}}{Observed information matrix (only for \code{method="Obs"}).}
+\item{\code{vcov}}{Variance-covariance matrix for \code{method="Obs"} or \code{"Louis"}; \code{NULL} for bootstrap.}
+\item{\code{hessian}}{Observed information matrix for \code{method="Obs"} or \code{"Louis"}; \code{NULL} for bootstrap.}
 \item{\code{diagnostics}}{Method-specific diagnostic information (e.g., estimation method).}
 \item{\code{call}}{Function call that generated the object.}
 \item{\code{arguments}}{Input arguments used in estimation.}
@@ -259,11 +275,11 @@ This function supports extraction from ten primary object classes. Below are ava
 
 \item \code{extract(sim.LTA)}: Extract fields from a \code{sim.LTA} object
 
-\item \code{extract(fit.index)}: Extractor method for \code{fit.index} objects
+\item \code{extract(fit.index)}: Extractor method for \code{\link[LCPA:get.fit.index]{fit.index}} objects
 
 \item \code{extract(compare.model)}: Extract fields from a \code{compare.model} object
 
-\item \code{extract(SE)}: Extract fields from a \code{SE} object
+\item \code{extract(SE)}: Extract fields from a \code{\link[LCPA:get.SE]{SE}} object
 
 }}
 \section{Usage Notes}{
@@ -271,9 +287,9 @@ This function supports extraction from ten primary object classes. Below are ava
 \itemize{
 \item For \code{LCA}, \code{LPA}, \code{LCPA}, and \code{LTA} objects, components reflect \emph{estimated} parameters.
 \item For \code{sim.LCA}, \code{sim.LPA}, and \code{sim.LTA} objects, components reflect \emph{true} data-generating parameters.
-\item In \code{SE} objects:
+\item In \code{\link[LCPA:get.SE]{SE}} objects:
 \itemize{
-\item Top-level components like \code{vcov} and \code{hessian} are only available when \code{method = "Obs"}.
+\item Top-level components like \code{vcov} and \code{hessian} are available when \code{method = "Obs"} or \code{"Louis"}.
 Requesting them under \code{Bootstrap} triggers a warning and returns \code{NULL}.
 \item Parameter-specific SEs (e.g., \code{means}, \code{par}) are stored within the \code{se} list.
 You can extract them directly by name (e.g., \code{extract(se_obj, "means")}).

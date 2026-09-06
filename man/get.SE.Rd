@@ -4,85 +4,74 @@
 \alias{get.SE}
 \title{Compute Standard Errors}
 \usage{
-get.SE(object, method = "Bootstrap", n.Bootstrap = 100, vis = TRUE)
+get.SE(object, method = "Bootstrap", nrep.bootstrap = 100, vis = TRUE)
 }
 \arguments{
-\item{object}{An object of class \code{"LCA"} or \code{"LPA"} returned by \code{\link{LCA}} or \code{\link{LPA}}.}
+\item{object}{An object of class \code{"LCA"} or \code{"LPA"} returned by \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.}
 
-\item{method}{Character specifying SE calculation method: \code{"Obs"} or \code{"Bootstrap"} (default).}
+\item{method}{Character specifying \code{"Bootstrap"}, \code{"Obs"}, or \code{"Louis"}.}
 
-\item{n.Bootstrap}{Integer. Number of bootstrap replicates when \code{method="Bootstrap"} (default=100).}
+\item{nrep.bootstrap}{Integer. Number of successful bootstrap replicates when
+\code{method = "Bootstrap"} (default: 100).}
 
-\item{vis}{Logical. If \code{TRUE}, displays progress information during estimation (default: \code{TRUE}).}
+\item{vis}{Logical. If \code{TRUE}, displays bootstrap progress (default: \code{TRUE}).}
 }
 \value{
 A list of class \code{"SE"} containing:
 \describe{
-\item{\code{se}}{Named list of SEs matching parameter structure of input model:
-\itemize{
-\item LPA: \code{means} (matrix: classes x variables),
-\code{covs} (array: vars x vars x classes),
-\code{P.Z} (vector: class prob SEs)
-\item LCA: \code{par} (array: classes x indicators x categories),
-\code{P.Z} (vector: class prob SEs)
-\item Critical Note for \code{"Obs"} method:
-Only \emph{free parameters} have non-zero SEs. Non-free parameters (e.g., last class probability in \code{P.Z} due
-to sum-to-1 constraint; last category probability in LCA indicators) have SE=0.
-Bootstrap provides SEs for all parameters.
-}
-}
-\item{\code{vcov}}{\code{NULL} for bootstrap. For \code{"Obs"}: variance-covariance matrix (may be regularized). Diagonal
-contains squared SEs of free parameters.}
-\item{\code{hessian}}{\code{NULL} for bootstrap. For \code{"Obs"}: observed information matrix (pre-regularization).
-Dimension = number of free parameters.}
-\item{\code{diagnostics}}{Method-specific diagnostics:
-\itemize{
-\item Bootstrap: \code{n.Bootstrap.requested}, \code{n.Bootstrap.completed}
-\item Obs: Hessian computation details, condition number, regularization status, step sizes
-}
-}
-\item{\code{call}}{Function call that generated the object}
-\item{\code{arguments}}{List of input arguments}
+\item{\code{se}}{SEs with the same parameter structure and dimnames as the fitted model.}
+\item{\code{vcov}}{Covariance matrix on the unconstrained estimation scale for
+\code{"Obs"} and \code{"Louis"}; \code{NULL} for bootstrap.}
+\item{\code{hessian}}{Observed information matrix on the unconstrained estimation scale for
+\code{"Obs"} and \code{"Louis"}; \code{NULL} for bootstrap.}
+\item{\code{diagnostics}}{Method-specific diagnostics.}
+\item{\code{call}}{Function call that generated the object.}
+\item{\code{arguments}}{Input arguments.}
 }
 }
 \description{
-Computes approximate standard errors (SEs) for estimated parameters in Latent Class Analysis (LCA)
-or Latent Profile Analysis (LPA) models using two methods:
+Computes standard errors (SEs) for parameters estimated by \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.
+Three methods are available:
 \itemize{
-\item \code{"Bootstrap"}: Non-parametric bootstrap with label-switching correction.
-McLachlan & Peel (2004) suggest that 50–100 replicates often provide adequate accuracy
-for practical purposes, though more (e.g., 500–1000) may be preferred for publication-quality inference.
-\item \code{"Obs"}: Numerical evaluation of the observed information matrix (Hessian of negative log-likelihood)
+\item \code{"Bootstrap"}: Nonparametric bootstrap with label-switching correction.
+\item \code{"Obs"}: Numerical observed information from adaptive central differences
+of the analytic observed-data score.
+\item \code{"Louis"}: Analytic observed information based on Louis' identity.
 }
-Users should note that \code{\link[LCPA]{get.SE}} computes standard errors based on the observed
-information matrix via numerical differentiation, which may lack precision and often yields
-ill-conditioned matrices. Therefore, we recommend using \code{method = "Bootstrap"}.
+}
+\details{
+Class proportions and LCA conditional probabilities are represented by additive log-ratios
+with the final category as reference. Standard errors for every probability, including the
+reference probability, are obtained using the full softmax Jacobian.
+
+For LPA, the observed-information parameterization includes only covariance parameters that
+are free under the fitted \code{constraint}; variances are represented on the log scale.
+This avoids the nonidentified Hessian directions produced by differentiating all class-specific
+covariance elements under equality or zero constraints.
+
+The analytic \code{"Louis"} method evaluates the observed information from the conditional
+complete-data score and Hessian. For both LCA and LPA it accounts for posterior class uncertainty
+and therefore is not the naive complete-data information matrix. The numerical \code{"Obs"}
+method provides an independent check by differentiating the analytic observed-data score.
 }
 \examples{
 \donttest{
-library(LCPA)
 set.seed(123)
+lca.data <- sim.LCA(N = 300, I = 4, L = 2, poly.value = 3)
+lca.fit <- LCA(lca.data$response, L = 2, nrep = 3, vis = FALSE)
+se.louis <- get.SE(lca.fit, method = "Louis")
 
-# LPA with Bootstrap (minimal replicates for example)
-lpa_data <- sim.LPA(N = 500, I = 4, L = 3)
-lpa_fit <- LPA(lpa_data$response, L = 3)
-se_boot <- get.SE(lpa_fit, method = "Bootstrap", n.Bootstrap = 10)
-
-print(se_boot)
-extract(se_boot, "covs")
-
-
-# LCA with Observed Information (note zeros for constrained parameters)
-lca_data <- sim.LCA(N = 500, I = 4, L = 3, poly.value = 5)
-lca_fit <- LCA(lca_data$response, L = 3)
-se_obs <- get.SE(lca_fit, method = "Obs")
-
-print(se_obs)
-extract(se_obs, "par")
+lpa.data <- sim.LPA(N = 300, I = 3, L = 2, constraint = "V0")
+lpa.fit <- LPA(lpa.data$response, L = 2, constraint = "V0", nrep = 3, vis = FALSE)
+se.louis.lpa <- get.SE(lpa.fit, method = "Louis")
 }
 
 }
 \references{
-McLachlan, G. J., & Peel, D. (2004). Finite Mixture Models. Wiley.
-https://books.google.com.sg/books?id=c2_fAox0DQoC
+Louis, T. A. (1982). Finding the observed information matrix when using the EM algorithm.
+\emph{Journal of the Royal Statistical Society: Series B (Methodological),
+44}(2), 226--233.
+\doi{10.1111/j.2517-6161.1982.tb01203.x}
+
+McLachlan, G. J., & Peel, D. (2000). \emph{Finite mixture models}. John Wiley & Sons.
 }

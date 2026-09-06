@@ -9,22 +9,24 @@
 #' @param L Integer specifying the number of latent classes.
 #'
 #' @return Integer representing the total number of free parameters in the model:
-#'   \deqn{\text{npar} = \sum_{i=1}^I \underbrace{(L \times K_i - 1)}_{\text{free parameters}} + \underbrace{(L-1)}_{\text{class proportions}}}
+#'   \deqn{\text{npar} = L\sum_{i=1}^I(K_i-1) + (L-1)}
 #'
 #' @details Parameter count derivation:
 #'   \describe{
 #'     \item{Fixed components (always present):}{
 #'       \itemize{
-#'         \item Conditional response probabilities: \eqn{\sum_{i=1}^I (L \times K_i - 1)} parameters
+#'         \item Conditional response probabilities: \eqn{L\sum_{i=1}^I(K_i-1)} parameters
 #'         \item Independent class proportions: \eqn{L-1} parameters (since \eqn{\sum_{l=1}^L \pi_l = 1})
 #'       }
 #'     }
 #'     \item{Per-variable parameterization:}{
 #'       For each observed variable \eqn{i} with \eqn{K_i} categories:
 #'       \itemize{
-#'         \item Each latent class requires \eqn{K_i} conditional probabilities \eqn{P(X_i=k|Z=l)}
-#'         \item With constraints \eqn{\sum_{k=1}^{K_i} P(X_i=k|Z=l) = 1} for each class \eqn{l}
-#'         \item Global constraints reduce total parameters to \eqn{L \times K_i - 1} per variable
+#'         \item Each latent class requires \eqn{K_i} conditional probabilities
+#'           \eqn{P(X_i=q\mid Z=l)}
+#'         \item With constraints
+#'           \eqn{\sum_{q=1}^{K_i}P(X_i=q\mid Z=l)=1} for each class \eqn{l}
+#'         \item The \eqn{L} class-specific sum-to-one constraints leave \eqn{L(K_i-1)} free parameters per variable
 #'       }
 #'     }
 #'   }
@@ -33,23 +35,23 @@
 #' # Example 1: 3 binary variables (K_i=2), 2 latent classes
 #' poly.value <- c(2, 2, 2)  # Three binary variables
 #' L <- 2
-#' npar <- sum(poly.value * L - 1) + (L - 1)  # = (4-1)+(4-1)+(4-1) + 1 = 3+3+3+1 = 10
-#' get.npar.LCA(poly.value, L)  # Returns 10
+#' npar <- L * sum(poly.value - 1) + (L - 1)  # = 2 * 3 + 1 = 7
+#' get.npar.LCA(poly.value, L)  # Returns 7
 #'
 #' # Example 2: Mixed variable types (binary, ternary, quaternary)
 #' poly.value <- c(2, 3, 4)  # Variables with 2, 3, and 4 categories
 #' L <- 3
-#' npar <- sum(poly.value * L - 1) + (L - 1)  # = (6-1)+(9-1)+(12-1) + 2 = 5+8+11+2 = 26
-#' get.npar.LCA(poly.value, L)  # Returns 26
+#' npar <- L * sum(poly.value - 1) + (L - 1)  # = 3 * (1+2+3) + 2 = 20
+#' get.npar.LCA(poly.value, L)  # Returns 20
 #'
 #' # Example 3: Single polytomous variable with 5 categories, 4 latent classes
 #' poly.value <- 5
 #' L <- 4
-#' npar <- sum(poly.value * L - 1) + (L - 1)  # = (20-1) + 3 = 19+3 = 22
-#' get.npar.LCA(poly.value, L)  # Returns 22
+#' npar <- L * sum(poly.value - 1) + (L - 1)  # = 4 * 4 + 3 = 19
+#' get.npar.LCA(poly.value, L)  # Returns 19
 #'
 #' @export
 get.npar.LCA <- function(poly.value, L) {
-  npar <- sum(poly.value * L - 1) + (L - 1)
+  npar <- L * sum(poly.value - 1) + (L - 1)
   return(npar)
 }

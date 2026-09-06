@@ -3,7 +3,7 @@
 #' @importFrom stats var
 
 Mplus.LPA <- function(response, L = 2, constraint = "VV",
-                      nrep = 10, starts = 200, maxiter.wa=20,
+                      nrep = 10, starts = 200, maxiter.warmup=20,
                       vis = TRUE,
                       maxiter = 2000, tol = 1e-4,
                       files.path = NULL,
@@ -55,7 +55,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
   }
 
   if(vis){
-    cat("Temporary working: ", paste0(getwd(), "/", temp_dir), "\n")
+    cat(.estimation.output.prefix(), "Temporary working: ", paste0(getwd(), "/", temp_dir), "\n", sep = "")
   }
 
   if (isTRUE(files.clean)) {
@@ -74,16 +74,16 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
           )
         }else{
           if(vis){
-            cat("Successed to clean up: ", paste0(getwd(), "/", temp_dir), "\n")
+            cat(.estimation.output.prefix(), "Successed to clean up: ", paste0(getwd(), "/", temp_dir), "\n", sep = "")
           }
         }
       }
     }, add = TRUE)
   }
 
-  orig_var_names <- colnames(response)
-  if (is.null(orig_var_names)) {
-    orig_var_names <- paste0("V", seq_len(I))
+  orig_variable.names <- colnames(response)
+  if (is.null(orig_variable.names)) {
+    orig_variable.names <- paste0("V", seq_len(I))
   }
   standardize_varnames <- function(names) {
     names_std <- tolower(names)
@@ -93,21 +93,23 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     return(names_std)
   }
 
-  var_names_std <- standardize_varnames(orig_var_names)
-  colnames(response) <- var_names_std
-  var_names <- var_names_std
+  variable.names.standardized <- standardize_varnames(orig_variable.names)
+  colnames(response) <- variable.names.standardized
+  variable.names <- variable.names.standardized
 
   df <- as.data.frame(response)
+  seed <- sample.int(.Machine$integer.max, 1L)
 
   variable_str <- paste0("CLASSES = c1(", L, ");\n",
                          "ANALYSIS:\n",
                          "  TYPE = mixture;\n",
                          "  STARTS = ", starts, " ", nrep, ";\n",
-                         "  STITERATIONS = ", maxiter.wa, ";\n",
+                         "  STSEED = ", seed, ";\n",
+                         "  STITERATIONS = ", maxiter.warmup, ";\n",
                          "  MITERATIONS = ", maxiter, ";\n",
                          "  CONVERGENCE = ", tol, ";")
 
-  model_lines <- generate_mplus_model(constraint, var_names, L, class_var = "c1")
+  model_lines <- generate_mplus_model(constraint, variable.names, L, class.variable = "c1")
   model_str <- paste(model_lines, collapse = "\n")
   output_str <- "  TECH8;"
 
@@ -131,7 +133,7 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
   dataout_path <- file.path(temp_dir, "lpa_data.dat")
 
   if (vis) {
-    cat("Runing Mplus ...\n")
+    cat(.estimation.output.prefix(), "Running Mplus ...\n", sep = "")
   }
 
   Mplus.obj <- MplusAutomation::mplusModeler(
@@ -163,10 +165,10 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
   analysis_result <- Mplus.obj$results
   params_df <- analysis_result$parameters$unstandardized
 
-  var_names_upper <- toupper(var_names)
+  variable.names.upper <- toupper(variable.names)
 
   mean_data <- dplyr::filter(params_df, .data[["paramHeader"]] == "Means" & .data[["LatentClass"]] %in% 1:L)
-  var_data  <- dplyr::filter(params_df, .data[["paramHeader"]] == "Variances" & .data[["param"]] %in% var_names_upper & .data[["LatentClass"]] %in% 1:L)
+  var_data  <- dplyr::filter(params_df, .data[["paramHeader"]] == "Variances" & .data[["param"]] %in% variable.names.upper & .data[["LatentClass"]] %in% 1:L)
   cov_data <- dplyr::filter(
     params_df,
     grepl("\\.WITH$", .data[["paramHeader"]]) &
@@ -184,8 +186,8 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     cov_data$paramHeader <- tolower(cov_data$paramHeader)
   }
 
-  means <- matrix(0, nrow = L, ncol = I, dimnames = list(1:L, var_names))
-  covs <- array(0, dim = c(I, I, L), dimnames = list(var_names, var_names, 1:L))
+  means <- matrix(0, nrow = L, ncol = I, dimnames = list(1:L, variable.names))
+  covs <- array(0, dim = c(I, I, L), dimnames = list(variable.names, variable.names, 1:L))
 
   for (i in 1:nrow(mean_data)) {
     cls <- as.integer(sub("C1#", "", mean_data$LatentClass[i]))
@@ -217,15 +219,15 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     raw_var1 <- tolower(raw_var1)
 
     raw_var2 <- tolower(as.character(cov_data$param[i]))
-    var1_idx <- match(raw_var1, var_names)
-    var2_idx <- match(raw_var2, var_names)
+    variable1.index <- match(raw_var1, variable.names)
+    variable2.index <- match(raw_var2, variable.names)
 
-    if (!is.na(var1_idx) && !is.na(var2_idx)) {
+    if (!is.na(variable1.index) && !is.na(variable2.index)) {
       est_val <- as.numeric(cov_data$est[i])
 
       if (!is.na(est_val) && is.finite(est_val)) {
-        covs[var1_idx, var2_idx, cls] <- est_val
-        covs[var2_idx, var1_idx, cls] <- est_val
+        covs[variable1.index, variable2.index, cls] <- est_val
+        covs[variable2.index, variable1.index, cls] <- est_val
       }
     }
   }
@@ -234,38 +236,15 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
   if(is.null(P.Z)){
     P.Z <- rep(1/L, L)
   }
+  P.Z <- pmax(as.numeric(P.Z), 1e-12)
+  P.Z <- P.Z / sum(P.Z)
 
-  logres <- matrix(NA_real_, nrow = N, ncol = L)
-  tresponse <- t(response)
-  jitter = 1e-10
+  covariance.repair <- .stabilize.LPA.covariances(
+    covs, constraint, fallback = stats::cov(response)
+  )
+  covs <- covariance.repair$covs
 
-  for (l in 1:L) {
-    covs.l <- covs[,,l]
-    mean.l <- means[l,]
-    lp <- logpdf_component(mean.l, covs.l, tresponse, jitter)
-    logres[,l] <- lp + log(P.Z[l] + 1e-12)
-  }
-
-  rowmax <- apply(logres, 1, max)
-  nonfinite_rows <- !is.finite(rowmax)
-  if (any(nonfinite_rows)) {
-    finite_vals <- logres[is.finite(logres)]
-    if (length(finite_vals) > 0) {
-      rowmax[nonfinite_rows] <- max(finite_vals)
-    } else {
-      rowmax[nonfinite_rows] <- 0
-    }
-  }
-
-  exp_rel <- exp(logres - matrix(rowmax, N, L))
-  row_sums <- rowSums(exp_rel)
-  bad <- !is.finite(row_sums) | row_sums < 1e-20
-  if (any(bad)) {
-    exp_rel[bad,] <- 1/L
-    row_sums[bad] <- 1
-  }
-
-  P.Z.Xn <- exp_rel / row_sums
+  P.Z.Xn <- get.P.Z.Xn.LPA(response, means, covs, P.Z)
   nk <- colSums(P.Z.Xn)
   empty_clusters <- which(nk < 1e-5)
   if (length(empty_clusters) > 0) {
@@ -277,23 +256,24 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     nk <- colSums(P.Z.Xn)
   }
 
-  Z <- apply(P.Z.Xn, 1, which.max)
+  Z <- max.col(P.Z.Xn, ties.method = "first")
   P.Z <- pmax(nk / N, 1e-12)
   P.Z <- P.Z / sum(P.Z)
 
-  Log.Lik <- get.Log.Lik.LPA(response, P.Z, means, covs, jitter = 1e-10)
+  Log.Lik <- get.Log.Lik.LPA(response, means, covs, P.Z)
   npar <- get.npar.LPA(I, L, constraint)
 
   AIC <- -2 * Log.Lik + 2 * npar
   BIC <- -2 * Log.Lik + npar * log(N)
 
   if (vis) {
-    cat(sprintf("Mplus Model: %s\nLog-likelihood = %.5f | BIC = %.2f\n",
-                title_str, Log.Lik, BIC))
+    cat(sprintf("%sMplus Model: %s\n%sLog-likelihood = %.5f | BIC = %.2f\n",
+                .estimation.output.prefix(), title_str,
+                .estimation.output.prefix(), Log.Lik, BIC))
   }
 
-  dimnames(means) <- list(1:L, orig_var_names)
-  dimnames(covs) <- list(orig_var_names, orig_var_names, 1:L)
+  dimnames(means) <- list(1:L, orig_variable.names)
+  dimnames(covs) <- list(orig_variable.names, orig_variable.names, 1:L)
 
   res <- list(
     params = list(means = means, covs = covs, P.Z = P.Z),
@@ -304,36 +284,34 @@ Mplus.LPA <- function(response, L = 2, constraint = "VV",
     BIC = BIC,
     P.Z.Xn = P.Z.Xn,
     P.Z = P.Z,
-    Z = Z
+    Z = Z,
+    covariance.repaired = covariance.repair$repaired,
+    covariance.repair = covariance.repair$diagnostics
   )
-
-  if(vis){
-    cat("\n")
-  }
 
   return(res)
 }
 
 #' @importFrom utils combn
 #' @importFrom stats setNames
-generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
-  n_vars <- length(var_names)
-  var_pairs <- t(combn(var_names, 2))
+generate_mplus_model <- function(constraint, variable.names, L, class.variable = "c1") {
+  I <- length(variable.names)
+  variable.pairs <- t(combn(variable.names, 2))
 
   if (is.character(constraint) && constraint == "VE") {
     overall_lines <- c(
       "%OVERALL%",
-      apply(var_pairs, 1, function(pair) {
-        pair_idx <- which(apply(var_pairs, 1, function(x) all(sort(x) == sort(pair))))
+      apply(variable.pairs, 1, function(pair) {
+        pair_idx <- which(apply(variable.pairs, 1, function(x) all(sort(x) == sort(pair))))
         sprintf("%s WITH %s (c%d);", pair[1], pair[2], pair_idx)
       })
     )
 
     class_lines <- lapply(1:L, function(k) {
       c(
-        paste0("%", class_var, "#", k, "%"),
-        paste0("[", paste(var_names, collapse = " "), "];"),
-        paste0(var_names, ";", collapse = "\n")
+        paste0("%", class.variable, "#", k, "%"),
+        paste0("[", paste(variable.names, collapse = " "), "];"),
+        paste0(variable.names, ";", collapse = "\n")
       )
     })
 
@@ -347,18 +325,18 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
     switch(constraint,
            "E0" = {
              overall_lines <- c(
-               sapply(seq_along(var_names), function(i) {
-                 sprintf("%s (%d);", var_names[i], i)
+               sapply(seq_along(variable.names), function(i) {
+                 sprintf("%s (%d);", variable.names[i], i)
                }),
-               apply(var_pairs, 1, function(pair) {
+               apply(variable.pairs, 1, function(pair) {
                  sprintf("%s WITH %s@0;", pair[1], pair[2])
                })
              )
 
              class_lines <- lapply(1:L, function(k) {
                c(
-                 paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];")
+                 paste0("%", class.variable, "#", k, "%"),
+                 paste0("[", variable.names, "];")
                )
              })
 
@@ -367,10 +345,10 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
            "V0" = {
              class_lines <- lapply(1:L, function(k) {
                c(
-                 paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),
-                 paste0(var_names, ";"),
-                 apply(var_pairs, 1, function(pair) {
+                 paste0("%", class.variable, "#", k, "%"),
+                 paste0("[", variable.names, "];"),
+                 paste0(variable.names, ";"),
+                 apply(variable.pairs, 1, function(pair) {
                    sprintf("%s WITH %s@0;", pair[1], pair[2])
                  })
                )
@@ -380,38 +358,38 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
            },
            "EE" = {
              overall_lines <- character(0)
-             overall_lines <- c(overall_lines, sapply(seq_along(var_names), function(i) {
-               sprintf("%s (%d);", var_names[i], i)
+             overall_lines <- c(overall_lines, sapply(seq_along(variable.names), function(i) {
+               sprintf("%s (%d);", variable.names[i], i)
              }))
 
-             cov_labels <- (n_vars + 1):(n_vars + nrow(var_pairs))
-             overall_lines <- c(overall_lines, apply(var_pairs, 1, function(pair) {
-               idx <- which(apply(var_pairs, 1, function(x) all(sort(x) == sort(pair))))
+             cov_labels <- (I + 1):(I + nrow(variable.pairs))
+             overall_lines <- c(overall_lines, apply(variable.pairs, 1, function(pair) {
+               idx <- which(apply(variable.pairs, 1, function(x) all(sort(x) == sort(pair))))
                sprintf("%s WITH %s (%d);", pair[1], pair[2], cov_labels[idx])
              }))
 
              class_lines <- lapply(1:L, function(k) {
                c(
-                 paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];")
+                 paste0("%", class.variable, "#", k, "%"),
+                 paste0("[", variable.names, "];")
                )
              })
 
              return(c("%OVERALL%", overall_lines, unlist(class_lines)))
            },
            "EV" = {
-             overall_lines <- sapply(seq_along(var_names), function(i) {
-               sprintf("%s (%d);", var_names[i], i)
+             overall_lines <- sapply(seq_along(variable.names), function(i) {
+               sprintf("%s (%d);", variable.names[i], i)
              })
 
              class_lines <- lapply(1:L, function(k) {
-               cov_lines <- apply(var_pairs, 1, function(pair) {
+               cov_lines <- apply(variable.pairs, 1, function(pair) {
                  paste0(pair[1], " WITH ", pair[2], ";")
                })
 
                c(
-                 paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),
+                 paste0("%", class.variable, "#", k, "%"),
+                 paste0("[", variable.names, "];"),
                  cov_lines
                )
              })
@@ -420,14 +398,14 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
            },
            "VV" = {
              class_lines <- lapply(1:L, function(k) {
-               cov_lines <- apply(var_pairs, 1, function(pair) {
+               cov_lines <- apply(variable.pairs, 1, function(pair) {
                  paste0(pair[1], " WITH ", pair[2], ";")
                })
 
                c(
-                 paste0("%", class_var, "#", k, "%"),
-                 paste0("[", var_names, "];"),
-                 paste0(var_names, ";"),
+                 paste0("%", class.variable, "#", k, "%"),
+                 paste0("[", variable.names, "];"),
+                 paste0(variable.names, ";"),
                  cov_lines
                )
              })
@@ -444,8 +422,8 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
         stop("Each constraint must be a numeric vector of length 2")
       }
       x <- as.integer(x)
-      if (any(x < 1) || any(x > n_vars)) {
-        stop("Constraint indices must be between 1 and ", n_vars)
+      if (any(x < 1) || any(x > I)) {
+        stop("Constraint indices must be between 1 and ", I)
       }
       sort(x)
     })
@@ -460,8 +438,8 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
     labels <- 1000 + seq_len(n_constraints) - 1
     constraint_to_label <- setNames(labels, sapply(constraints, paste, collapse = ":"))
 
-    var_constraints <- rep(NA_integer_, n_vars)
-    cov_constraints <- matrix(NA_integer_, nrow = n_vars, ncol = n_vars)
+    var_constraints <- rep(NA_integer_, I)
+    cov_constraints <- matrix(NA_integer_, nrow = I, ncol = I)
 
     for (con in constraints) {
       key <- paste(con, collapse = ":")
@@ -487,25 +465,25 @@ generate_mplus_model <- function(constraint, var_names, L, class_var = "c1") {
 
     class_lines <- lapply(1:L, function(k) {
       lines <- c(
-        paste0("%", class_var, "#", k, "%"),
-        paste0("[", paste(var_names, collapse = " "), "];")
+        paste0("%", class.variable, "#", k, "%"),
+        paste0("[", paste(variable.names, collapse = " "), "];")
       )
 
-      for (i in seq_len(n_vars)) {
-        var_name <- var_names[i]
+      for (i in seq_len(I)) {
+        variable.name <- variable.names[i]
         label <- var_constraints[i]
         if (!is.na(label)) {
-          lines <- c(lines, sprintf("%s (%d);", var_name, label))
+          lines <- c(lines, sprintf("%s (%d);", variable.name, label))
         } else {
-          lines <- c(lines, sprintf("%s;", var_name))
+          lines <- c(lines, sprintf("%s;", variable.name))
         }
       }
 
-      for (pair_idx in seq_len(nrow(var_pairs))) {
-        v1 <- var_pairs[pair_idx, 1]
-        v2 <- var_pairs[pair_idx, 2]
-        idx1 <- match(v1, var_names)
-        idx2 <- match(v2, var_names)
+      for (pair_idx in seq_len(nrow(variable.pairs))) {
+        v1 <- variable.pairs[pair_idx, 1]
+        v2 <- variable.pairs[pair_idx, 2]
+        idx1 <- match(v1, variable.names)
+        idx2 <- match(v2, variable.names)
         label <- cov_constraints[idx1, idx2]
         if (!is.na(label)) {
           lines <- c(lines, sprintf("%s WITH %s (%d);", v1, v2, label))

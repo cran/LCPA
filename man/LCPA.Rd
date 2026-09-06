@@ -2,378 +2,612 @@
 % Please edit documentation in R/LCPA.R
 \name{LCPA}
 \alias{LCPA}
-\title{Latent Class/Profile Analysis with Covariates}
+\title{Three-step latent class/profile analysis}
 \usage{
 LCPA(
   response,
   L = 2,
+  type.analysis = c("XZ", "ZY"),
+  type.model = c("LCA", "LPA"),
+  covariates = NULL,
   ref.class = L,
-  type = "LCA",
-  covariate = NULL,
+  dependent.variables = NULL,
+  family = "gaussian",
+  method.model = "EM",
+  control.model = NULL,
+  control.EM = NULL,
+  control.Mplus = NULL,
+  control.NNE = NULL,
+  control.flexmix = NULL,
+  control.Rmixmod = NULL,
+  control.RMixtComp = NULL,
+  method.3step = NULL,
   CEP.error = TRUE,
-  par.ini = "random",
-  params = NULL,
-  is.sort = TRUE,
-  constraint = "VV",
-  method = "EM",
+  method.regression = "Analytic",
+  maxiter = 5000,
   tol = 1e-04,
   lower = -10,
   upper = 10,
   method.SE = "Bootstrap",
-  n.Bootstrap = 100,
-  maxiter = 5000,
-  nrep = 20,
-  starts = 100,
-  maxiter.wa = 20,
-  vis = TRUE,
-  control.EM = NULL,
-  control.Mplus = NULL,
-  control.NNE = NULL
+  nrep.bootstrap = 100,
+  vis = TRUE
 )
 }
 \arguments{
-\item{response}{A matrix or data frame of observed responses.
-Rows of the matrix represent individuals/participants/observations (\eqn{N}), columns of the
-matrix represent observed indicators/items/variables (\eqn{I}).
-For \code{type = "LCA"}: indicators must be binary or categorical (coded as integers starting from 0).
-For \code{type = "LPA"}: indicators must be continuous (numeric), and the response matrix must be
-standardized using \code{\link[base]{scale}} or \code{\link[LCPA]{normalize}} prior to input.}
+\item{response}{An \eqn{N \times I} numeric matrix or data frame containing
+the Step 1 latent class/profile indicators. For \code{type.model = "LCA"}, each
+column is a categorical indicator and follows the same category-mapping
+requirements as the \code{response} argument of \code{\link[LCPA]{LCA}()}. For
+\code{type.model = "LPA"}, all columns are continuous, missing values are not
+allowed, and the indicators should be standardized with \code{scale()} or
+\code{\link[LCPA]{normalize}()} before analysis, exactly as required by \code{\link[LCPA]{LPA}()}.}
 
-\item{L}{Integer scalar. Number of latent classes/profiles. Must satisfy \eqn{L \geq 2}.}
+\item{L}{Integer number of latent classes/profiles in the Step 1 measurement
+model (default: 2; must be at least 2). It has the same meaning as \code{L} in
+\code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.}
 
-\item{ref.class}{Integer \eqn{L \geq ref.class \geq 1}. Specifies which latent class to use as the reference category.
-Default is \code{L} (last class). Coefficients for the reference class are fixed to zero.
-When \code{is.sort=TRUE}, classes are first ordered by decreasing \code{P.Z} (class 1 has highest probability),
-then \code{ref.class} refers to the position in this sorted order.}
-
-\item{type}{Character string. Specifies the type of latent variable model for Step 1:
+\item{type.analysis}{Character string selecting the independent Step 3 path:
 \itemize{
-\item \code{"LCA"} — Latent Class Analysis for categorical indicators.
-\item \code{"LPA"} — Latent Profile Analysis for continuous indicators.
+\item \code{"XZ"}: estimate the effect of observed covariates
+\eqn{\boldsymbol{\zeta}} on latent class/profile membership \eqn{Z};
+\code{covariates} is used and
+\code{dependent.variables} is ignored.
+\item \code{"ZY"}: estimate class/profile-specific distributions of external
+observed dependent variables \eqn{\mathbf{Y}}; \code{dependent.variables}
+and \code{family} are used and
+\code{covariates} and \code{ref.class} are ignored.
 }
-See \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}} for details.}
+The default is \code{"XZ"}.}
 
-\item{covariate}{Optional. A matrix or data frame of covariates for modeling latent class membership.
-Must include an intercept column (all 1s) as the first column.
-If \code{NULL} (default), only intercept terms are used (i.e., no covariates).
-Dimension is \eqn{N \times p} where \eqn{p} is the number of covariates including intercept.}
+\item{type.model}{Character string selecting the Step 1 measurement model:
+\code{"LCA"} for categorical indicators or \code{"LPA"} for continuous indicators
+(default: \code{"LCA"}). Its meaning, response-data requirements, and fitted
+measurement parameters are the same as in \code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()},
+respectively.}
 
-\item{CEP.error}{Logical. If \code{TRUE} (recommended), incorporates classification uncertainty via
-estimated Classification Error Probability (\code{\link[LCPA]{get.CEP}}) matrices from Step 1. If \code{FALSE},
-uses identity CEP matrices (equivalent to naive modal assignment; introduces bias).}
+\item{covariates}{Used only when \code{type.analysis = "XZ"}. An
+\eqn{N\times(U+1)} numeric matrix/data frame representing
+\eqn{\boldsymbol{\zeta}_n=(1,\zeta_{n1},\ldots,\zeta_{nU})^\top}.
+Its first column is an unstandardized all-ones intercept; standardize the
+\eqn{U} observed covariates before analysis and construct interactions
+from the standardized variables. If \code{NULL} (default), the
+function automatically creates an \eqn{N \times 1} all-ones design, so an
+intercept-only class-membership model remains estimable. The argument is
+ignored for \code{"ZY"}; that path automatically uses latent-class-specific
+intercepts as the dependent-variable predictors.}
 
-\item{par.ini}{Specification for parameter initialization. Options include:
-\itemize{
-\item \code{"random"}: Completely random initialization (default).
-\item \code{"kmeans"}: Initializes parameters via K-means clustering on observed data (McLachlan & Peel, 2004).
-\item A \code{list} for LCA containing:
+\item{ref.class}{Integer from 1 to \code{L} selecting the reference category in
+the \code{X -> Z} multinomial regression (default: \code{L}). Its coefficient vector
+is fixed to zero. If \code{control.model$is.sort = TRUE}, the value refers to the class/profile
+position after Step 1 sorting. This argument is not used for \code{"ZY"} because
+that path estimates a separate dependent-variable distribution for every class.}
+
+\item{dependent.variables}{Used only when \code{type.analysis = "ZY"}. An observed
+dependent-variable vector, or an \eqn{N\times V} matrix/data frame
+representing
+\eqn{\mathbf{Y}_n=(Y_{n1},\ldots,Y_{nV})^\top}, with one dependent variable
+per column and one participant per row. These are external dependent
+variables (for example, depression or anxiety), not Step 1 latent
+class/profile indicators. Missing dependent-variable values are allowed and are
+omitted separately for each dependent variable; the indicator data in \code{response}
+remain subject to the requirements of \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}.
+Before calling \code{LCPA()}, standardize every continuous dependent-variable
+column assigned \code{family = "gaussian"} over the \eqn{N} participants,
+preferably with \code{\link[base]{scale}()}, so that its observed sample mean
+is 0 and sample standard deviation is 1. Do not standardize columns assigned
+\code{family = "categorical"}; retain their original category values.}
+
+\item{family}{Used only when \code{type.analysis = "ZY"}. Either one character
+string applied to every dependent variable or a character vector with one value per
+dependent-variable column. \code{"gaussian"} (default) estimates class-specific means for
+a standardized numeric continuous dependent variable; \code{"categorical"} estimates
+class-specific probabilities for the observed categories. Missing values are
+excluded separately for each dependent variable.}
+
+\item{method.model}{Character string selecting the Step 1 parameter estimator.
+It has exactly the same meaning and available values as the \code{method}
+argument of \code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}: \code{"EM"} (default), \code{"NNE"}, \code{"Mplus"},
+\code{"flexmix"}, \code{"Rmixmod"}, or \code{"RMixtComp"}. The corresponding
+\verb{control.*} argument is passed to the selected Step 1 function. It is not
+used to estimate the Step 3 regression/dependent-variable model.}
+
+\item{control.model}{Optional named list of common Step 1 measurement-model
+settings. If \code{NULL} (default), all settings below use their defaults. Supply
+only the elements to override:
 \describe{
-\item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
-number of categories across indicators).}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
+\item{\code{params}}{Optional fixed Step 1 parameter list (default: \code{NULL}).
+When supplied, Step 1 fitting is skipped. For LCA it must contain \code{par},
+\code{P.Z}, and \code{category.levels}; for LPA it must contain \code{means}, \code{covs},
+and \code{P.Z}, with the definitions and dimensions returned by
+\code{\link[LCPA]{LCA}()} and \code{\link[LCPA]{LPA}()}.}
+\item{\code{par.ini}}{Initialization used when \code{params = NULL} (default:
+\code{"random"}). It accepts \code{"random"}, \code{"kmeans"}, or the model-specific
+parameter-list forms documented for \code{\link[LCPA]{LCA}()} and
+\code{\link[LCPA]{LPA}()}.}
+\item{\code{constraint}}{LPA covariance structure (default: \code{"VV"}). It accepts
+\code{"UE"}, \code{"UV"}, \code{"E0"}, \code{"V0"}, \code{"EE"}, \code{"VV"}, \code{"VE"}, \code{"EV"}, or
+a custom equality list as documented for \code{\link[LCPA]{LPA}()}.
+It is ignored when \code{type.model = "LCA"}.}
+\item{\code{is.sort}}{Logical (default: \code{TRUE}). Order classes/profiles by
+decreasing Step 1 prior probability and consistently permute Step 1,
+CEP, and Step 3 class-specific results.}
+\item{\code{starts}}{Positive integer number of independently initialized Step 1
+warm-up analyses (default: 100).}
+\item{\code{maxiter.warmup}}{Positive integer maximum number of Step 1 iterations
+per warm-up analysis (default: 20).}
+\item{\code{nrep}}{Positive integer not exceeding \code{starts} (default: 20). The
+best warm-up states are continued to final Step 1 fits.}
 }
-\item A \code{list} for LPA containing:
-\describe{
-\item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-\item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
+Element names must be unique; unknown or unnamed elements are rejected.}
+
+\item{control.EM}{Optional Step 1 control list for the EM estimator in
+\code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()}. \code{maxiter} sets the
+maximum number of EM iterations, \code{tol} sets the convergence tolerance, and
+the LPA covariance-floor element bounds small covariance eigenvalues away
+from zero. See \code{control.EM} in those functions for the complete list.}
+
+\item{control.Mplus}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+Mplus backend. It has the same \code{maxiter}, \code{tol}, \code{files.path},
+\code{files.clean}, and LPA covariance-floor semantics documented there.}
+
+\item{control.NNE}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()} NNE
+backend. Network architecture, attention, annealing, optimizer, plotting,
+and device fields have exactly the meanings documented for \code{control.NNE}
+in those functions.}
+
+\item{control.flexmix}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+flexmix SEM backend. \code{maxiter}, \code{minprior}, \code{tol}, and the LPA covariance
+floor have the same meanings as in \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}.}
+
+\item{control.Rmixmod}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+Rmixmod backend. The \code{path}, native strategy, algorithm, initialization,
+iteration, tolerance, and replication fields retain the meanings and
+restrictions documented in those functions.}
+
+\item{control.RMixtComp}{Optional list passed to the selected \code{\link[LCPA]{LCA}()}/\code{\link[LCPA]{LPA}()}
+RMixtComp SEM backend. Burn-in, SEM/Gibbs iterations, stability,
+initialization, criterion, replication, and core controls have the same
+meanings and restrictions documented in those functions.}
+
+\item{method.3step}{Character string selecting the Step 2--3 correction:
+\itemize{
+\item \code{"ML"}: maximize a likelihood that treats the modal Step 1 class
+as measured with error through the CEP matrix.
+\item \code{"BCH"}: invert the CEP matrix and estimate Step 3 with BCH
+pseudo-weights, leaving the Step 1 class/profile definition fixed.
 }
-}}
+If \code{NULL} (default), \code{"ML"} is selected for \code{"XZ"} and \code{"BCH"} for
+\code{"ZY"}. Both methods are available for both paths. ML/CEP estimates a
+classification-error-corrected likelihood, whereas BCH estimates
+inverse-CEP-weighted score equations. BCH is generally preferred for
+distal dependent variables, and ML is generally preferred for
+class-membership regression. Vermunt (2010) develops both BCH and ML
+corrections for covariates predicting class membership, including the
+BCH-XZ specification. Bakk, Tekle, and Vermunt (2013) develop the
+bias-adjusted ML formulation for class membership predicting a distal
+dependent variable; Nylund-Gibson, Grimm, and Masyn (2019) provide a
+worked manual ML three-step distal-outcome analysis.}
 
-\item{params}{Optional \code{list} of pre-estimated Step 1 parameters. If \code{NULL} (default),
-Step 1 models are estimated internally. If provided, no LCA or LPA parameter estimation
-will be performed; instead, the parameters provided in \code{params} will be used as
-fixed values. Additionally, \code{params} must contain:
+\item{CEP.error}{Logical. If \code{TRUE} (default and recommended), Step 2
+estimates the classification-error probability matrix
+\eqn{\mathrm{CEP}(l,k)=P(\widehat{Z}=k\mid Z=l)} using
+\code{\link[LCPA]{get.CEP}()}, and Step 3 applies the selected correction.
+If \code{FALSE}, an identity CEP matrix is used, reducing the analysis to naive
+modal-class assignment without classification-error correction.}
+
+\item{method.regression}{Character string controlling Step 3 point estimation
+(default: \code{"Analytic"}). For ML-XZ, BCH-XZ, and ML-ZY, \code{"Analytic"}
+supplies the exact analytic gradient to a numerical optimizer; these models
+do not generally have closed-form coefficient estimates. For BCH-ZY,
+\code{"Analytic"} directly evaluates the weighted closed-form class means or
+categorical probabilities. \code{"Numeric"} optimizes the same likelihood
+without the supplied gradient or numerically solves the same BCH estimating
+equations. This choice is independent of \code{method.SE}.}
+
+\item{maxiter}{Positive integer giving the maximum number of Step 3 \code{"XZ"}
+optimization iterations (default: 5000). It is distinct from Step 1
+\verb{control.*$maxiter} and \code{control.model$maxiter.warmup}, and is ignored for \code{"ZY"}.}
+
+\item{tol}{Positive finite convergence tolerance for the Step 3 \code{"XZ"}
+optimization (default: \eqn{10^{-4}}). It is separate from the Step 1
+tolerance in \code{control.EM}, \code{control.Mplus}, or another backend control and
+is ignored for \code{"ZY"}, whose dependent-variable estimators use their own equations.}
+
+\item{lower, upper}{Finite lower and upper bounds applied to every \code{"XZ"}
+multinomial regression coefficient (defaults: -10 and 10). They are ignored
+for \code{"ZY"}. Inspect the returned bound diagnostics when an estimate reaches
+a limit.}
+
+\item{method.SE}{Character string selecting Step 3 uncertainty estimation:
 \itemize{
-\item A \code{list} for LCA containing:
-\describe{
-\item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
-each latent class, indicator, and response category (where \eqn{K_{\max}} is the maximum
-number of categories across indicators).}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
-}
-\item A \code{list} for LPA containing:
-\describe{
-\item{\code{means}}{An \eqn{L \times I} matrix of initial mean vectors for each profile.}
-\item{\code{covs}}{An \eqn{I \times I \times L} array of initial covariance matrices for each profile.}
-\item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for profiles.}
-}
+\item \code{"Analytic"}: for ML-XZ, use the analytic observed-information
+bread and an empirical sandwich meat that includes the influence of
+estimating the CEP matrix; for ML-ZY, use Louis observed information;
+for BCH, use the analytic estimating-equation bread and empirical
+sandwich meat.
+\item \code{"Numeric"}: replace the analytic information/bread with a
+numerical Hessian or Jacobian while retaining the corresponding
+empirical meat and Step 3 estimand.
+\item \code{"Bootstrap"} (default): resample individuals, keep the Step 1
+measurement parameters fixed, recompute posterior assignments and CEP
+or BCH weights, and re-estimate Step 3.
 }}
 
-\item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-order according to \code{P.Z}. All other parameters will be adjusted accordingly
-based on the reordered latent classes.}
+\item{nrep.bootstrap}{Integer number of nonparametric bootstrap replications
+used only when \code{method.SE = "Bootstrap"} (default: 100; minimum: 2). Only
+successful Step 3 replications contribute to the empirical covariance;
+larger values such as 500--1000 are advisable for final publication-level
+inference when computationally feasible.}
 
-\item{constraint}{Character (LPA only). Specifies structure of within-class covariance matrices:
-\itemize{
-\item \code{"VV"} — Class-varying variances and covariances (unconstrained; default).
-\item \code{"EE"} — Equal variances and covariances across all classes (homoscedastic).
-}}
-
-\item{method}{Character. Estimation algorithm for Step 1 models:
-\itemize{
-\item \code{"EM"} — Expectation-Maximization (default; robust and widely used).
-\item \code{"Mplus"} — Interfaces with Mplus software (requires external installation).
-\item \code{"NNE"} — Neural Network Estimator (experimental; uses transformer + simulated
-annealing, more reliable than both \code{"EM"} and \code{"Mplus"}).
-}}
-
-\item{tol}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-
-\item{lower}{The upper bound for the estimation of regression coefficients, default is -10}
-
-\item{upper}{The lower bound for the estimation of regression coefficients, default is 10}
-
-\item{method.SE}{Character. Method for estimating standard errors of parameter estimates:
-\itemize{
-\item \code{"Obs"} — Approximates the observed information matrix via numerical differentiation (Richardson's method).
-Standard errors are obtained from the inverse Hessian. May fail or be unreliable in small samples or with
-complex likelihood surfaces.
-\item \code{"Bootstrap"} — Uses nonparametric bootstrap resampling to estimate empirical sampling variability.
-More robust to model misspecification and small-sample bias. Computationally intensive but recommended when
-asymptotic assumptions are questionable.
-}
-Default is \code{"Bootstrap"}.}
-
-\item{n.Bootstrap}{Integer. Number of bootstrap replicates used when \code{method.SE = "Bootstrap"}.
-Default is 100. McLachlan & Peel (2004) suggest that 50–100 replicates often provide adequate accuracy
-for practical purposes, though more (e.g., 500–1000) may be preferred for publication-quality inference.
-Each replicate involves re-estimating the full three-step LTA model on a resampled dataset.}
-
-\item{maxiter}{Maximum number of iterations for optimizing the regression coefficients. Default: 5000.}
-
-\item{nrep}{Integer controlling replication behavior:
-\itemize{
-\item If \code{par.ini = "random"}, number of random initializations.
-\item If \code{par.ini = "kmeans"}, number of K-means runs for initialization.
-\item For \code{method="Mplus"}, controls number of random starts in Mplus via \code{STARTS} option.
-\item Best solution is selected by log-likelihood/BIC across replications.
-\item Ignored for user-provided initial parameters.
-}}
-
-\item{starts}{Number of random initializations to explore during warm-up phase (default: 100).}
-
-\item{maxiter.wa}{Maximum number of training iterations allowed per warm-up run. After completion,
-the top \code{nrep} solutions (by log-likelihood) are promoted to final training phase (default: 20).}
-
-\item{vis}{Logical. If \code{TRUE}, displays progress information during estimation (default: \code{TRUE}).}
-
-\item{control.EM}{List of control parameters for EM algorithm:
-\describe{
-\item{\code{maxiter}}{Maximum iterations (default: 2000).}
-\item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-}}
-
-\item{control.Mplus}{List of control parameters for Mplus estimation:
-\describe{
-\item{\code{maxiter}}{Maximum iterations for Mplus optimization (default: 2000).}
-\item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-\item{\code{files.path}}{Character string specifying the directory path where Mplus will write its intermediate files
-(e.g., \code{.inp} model input, \code{.dat} data file, \code{.out} output, and saved posterior probabilities).
-This argument is \strong{required} — if \code{NULL} (default), the function throws an error.
-The specified directory must exist and be writable; if it does not exist, the function attempts to create it recursively.
-A unique timestamped subdirectory (e.g., \code{"Mplus_LPA_YYYY-MM-DD_HH-MM-SS"} or
-\code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}) will be created within this path
-to store all run-specific files and avoid naming conflicts. See in \code{\link[LCPA]{LCA}} and \code{\link[LCPA]{LPA}}.}
-\item{\code{files.clean}}{Logical. If \code{TRUE} (default), all intermediate files and the temporary working directory
-created for this run are deleted upon successful completion or error exit (via \code{on.exit()}).
-If \code{FALSE}, all generated files are retained in \code{files.path} (or the auto-generated temp dir)
-for inspection or debugging. Note: when \code{files.path = NULL}, even if \code{files.clean = FALSE},
-the temporary directory may still be cleaned up by the system later — for guaranteed persistence,
-specify a custom \code{files.path}.}
-}}
-
-\item{control.NNE}{List of control parameters for NNE algorithm:
-\describe{
-\item{\code{hidden.layers}}{Integer vector specifying layer sizes in fully-connected network (default: \code{c(16,16)}).}
-\item{\code{activation.function}}{Activation function (e.g., \code{"tanh"}, default: \code{"tanh"}).}
-\item{\code{use.attention}}{Whether to enable the self-attention mechanism (i.e., transformer encoder) (default: \code{TRUE}).}
-\item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
-\item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
-\item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
-\item{\code{eps}}{Small constant for numerical stability (default: 1e-8).}
-\item{\code{lambda}}{A factor for slight regularization of all parameters (default: 1e-5).}
-\item{\code{initial.temperature}}{Initial temperature for simulated annealing (default: 1000).}
-\item{\code{cooling.rate}}{Cooling rate per iteration in simulated annealing (default: 0.5).}
-\item{\code{maxiter.sa}}{Maximum iterations for simulated annealing (default: 1000).}
-\item{\code{threshold.sa}}{Minimum temperature threshold for annealing (default: 1e-10).}
-\item{\code{maxiter}}{Maximum training epochs (default: 1000).}
-\item{\code{maxiter.early}}{Patience parameter for early stopping (default: 50).}
-\item{\code{maxcycle}}{Maximum cycles for optimization (default: 10).}
-\item{\code{lr}}{Learning rate, controlling the step size of neural network parameter updates (default: 0.025).}
-\item{\code{scheduler.patience}}{Patience for learning rate decay (if the loss function does not improve for more than \code{patience} consecutive epochs, the learning rate will be reduced) (default: 10).}
-\item{\code{scheduler.factor}}{Learning rate decay factor; the new learning rate equals the original learning rate multiplied by \code{scheduler.factor} (default: 0.70).}
-\item{\code{plot.interval}}{Interval (in epochs) for plotting training diagnostics (default: 100).}
-\item{\code{device}}{Specifies the hardware device; can be \code{"CPU"} (default) or \code{"GPU"}. If the GPU is not available, it automatically falls back to CPU.}
-}}
+\item{vis}{Logical (default: \code{TRUE}). If enabled, display the Step 1
+measurement-model progress, Step 2 posterior/CEP preparation, and Step 3
+regression or distal-dependent-variable estimation progress. Each Step 2
+and Step 3 heading identifies the selected \code{X -> Z} or \code{Z -> Y} path. For
+\code{Z -> Y}, the output also gives the number and family of dependent-variable
+models, convergence and iteration information, and the selected
+standard-error or bootstrap progress.}
 }
 \value{
-An object of class \code{LCPA}, a named list containing:
-\describe{
-\item{\code{beta}}{Matrix of size \eqn{p \times L}. Coefficients for class membership multinomial logit model.
-Columns 1 to \eqn{L-1} are free parameters; column \eqn{L} (reference class) is constrained to \eqn{\boldsymbol{\beta}_L = \mathbf{0}}.}
-\item{\code{beta.se}}{Standard errors for \code{beta} (if Hessian is invertible). Same dimensions as \code{beta}.
-May contain \code{NA} if variance-covariance matrix is not positive definite.}
-\item{\code{beta.Z.sta}}{Z-statistics for testing null hypothesis that each beta coefficient equals zero.
-Computed as \code{beta / beta.se}. Same structure as \code{beta}.}
-\item{\code{beta.p.value.tail1}}{One-tailed p-values based on standard normal distribution: \eqn{P(Z < -|z|)}.
-Useful for directional hypotheses. Same structure as \code{beta}.}
-\item{\code{beta.p.value.tail2}}{Two-tailed p-values: \eqn{2 \times P(Z < -|z|)}.
-Standard test for non-zero effect. Same structure as \code{beta}.}
-\item{\code{P.Z.Xn}}{Matrix of size \eqn{N \times L} of posterior class probabilities
-\eqn{P(Z_n=l \mid \mathbf{X}_n)} for each individual \eqn{n} and class \eqn{l}.}
-\item{\code{P.Z}}{Vector of length \eqn{L} containing prior class proportions
-\eqn{P(Z = l)} estimated at Step 1.}
-\item{\code{Z}}{Vector of length \eqn{N} containing modal class assignments
-(MAP classifications) \eqn{\hat{z}_n} for each individual.}
-\item{\code{npar}}{Number of free parameters in the model (depends on covariates).}
-\item{\code{Log.Lik}}{Observed-data log-likelihood value at convergence.}
-\item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each iteration.}
-\item{\code{AIC}}{Akaike Information Criterion value.}
-\item{\code{BIC}}{Bayesian Information Criterion value.}
-\item{\code{iterations}}{Integer. Number of optimization iterations in Step 3.}
-\item{\code{coveraged}}{Logical. \code{TRUE} if optimization terminated before reaching \code{maxiter} (suggesting convergence).
-Note: This is a heuristic indicator; formal convergence diagnostics should check Hessian properties.}
-\item{\code{params}}{List. Step 1 model parameters (output from \code{LCA()} or \code{LPA()}).}
-\item{\code{call}}{The matched function call.}
-\item{\code{arguments}}{List of all input arguments passed to the function (useful for reproducibility).}
-}
+An object of class \code{"LCPA"}. The selected result is available from
+\code{analysis$XZ} or \code{analysis$ZY}; posterior probabilities, modal assignments,
+and CEP matrices use the same list structure as \code{\link[LCPA]{LTA}()}.
+For \code{type.analysis = "ZY"}, \code{dependent.variables$t1} contains one fitted
+model per observed dependent variable. A Gaussian model reports
+class/profile-specific \code{estimate}, \code{se}, \code{variance}, \code{variance.se}, their
+covariance matrices, omnibus Wald tests for both means and variances,
+group weight masses, observations, omitted values, iterations, and
+convergence. A categorical model reports class/profile-by-category
+\code{estimate} and \code{se} matrices, their covariance matrix, an omnibus Wald
+test of equality of the conditional category distributions, group weight
+masses, observations, omitted values, iterations, and convergence.
 }
 \description{
-Implements the three-step estimation method (Vermunt, 2010; Liang et al., 2023) for latent class/profile analysis
-with covariates, treating latent class membership as an observed variable with measurement error.
-This is mathematically equivalent to a latent transition analysis (\code{\link[LCPA]{LTA}}) with \code{times=1}.
+Fits one of two independent auxiliary-variable paths. \code{type.analysis = "XZ"}
+estimates the effect of observed covariates on latent class/profile membership.
+\code{type.analysis = "ZY"} estimates class/profile-specific distributions of
+external observed dependent variables; these variables are never treated as
+indicators.
 }
-\section{Methodology Overview}{
+\details{
+The notation distinguishes the Step 1 indicators from the Step 3 auxiliary
+variables. Write the indicator matrix as
+\eqn{\mathbf{X}=(X_{ni})_{N\times I}}, where
+\eqn{n=1,2,\ldots,N} indexes participants and
+\eqn{i=1,2,\ldots,I} indexes observed indicators. Participant \eqn{n}'s
+indicator vector is
+\eqn{\mathbf{X}_n=(X_{n1},\ldots,X_{nI})^\top}, and
+\eqn{Z_n\in\{1,2,\ldots,L\}}, with
+\eqn{l=1,2,\ldots,L} indexing latent classes/profiles.
 
-The three-step procedure follows the same principles as LTA but for a single time point:
+The covariate vector is
+\eqn{\boldsymbol{\zeta}_n=(1,\zeta_{n1},\ldots,\zeta_{nU})^\top}, where
+\eqn{u=1,2,\ldots,U} indexes the \eqn{U} observed covariates and the leading
+1 is the intercept. The dependent-variable vector is
+\eqn{\mathbf{Y}_n=(Y_{n1},\ldots,Y_{nV})^\top}, where
+\eqn{v=1,2,\ldots,V} indexes the \eqn{V} external observed dependent
+variables. Neither \eqn{\boldsymbol{\zeta}_n} nor \eqn{\mathbf{Y}_n} is part
+of the indicator vector \eqn{\mathbf{X}_n}.
+\code{"XZ"} is the function-interface label for the covariate-to-latent path;
+the formulas use \eqn{\boldsymbol{\zeta}} for its covariates because
+\eqn{\mathbf{X}} is reserved for the LCA/LPA indicator data.
+\code{type.analysis = "XZ"} uses \eqn{\boldsymbol{\zeta}_n} but not
+\eqn{\mathbf{Y}_n}; \code{type.analysis = "ZY"} uses \eqn{\mathbf{Y}_n} but not
+\eqn{\boldsymbol{\zeta}_n}. These are separate Step 3 analyses rather than a
+jointly estimated mediation model. Run both analyses when both the
+covariate-to-class and class-to-dependent-variable associations are required.
+For a ZY analysis, standardization applies to the continuous dependent variables
+in \eqn{\mathbf{Y}_n}, not to the Step 1 indicator matrix \eqn{\mathbf{X}}.
+Each Gaussian dependent variable must be transformed before model fitting to
+have observed sample mean 0 and sample standard deviation 1. Consequently,
+its class/profile-specific estimates and standard errors are expressed in
+observed-standard-deviation units. Categorical dependent variables retain
+their original category values.
+}
+\section{Methodology overview}{
 
-Step 1 — Unconditional Latent Class/Profile Model:
-Fit an unconditional LCA or LPA model (ignoring covariates). Obtain posterior class membership probabilities
-\eqn{P(Z_n=l \mid \mathbf{X}_n)} for each individual \eqn{n} and class \eqn{l} using Bayes' theorem.
+The cross-sectional three-step analysis proceeds as follows.
 
-Step 2 — Classification Error Probabilities (equal to \code{\link[LCPA]{get.CEP}}):
-Compute the \eqn{L \times L} CEP matrix where element \eqn{(k,l)} estimates:
-\deqn{
-  \text{CEP}(k,l) = P(\hat{Z}_n = l \mid Z_n = k)
-}
-using a non-parametric approximation:
-\deqn{
-  \widehat{\text{CEP}}(k,l) = \frac{ \sum_{n=1}^N \mathbb{I}(\hat{z}_n = l) \cdot P(Z_n=k \mid \mathbf{X}_n) }{ \sum_{n=1}^N P(Z_n=k \mid \mathbf{X}_n) }
-}
-where \eqn{\hat{z}_n} is the modal class assignment.
+Step 1 -- Unconditional measurement model. Fit an unconditional
+\code{\link[LCPA]{LCA}()} or \code{\link[LCPA]{LPA}()} to \code{response}. Let
+\eqn{\pi_l=P(Z_n=l)}. For LCA, the Step 1 observed-data log-likelihood is
+\deqn{\log\mathcal{L}_{\mathrm{LCA}}=
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+\prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)\right\}.}
+For LPA, it is
+\deqn{\log\mathcal{L}_{\mathrm{LPA}}=
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+\mathcal{N}(\mathbf{X}_n\mid\boldsymbol{\mu}_l,
+\boldsymbol{\Sigma}_l)\right\}.}
+These are the likelihoods defined in
+\code{\link[LCPA]{get.Log.Lik.LCA}()} and
+\code{\link[LCPA]{get.Log.Lik.LPA}()}. Bayes' theorem gives
+\deqn{\tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+\frac{\pi_l\prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)}
+{\sum_{h=1}^L\pi_h\prod_{i=1}^I
+P(X_{ni}=x_{ni}\mid Z_n=h)}}
+for LCA and
+\deqn{\tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+\frac{\pi_l\mathcal{N}(\mathbf{X}_n\mid\boldsymbol{\mu}_l,
+\boldsymbol{\Sigma}_l)}
+{\sum_{h=1}^L\pi_h\mathcal{N}(\mathbf{X}_n\mid
+\boldsymbol{\mu}_h,\boldsymbol{\Sigma}_h)}}
+for LPA.
+The modal assignment is
+\eqn{\widehat{Z}_n=\arg\max_l\tau_{nl}}. \code{method.model} selects the estimator of
+this measurement model, and \code{control.model} supplies its initialization,
+covariance-constraint, sorting, and replication settings. If
+\code{control.model$params} is supplied, those fixed measurement parameters are
+used to calculate \eqn{\tau_{nl}}.
 
-Step 3 — Class Membership Model with Measurement Error Correction:
-Estimate the multinomial logit model for class membership:
-\deqn{
-P(Z_n = l \mid \mathbf{X}_n) = \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_n)}{\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_n)}
-}
-where \eqn{\mathbf{X}_n = (1, W_{n1}, \dots, W_{nM})^\top} is the covariate vector for individual \eqn{n}
-(with intercept as first column), and \eqn{\boldsymbol{\beta}_l = (\beta_{l0}, \beta_{l1}, \dots, \beta_{lM})^\top}
-contains intercept and regression coefficients. Class \eqn{L} is the reference category
-(\eqn{\boldsymbol{\beta}_L = \mathbf{0}}).
+Step 2 -- Classification-error probabilities. The \eqn{L\times L} CEP matrix
+has rows indexed by latent class/profile \eqn{l} and columns indexed by modal
+assignment \eqn{k}, so
+\eqn{\mathrm{CEP}(l,k)=P(\widehat{Z}_n=k\mid Z_n=l)}. The modal assignment, posterior-weight
+estimator, matrix orientation, and pooling rules are defined in
+\code{\link[LCPA]{get.CEP}()}. With \code{CEP.error = FALSE}, \eqn{\mathrm{CEP}}
+is replaced
+by the identity matrix and Step 3 becomes an uncorrected modal-assignment
+analysis. The BCH and ML corrections for this classification error follow
+Bolck, Croon, and Hagenaars (2004) and Vermunt (2010).
 
-The observed-data likelihood integrates over latent classes:
-\deqn{
-\log \mathcal{L}(\boldsymbol{\beta}) =
-\sum_{n=1}^N \log \left[
-  \sum_{l=1}^L \text{CEP}(l, \hat{z}_n) \cdot P(Z_n=l \mid \mathbf{X}_n)
-\right]
-}
-Parameters \eqn{\boldsymbol{\beta}} are estimated via maximum likelihood using the BOBYQA algorithm.
+Step 3A -- Covariates predicting latent membership (XZ). With reference
+class \code{ref.class} denoted by \eqn{l_0}, the multinomial-logit model is
+\deqn{P(Z_n=l\mid\boldsymbol{\zeta}_n)=
+\frac{\exp(\boldsymbol{\zeta}_n^\top\boldsymbol{\beta}_l)}
+{1+\sum_{h\ne l_0}\exp(\boldsymbol{\zeta}_n^\top
+\boldsymbol{\beta}_h)},\quad l\ne l_0,}
+with \eqn{\boldsymbol{\beta}_{l_0}=0}. If \code{covariates = NULL},
+\eqn{\boldsymbol{\zeta}_n=1} and the model
+contains class-specific intercepts only. Vermunt's (2010) ML/CEP estimator
+maximizes
+\deqn{\ell_{\mathrm{ML}}(\boldsymbol{\beta})=\sum_{n=1}^N
+\log\left\{\sum_{l=1}^L\mathrm{CEP}(l,\widehat{Z}_n)
+P(Z_n=l\mid\boldsymbol{\zeta}_n)\right\}.}
+For each non-reference class/profile \eqn{l\ne l_0}, the first derivative of
+the observed-data log-likelihood with respect to the coefficient vector
+\eqn{\boldsymbol{\beta}_l} is
+\deqn{\frac{\partial\ell_{\mathrm{ML}}(\boldsymbol{\beta})}
+{\partial\boldsymbol{\beta}_l}=
+\sum_{n=1}^N\boldsymbol{\zeta}_n
+P(Z_n=l\mid\boldsymbol{\zeta}_n)
+\left\{\frac{\mathrm{CEP}(l,\widehat{Z}_n)}
+{\sum_{h=1}^L\mathrm{CEP}(h,\widehat{Z}_n)
+P(Z_n=h\mid\boldsymbol{\zeta}_n)}-1\right\}.}
+This derivative is an \eqn{(U+1)\times 1} vector: its entries correspond to
+the intercept and the \eqn{U} covariate coefficients in
+\eqn{\boldsymbol{\beta}_l}. At an interior maximum, the ML estimates jointly
+satisfy \eqn{\partial\ell_{\mathrm{ML}}/
+\partial\boldsymbol{\beta}_l=\mathbf{0}} for every \eqn{l\ne l_0}; \code{lower}
+and \code{upper} define the permitted coefficient range.
+
+Vermunt's (2010) BCH-XZ estimator instead solves, for class
+\eqn{l\ne l_0},
+\deqn{\sum_{n=1}^N\boldsymbol{\zeta}_n
+\left\{(\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+-P(Z_n=l\mid\boldsymbol{\zeta}_n)
+\sum_{h=1}^L(\mathrm{CEP}^{-1})_{\widehat{Z}_n,h}
+\right\}=\mathbf{0}.}
+This is a BCH estimating equation, not the derivative of the ML corrected
+likelihood above. Its \eqn{U+1} equations correspond to the intercept and
+covariate coefficients in \eqn{\boldsymbol{\beta}_l}.
+Thus ML and BCH estimate the same multinomial-logit parameters but use
+different corrections for modal-classification error.
+
+Step 3B -- Latent membership predicting dependent variables (ZY). The
+bias-adjusted ML three-step formulation follows Bakk, Tekle, and Vermunt
+(2013) and Nylund-Gibson, Grimm, and Masyn (2019), with the BCH
+secondary-model formulation described by Asparouhov and Muthén (2014b). The model
+estimates the conditional distribution of \eqn{Y_{nv}} given \eqn{Z_n=l}
+separately for \eqn{v=1,\ldots,V}. For \code{family = "gaussian"},
+\eqn{Y_{nv}\mid Z_n=l\sim N(\mu_{lv},\sigma_{lv}^2)}. For
+\code{family = "categorical"},
+\eqn{P(Y_{nv}=q\mid Z_n=l)=p_{lvq}}, where \eqn{q} indexes the observed
+categories of dependent variable \eqn{v}. No design matrix is required because the
+model contains a separate intercept for every class/profile.
+
+ML/CEP maximizes
+\deqn{\ell_{\mathrm{ML},v}=
+\begin{cases}
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L
+\mathrm{CEP}(l,\widehat{Z}_n)\pi_l
+\mathcal{N}(Y_{nv}\mid\mu_{lv},\sigma_{lv}^2)\right\},
+& \text{for a Gaussian dependent variable},\\
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L
+\mathrm{CEP}(l,\widehat{Z}_n)\pi_l
+\prod_q p_{lvq}^{\mathbb{1}(Y_{nv}=q)}\right\},
+& \text{for a categorical dependent variable},
+\end{cases}}
+The reported
+class-shift rate compares the Step 3 modal class with
+\eqn{\widehat{Z}_n} from Step 1.
+
+BCH Gaussian means solve
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+(Y_{nv}-\mu_{lv})=0,}
+and the corresponding Gaussian variances solve
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+\{(Y_{nv}-\mu_{lv})^2-\sigma_{lv}^2\}=0.}
+and categorical probabilities solve
+\deqn{\sum_{n=1}^N
+(\mathrm{CEP}^{-1})_{\widehat{Z}_n,l}
+\{\mathbb{1}(Y_{nv}=q)-p_{lvq}\}=0.}
 }
 
-\section{Important Implementation Details}{
+\section{Parameter estimation and uncertainty}{
 
-\itemize{
-\item Reference Class: Coefficients for the reference class (\code{ref.class}) are ALWAYS fixed to
-zero (\eqn{\boldsymbol{\beta}_{ref.class} = \mathbf{0}}) in the multinomial
-logit model.
-\item CEP Matrices: When \code{CEP.error = TRUE}, misclassification probabilities are estimated
-non-parametrically using Step 1 posterior probabilities. This corrects for
-classification uncertainty. See in \code{\link[LCPA]{get.CEP}}.
-\item Covariate Requirements: Covariate matrix MUST include an intercept column (all 1s) as the first
-column. Dimensions must be \eqn{N \times (M+1)}, where \eqn{M} represents
-the number of covariate and \eqn{1} is the Intercept.
-\item \strong{Optimization & Standard Errors}:
-\itemize{
-\item Step 3 uses BOBYQA algorithm (\code{nloptr::nloptr}) for stable optimization with box constraints.
-\item For \code{method.SE = "Obs"}: Standard errors derived from inverse Hessian (\code{\link[numDeriv]{hessian}}). If Hessian is singular:
-\itemize{
-\item Uses Moore-Penrose pseudoinverse (\code{\link[MASS]{ginv}})
-\item Sets negative variances to \code{NA}
+With \code{method.regression = "Analytic"}, ML-XZ, BCH-XZ, and ML-ZY use their
+exact scores or gradients within numerical optimization; BCH-ZY evaluates
+the closed-form weighted estimates shown above. \code{"Numeric"} evaluates the
+same likelihoods without supplied gradients or minimizes the squared BCH-ZY
+estimating equations numerically.
+
+For ML-XZ and BCH, the covariance has sandwich form
+\eqn{A^{-1}BA^{-\top}}. In ML-XZ, \eqn{A} is the observed information and
+\eqn{B} is formed from individual likelihood scores plus the influence
+function of the estimated CEP matrix. In BCH, \eqn{A} is the
+estimating-equation Jacobian and \eqn{B} is the empirical covariance of
+individual estimating-function contributions. For BCH-ZY Gaussian models,
+the mean and variance equations are stacked so their sandwich covariance
+includes the covariance between \eqn{\widehat{\mu}_{lv}} and
+\eqn{\widehat{\sigma}_{lv}^2}. ML-ZY uses the inverse Louis
+observed-information matrix; the variance standard error follows by applying
+the delta method to the fitted log-standard-deviation parameter.
+\code{method.SE = "Numeric"} evaluates the required
+Hessian or Jacobian numerically. \code{"Bootstrap"} resamples individuals, recalculates posterior
+assignments and CEP/BCH weights, and re-estimates Step 3 while holding the
+Step 1 measurement parameters fixed. For a Gaussian dependent variable,
+\code{estimate} and \code{se} report \eqn{\mu_{lv}} and its standard error, whereas
+\code{variance} and \code{variance.se} report \eqn{\sigma_{lv}^2} and its standard
+error. Separate omnibus Wald tests assess equality of the conditional means
+and equality of the conditional variances across classes/profiles. For a
+categorical dependent variable, \code{estimate} and \code{se} report every
+class/profile-specific category probability and its standard error; the
+omnibus Wald test assesses equality of the complete conditional category
+distributions.
 }
-\item For \code{method.SE = "Bootstrap"}: Each replicate independently re-estimates Steps 1-3.
-Failed bootstrap runs yield \code{NA} in SEs and derived statistics. Progress messages include
-replicate index and optimization diagnostics.
-}
-\item \strong{Computational Notes}:
-\itemize{
-\item Step 1 complexity increases with \eqn{L} and \eqn{I}.
-\item Bootstrap is computationally intensive: 100 replicates = 100 full re-estimations of Steps 1-3.
-}
-\item \strong{Bootstrap Reproducibility}: Always set a seed (e.g., \code{set.seed(123)}) before
-calling \code{LCPA()} when using \code{method.SE = "Bootstrap"}.
-Monitor convergence in bootstrap runs via progress messages.
-}
+
+\section{Method selection}{
+
+ML is the default for XZ because its likelihood directly represents the
+error-prone modal assignment through \eqn{\mathrm{CEP}}. BCH is the default for ZY
+because its weights are calculated without using \eqn{\mathbf{Y}}, so the Step 1
+class/profile definition is not changed by the dependent variable. ML-ZY
+provides a corrected-likelihood sensitivity analysis and reports class
+shifts. Use a dedicated DCAT procedure when the DCAT estimand is required.
 }
 
 \examples{
+\donttest{
 library(LCPA)
 
-set.seed(123)
-N <- 2000  # Sample size
-L <- 3    # Number of latent classes
-I <- 6    # Number of indicators
+set.seed(1245)
+N <- 2000
+L <- 3
+I <- 6
 
-# Create covariates (intercept + 2 covariates + 1 interaction)
- Intercept = rep(1, N)
- X1 <- rnorm(N)
- X2 <- rbinom(N, 1, 0.5)
- X1.X2 <- X1 * X2
-covariate <- cbind(Intercept, X1, X2, X1.X2)
+# Two observed covariates plus the required intercept
+covariates <- cbind(
+  Intercept = 1,
+  Zeta.1 = as.numeric(scale(rnorm(N))),
+  Zeta.2 = rbinom(N, 1, 0.5)
+)
+beta <- matrix(c(
+   0.70,  0.30, 0,
+   0.40, -0.20, 0,
+  -0.30,  0.30, 0
+), ncol = L, byrow = TRUE)
+rownames(beta) <- colnames(covariates)
 
-# Simulate data for LPA
-sim_data <- sim.LTA(
+data.LCPA <- sim.LTA(
   N = N, I = I, L = L, times = 1, type = "LPA",
-  covariates = list(covariate), is.sort=TRUE,
-  beta = matrix(c(
-   -0.2, 0.0, -0.1,  ## fix reference class to class 2
-    0.2, 0.0, -0.3,
-    0.8, 0.0, -0.6,
-   -0.1, 0.0,  0.3
-  ), ncol = L, byrow = TRUE)
+  constraint = "VE", mean.range = c(-3, 3),
+  covs.range = c(0.4, 0.8),
+  covariates = list(covariates), ref.class = 3,
+  beta = beta, is.sort = TRUE
 )
-response <- sim_data$responses[[1]]
-
-## It is strongly recommended to perform the following
-## standardization to obtain more stable results when LPA.
-## Standardization is not performed here in order to
-## compare estimated values with true values.
-# response <- normalize(response)
-
-# Fit cross-sectional LPA with covariates
-## fix reference class to class 2
-# need Mplus
-\dontrun{
-fit <- LCPA(
-  response = response,
-  L = L, ref.class = 2,
-  type = "LPA", is.sort=TRUE,
-  covariate = covariate,
-  method.SE = "Obs",
-  CEP.error = TRUE,
-  method = "Mplus",
-  control.Mplus = list(files.path = ""),
-  vis = TRUE
+control.model <- list(
+  constraint = "VE", is.sort = TRUE,
+  starts = 10, maxiter.warmup = 10, nrep = 3
 )
-print(fit)
+
+# Covariates predicting latent profiles: XZ analysis
+fit.LCPA.XZ <- LCPA(
+  response = data.LCPA$responses[[1]], L = L,
+  type.analysis = "XZ", type.model = "LPA",
+  covariates = covariates, ref.class = 3,
+  method.model = "EM", control.model = control.model,
+  method.3step = "ML", method.regression = "Analytic",
+  method.SE = "Analytic", maxiter = 500, vis = TRUE
+)
+round(cbind(
+  "True Class 1" = beta[, 1],
+  "Estimate Class 1" = fit.LCPA.XZ$beta[, 1],
+  "True Class 2" = beta[, 2],
+  "Estimate Class 2" = fit.LCPA.XZ$beta[, 2]
+), 3)
+
+# Latent profiles predicting two dependent variables: ZY analysis
+true.mean <- rbind(
+  "Class 1" = c(Depression = 8, Anxiety = 12),
+  "Class 2" = c(Depression = 10, Anxiety = 10),
+  "Class 3" = c(Depression = 13, Anxiety = 8)
+)
+dependent.variables <- scale(
+  true.mean[data.LCPA$Zs[[1]], ] +
+    matrix(rnorm(N * 2, sd = 1.5), N, 2)
+)
+true.mean.standardized <- sweep(
+  sweep(true.mean, 2, attr(dependent.variables, "scaled:center"), "-"),
+  2, attr(dependent.variables, "scaled:scale"), "/"
+)
+true.variance.standardized <-
+  (1.5 / attr(dependent.variables, "scaled:scale"))^2
+dependent.variables <- as.data.frame(dependent.variables)
+fit.LCPA.ZY <- LCPA(
+  response = data.LCPA$responses[[1]], L = L,
+  type.analysis = "ZY", type.model = "LPA",
+  dependent.variables = dependent.variables,
+  family = "gaussian",
+  method.model = "EM", control.model = control.model,
+  method.3step = "BCH", method.regression = "Analytic",
+  method.SE = "Analytic", vis = TRUE
+)
+round(cbind(
+  True.Depression = true.mean.standardized[, "Depression"],
+  Estimate.Depression =
+    fit.LCPA.ZY$dependent.variables$t1$Depression$estimate,
+  True.Anxiety = true.mean.standardized[, "Anxiety"],
+  Estimate.Anxiety =
+    fit.LCPA.ZY$dependent.variables$t1$Anxiety$estimate
+), 3)
+round(cbind(
+  True.Variance.Depression = rep(
+    true.variance.standardized["Depression"], L
+  ),
+  Estimate.Variance.Depression =
+    fit.LCPA.ZY$dependent.variables$t1$Depression$variance,
+  True.Variance.Anxiety = rep(
+    true.variance.standardized["Anxiety"], L
+  ),
+  Estimate.Variance.Anxiety =
+    fit.LCPA.ZY$dependent.variables$t1$Anxiety$variance
+), 3)
 }
 
 }
 \references{
-Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved three-step approaches. Political Analysis, 18(4), 450–469. https://doi.org/10.1093/pan/mpq025
+Asparouhov, T., & Muthén, B. (2014a). Auxiliary variables in mixture
+modeling: Three-step approaches using Mplus. \emph{Structural Equation Modeling:
+A Multidisciplinary Journal, 21}(3), 329--341.
+\doi{10.1080/10705511.2014.915181}
 
-Liang, Q., la Torre, J. d., & Law, N. (2023). Latent Transition Cognitive Diagnosis Model With Covariates: A Three-Step Approach. Journal of Educational and Behavioral Statistics, 48(6), 690-718. https://doi.org/10.3102/10769986231163320
+Asparouhov, T., & Muthén, B. (2014b). \emph{Auxiliary variables in mixture
+modeling: Using the BCH method in Mplus to estimate a distal outcome model
+and an arbitrary secondary model} (Mplus Web Note No. 21, Version 2).
+\url{https://www.statmodel.com/examples/webnotes/webnote21.pdf}
+
+Bakk, Z., Tekle, F. B., & Vermunt, J. K. (2013). Estimating the association
+between latent class membership and external variables using bias-adjusted
+three-step approaches. \emph{Sociological Methodology, 43}(1), 272--311.
+\doi{10.1177/0081175012470644}
+
+Bolck, A., Croon, M., & Hagenaars, J. (2004). Estimating latent structure
+models with categorical variables: One-step versus three-step estimators.
+\emph{Political Analysis, 12}(1), 3--27.
+\doi{10.1093/pan/mph001}
+
+Nylund-Gibson, K., Grimm, R. P., & Masyn, K. E. (2019). Prediction from
+latent classes: A demonstration of different approaches to include distal
+outcomes in mixture models. \emph{Structural Equation Modeling: A
+Multidisciplinary Journal, 26}(6), 967--985.
+\doi{10.1080/10705511.2019.1590146}
+
+Vermunt, J. K. (2010). Latent class modeling with covariates: Two improved
+three-step approaches. \emph{Political Analysis, 18}(4), 450--469.
+\doi{10.1093/pan/mpq025}
+}
+\seealso{
+\code{\link[LCPA]{LCA}()}, \code{\link[LCPA]{LPA}()}, \code{\link[LCPA]{LTA}()}, \code{\link[LCPA]{get.CEP}()}
 }

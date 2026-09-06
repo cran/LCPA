@@ -16,7 +16,7 @@
 #'   - \eqn{\text{skew} = 0}: Symmetric distribution (default)
 #' @param positive Logical. If \code{TRUE}, restricts partial correlations to \eqn{(0,1)} and enforces positive definiteness. Default is \code{FALSE}.
 #' @param permute Logical. If \code{TRUE}, applies a random permutation to rows/columns to ensure exchangeability (invariance to variable ordering). Default is \code{TRUE}.
-#' @param maxiter Integer. Maximum number of generation attempts before numerical adjustment when \code{positive = TRUE}. Default is 10.
+#' @param maxattempts Integer. Maximum number of matrix draws when \code{positive = TRUE}. Default is 10.
 #'
 #' @return An \eqn{I \times I} positive definite correlation matrix with unit diagonal.
 #'
@@ -51,21 +51,19 @@
 #' }
 #' This implements the dynamic programming approach from Joe & Kurowicka (2026, Section 2.1).
 #'
-#' 3. Positive definiteness enforcement (when \code{positive = TRUE}):
-#' \itemize{
-#'   \item Attempt up to \code{maxiter} generations
-#'   \item On failure, project to nearest positive definite correlation matrix using \code{\link[Matrix]{nearPD}} with \code{corr = TRUE}
-#'   \item Final matrix has minimum eigenvalue > 1e-8
-#' }
+#' 3. Positive definiteness (when \code{positive = TRUE}):
+#' The returned matrix is positive definite.
 #'
 #' 4. Exchangeability (optional):
 #' If \code{permute = TRUE}, rows/columns are randomly permuted before returning the matrix.
 #'
-#' @note When \code{positive = TRUE}, the function guarantees positive definiteness either through direct generation
-#' (with retries) or numerical projection. The theoretical guarantee \eqn{\eta > (I-2)/2} is recommended for high dimensions.
+#' @note The theoretical condition \eqn{\eta > (I-2)/2} is recommended for
+#'   positive-definite matrices in high dimensions.
 #'
 #' @references
-#' Joe, H., & Kurowicka, D. (2026). Random correlation matrices generated via partial correlation C-vines. Journal of Multivariate Analysis, 211, 105519. https://doi.org/10.1016/j.jmva.2025.105519
+#' Joe, H., & Kurowicka, D. (2026). Random correlation matrices generated via
+#' partial correlation C-vines. *Journal of Multivariate Analysis, 211*, 105519.
+#' \doi{10.1016/j.jmva.2025.105519}
 #'
 #' @examples
 #' # Default 3x3 correlation matrix
@@ -79,7 +77,7 @@
 #'
 #' # Positive partial correlations (enforced positive definiteness)
 #' R <- sim.correlation(6, positive = TRUE)
-#' min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)  # > 1e-8
+#' min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)  # > 0
 #'
 #' # High-dimensional case (I=20) with theoretical guarantee
 #' R <- sim.correlation(20, eta = 10)  # eta=10 > (20-2)/2=9
@@ -92,7 +90,7 @@ sim.correlation <- function(I,
                             skew = 0,
                             positive = FALSE,
                             permute = TRUE,
-                            maxiter = 10) {
+                            maxattempts = 10) {
 
   # Handle trivial case immediately
   if (I < 2) return(matrix(1, 1, 1))
@@ -100,7 +98,7 @@ sim.correlation <- function(I,
   # Validate input parameters
   if (eta <= 0) stop("eta must be > 0")
   if (abs(skew) >= 1) stop("skew must satisfy -1 < skew < 1")
-  if (maxiter < 1) stop("maxiter must be at least 1")
+  if (maxattempts < 1) stop("maxattempts must be at least 1")
 
   # Determine if positive definiteness enforcement is needed
   enforce_pd <- positive
@@ -109,7 +107,7 @@ sim.correlation <- function(I,
   R_final <- NULL
 
   # Attempt matrix generation with retries for positive definite case
-  while (attempt <= maxiter && !success) {
+  while (attempt <= maxattempts && !success) {
     # Initialize matrices
     R_current <- diag(I)  # Working correlation matrix
     partial_cor <- matrix(0, nrow = I, ncol = I)  # Stores partial correlations rho_{k,j}
@@ -175,8 +173,7 @@ sim.correlation <- function(I,
 
     # Step 3: Check positive definiteness if required
     if (enforce_pd) {
-      min_eigenval <- min(eigen(R_current, symmetric = TRUE, only.values = TRUE)$values)
-      if (min_eigenval > 1e-8) {
+      if (is.positive.definite(R_current)) {
         R_final <- R_current
         success <- TRUE
       }
@@ -194,7 +191,7 @@ sim.correlation <- function(I,
            "Install with: install.packages('Matrix')")
     }
 
-    warning(sprintf("Failed to generate PD matrix after %d attempts. ", maxiter),
+    warning(sprintf("Failed to generate PD matrix after %d attempts. ", maxattempts),
             "Applying numerical projection via Matrix::nearPD(). ",
             "Result may have small numerical deviations.")
 
@@ -203,19 +200,17 @@ sim.correlation <- function(I,
                                 corr = TRUE,
                                 keepDiag = TRUE,
                                 doDykstra = TRUE,
-                                conv.tol = 1e-7,
+                                eig.tol = .Machine$double.eps^(2 / 3),
+                                conv.tol = sqrt(.Machine$double.eps),
+                                posd.tol = sqrt(.Machine$double.eps),
                                 maxit = 1000)
     R_final <- as.matrix(pd_result$mat)
 
     # Re-enforce exact unit diagonal after projection
     diag(R_final) <- 1
 
-    # Final eigenvalue check
-    min_eig <- min(eigen(R_final, symmetric = TRUE, only.values = TRUE)$values)
-    if (min_eig <= 1e-8) {
-      warning(sprintf("Numerical adjustment yielded min eigenvalue = %.3e. ",
-                      min_eig),
-              "Consider increasing eta or maxiter for strict PD guarantee.")
+    if (!is.positive.definite(R_final)) {
+      stop("Matrix::nearPD failed to return a positive-definite correlation matrix")
     }
   }
 

@@ -11,8 +11,8 @@
 #' Note: Despite the name "logit", this function actually computes the *inverse logit* (i.e., the
 #' logistic function). The true logit function is the inverse: \eqn{\log(p / (1 - p))}.
 #' However, in many applied contexts—especially in software—the term "logit" is sometimes
-#' informally used to refer to the sigmoid. For clarity, this implementation follows the
-#' conventional definition of the logistic/sigmoid function.
+#' informally used to refer to the sigmoid. This function returns the
+#' logistic/sigmoid transformation \eqn{1/(1+\exp(-x))}.
 #'
 #' @param x A numeric vector, matrix, or array. Accepts any real number, including \code{Inf}
 #'   and \code{-Inf}. Missing values (\code{NA}) are preserved.

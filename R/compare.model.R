@@ -1,31 +1,36 @@
 #' @title Model Comparison Tool
 #'
 #' @description
-#' Compares two nested latent class/profile models using multiple fit indices, likelihood ratio tests, and classification metrics.
+#' Compares two latent class/profile models using multiple fit indices,
+#' likelihood ratio tests, and classification metrics. The models may have any
+#' class counts, including equal class counts.
 #'
 #' @param object1 An object of class \code{\link[LCPA]{LCA}} or \code{\link[LCPA]{LPA}}, representing
 #'                the first latent class/profile model.
 #' @param object2 An object of class \code{\link[LCPA]{LCA}} or \code{\link[LCPA]{LPA}}, representing
 #'                the second latent class/profile model. Must be of the same type as \code{object1}.
-#' @param n.Bootstrap Integer specifying the number of bootstrap replications for the parametric
+#' @param nrep.bootstrap Integer specifying the number of bootstrap replications for the parametric
 #'                    bootstrap likelihood ratio test (BLRT). Default is \code{0} (no bootstrap test performed).
 #'
 #' @return An object of class \code{compare.model} containing:
 #' \describe{
+#'   \item{\code{N}}{Named vector of sample sizes for the ordered models.}
+#'   \item{\code{I}}{Named vector of indicator counts for the ordered models.}
+#'   \item{\code{L}}{Named vector of latent class/profile counts for the ordered models.}
 #'   \item{\code{npar}}{Named vector with number of free parameters for each model}
 #'   \item{\code{entropy}}{Named vector with entropy values (classification accuracy measure) for each model}
 #'   \item{\code{AvePP}}{List containing average posterior probabilities per latent class/profile}
 #'   \item{\code{fit.index}}{List of \code{\link[LCPA]{get.fit.index}} objects for both models}
 #'   \item{\code{BF}}{Bayes Factor for model comparison (based on SIC)}
 #'   \item{\code{LRT.obj}}{Likelihood ratio test (LRT) results}
-#'   \item{\code{LRT.VLMR.obj}}{Vuong-Lo-Mendell-Rubin (VLMR) adjusted LRT results}
-#'   \item{\code{LRT.Bootstrap.obj}}{Bootstrap LRT results (if \code{n.Bootstrap > 0})}
+#'   \item{\code{LRT.VLMR.obj}}{Mplus TECH11 VLMR and adjusted LMR test results}
+#'   \item{\code{LRT.Bootstrap.obj}}{Bootstrap LRT results (if \code{nrep.bootstrap > 0})}
 #'   \item{\code{call}}{The matched function call}
 #'   \item{\code{arguments}}{List containing the original arguments passed to the function}
 #' }
 #'
 #' @details
-#' This function performs comprehensive model comparison between two nested LCA/LPA models. Key features include:
+#' This function performs comprehensive model comparison between two LCA/LPA models. Key features include:
 #' \itemize{
 #'   \item Automatically orders models by parameter count (smaller model first)
 #'   \item Computes multiple fit indices via \code{\link[LCPA]{get.fit.index}}
@@ -33,17 +38,21 @@
 #'   \item Performs three types of likelihood ratio tests:
 #'     \itemize{
 #'       \item Standard LRT, see \code{\link[LCPA]{LRT.test}}
-#'       \item VLMR adjusted LRT, see \code{\link[LCPA]{LRT.test.VLMR}}
+#'       \item VLMR and adjusted LMR tests, see \code{\link[LCPA]{LRT.test.VLMR}}
 #'       \item Parametric bootstrap LRT (computationally intensive but robust), see \code{\link[LCPA]{LRT.test.Bootstrap}}
 #'     }
-#'   \item Computes Bayes Factor using Sample-Size Adjusted BIC (SIC)
+#'   \item Computes a Bayes factor approximation from the difference in
+#'     \code{SIC = -0.5 * BIC}
 #' }
 #'
-#' \strong{Important Requirements}:
+#' Important requirements:
 #' \itemize{
 #'   \item Both models must be of the same type (\code{LCA} or \code{LPA})
-#'   \item Models must be nested (one model is a constrained version of the other)
-#'   \item \code{n.Bootstrap > 0} requires significant computational resources
+#'   \item The three likelihood-ratio procedures accept any pair of class
+#'     counts, including equal class counts. The VLMR component requires models
+#'     fitted to the same observations in the same order; LPA models must also
+#'     use the same covariance constraint.
+#'   \item \code{nrep.bootstrap > 0} requires significant computational resources
 #' }
 #'
 #' @examples
@@ -54,7 +63,7 @@
 #' response <- data.obj$response
 #'
 #' # need Mplus
-#' \dontrun{
+#' \donttest{
 #' # Compare 3-class vs 4-class LPA models
 #' object1 <- LPA(response, L = 3, method = "Mplus", constraint = "V0")
 #' object2 <- LPA(response, L = 4, method = "Mplus", constraint = "V0")
@@ -69,7 +78,7 @@
 #' \code{\link[LCPA]{extract}}, \code{\link[LCPA]{LRT.test}}, \code{\link[LCPA]{LRT.test.VLMR}}
 #'
 #' @export
-compare.model <- function(object1, object2, n.Bootstrap=0){
+compare.model <- function(object1, object2, nrep.bootstrap=0){
 
   if (!identical(class(object1), class(object2))) {
     stop("Model classes must be identical. Both objects must be either 'LCA' or 'LPA' type.")
@@ -82,7 +91,7 @@ compare.model <- function(object1, object2, n.Bootstrap=0){
 
   call <- match.call()
 
-  model.type <- class(object1)
+  type <- class(object1)
   npar1 <- object1$npar
   npar2 <- object2$npar
 
@@ -111,8 +120,8 @@ compare.model <- function(object1, object2, n.Bootstrap=0){
 
   LRT.obj <- LRT.test(object1, object2)
   LRT.VLMR.obj <- LRT.test.VLMR(object1, object2)
-  if(n.Bootstrap){
-    LRT.Bootstrap.obj <- LRT.test.Bootstrap(object1, object2, n.Bootstrap)
+  if(nrep.bootstrap){
+    LRT.Bootstrap.obj <- LRT.test.Bootstrap(object1, object2, nrep.bootstrap)
   }else{
     LRT.Bootstrap.obj <- NULL
   }
@@ -129,7 +138,7 @@ compare.model <- function(object1, object2, n.Bootstrap=0){
               LRT.Bootstrap.obj=LRT.Bootstrap.obj)
 
   res$call <- call
-  res$arguments = list( object1=object1, object2=object2, n.Bootstrap=n.Bootstrap)
+  res$arguments = list( object1=object1, object2=object2, nrep.bootstrap=nrep.bootstrap)
 
   class(res) <- "compare.model"
 

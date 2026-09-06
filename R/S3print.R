@@ -14,18 +14,24 @@
 #'       \code{\link[LCPA]{sim.LTA}}
 #'     \item Fit/comparison objects: \code{\link[LCPA]{get.fit.index}}, \code{\link[LCPA]{compare.model}}
 #'     \item Standard error objects: \code{\link[LCPA]{get.SE}}
-#'     \item Summary objects: \code{summary.LCA}, \code{summary.LPA}, \code{summary.LCPA},
-#'       \code{summary.LTA}, \code{summary.sim.LCA}, \code{summary.sim.LPA}, \code{summary.sim.LTA},
-#'       \code{summary.fit.index}, \code{summary.compare.model}, \code{summary.SE}
+#'     \item Summary objects: \code{\link[LCPA]{summary.LCA}},
+#'       \code{\link[LCPA]{summary.LPA}}, \code{\link[LCPA]{summary.LCPA}},
+#'       \code{\link[LCPA]{summary.LTA}}, \code{\link[LCPA]{summary.sim.LCA}},
+#'       \code{\link[LCPA]{summary.sim.LPA}}, \code{\link[LCPA]{summary.sim.LTA}},
+#'       \code{\link[LCPA]{summary.fit.index}},
+#'       \code{\link[LCPA]{summary.compare.model}}, and
+#'       \code{\link[LCPA]{summary.SE}}
 #'   }
-#' @param ... Additional arguments passed to methods (currently ignored in most cases).
 #' @param digits Number of decimal places for numeric output (default: varies by method, often 4).
-#'   Used by: \code{print.SE}, \code{print.summary.fit.index}, \code{print.summary.sim.LCA/LPA/LTA},
-#'   \code{print.summary.SE}.
+#'   Used by \code{\link[LCPA]{print.SE}}, \code{\link[LCPA]{print.summary.fit.index}},
+#'   \code{\link[LCPA]{print.summary.sim.LCA}}, \code{\link[LCPA]{print.summary.sim.LPA}},
+#'   \code{\link[LCPA]{print.summary.sim.LTA}}, and \code{\link[LCPA]{print.summary.SE}}.
 #' @param I.max Maximum number of variables/items to display before truncation (default: varies, e.g., 5).
-#'   Used by: \code{print.SE}, \code{print.summary.sim.LCA/LPA/LTA}.
+#'   Used by \code{\link[LCPA]{print.SE}}, \code{\link[LCPA]{print.summary.sim.LCA}},
+#'   \code{\link[LCPA]{print.summary.sim.LPA}}, and \code{\link[LCPA]{print.summary.sim.LTA}}.
 #' @param L.max Maximum number of latent classes/profiles to display before truncation (default: varies, e.g., 3).
-#'   Used by: \code{print.SE}, \code{print.summary.sim.LTA}.
+#'   Used by \code{\link[LCPA]{print.SE}} and \code{\link[LCPA]{print.summary.sim.LTA}}.
+#' @param ... Reserved for S3 method compatibility; no additional arguments are used.
 #'
 #' @return Invisibly returns the input object \code{x}. No data is modified.
 #'
@@ -33,21 +39,25 @@
 #' Each method produces a structured, human-readable summary optimized for its object type:
 #'
 #' \describe{
-#'   \item{\strong{Model Objects (\code{LCA}/\code{LPA}/\code{LCPA}/\code{LTA})}}{
-#'     Invokes \code{summary()} internally and prints comprehensive output including:
+#'   \item{Model objects (\code{LCA}/\code{LPA}/\code{LCPA}/\code{LTA})}{
+#'     Invokes \code{\link[base]{summary}()} internally and prints comprehensive output including:
 #'     \itemize{
 #'       \item Model call and configuration (method, constraints, reference class)
 #'       \item Data characteristics (N, I, time points, distribution)
-#'       \item Fit statistics (LogLik, AIC, BIC, entropy, npar)
+#'       \item Likelihood fit statistics for models for which they are defined
 #'       \item Class/profile prior probabilities and frequencies
 #'       \item Item-response probabilities (\code{LCA}) or profile means (\code{LPA})
-#'       \item For \code{LCPA}/\code{LTA}: regression coefficients with significance markers and 95% CIs
+#'       \item For XZ: regression coefficients with significance markers and 95% CIs
+#'       \item For Gaussian ZY: conditional means and variances with standard
+#'         errors, 95% CIs, and omnibus equality tests
+#'       \item For categorical ZY: conditional category probabilities with
+#'         standard errors, 95% CIs, and an omnibus distributional test
 #'       \item Convergence diagnostics (iterations, tolerance, hardware)
 #'       \item Replication details (if \code{nrep > 1})
 #'     }
 #'   }
 #'
-#'   \item{\strong{Simulation Objects (\code{sim.LCA}/\code{sim.LPA}/\code{sim.LTA})}}{
+#'   \item{Simulation objects (\code{sim.LCA}/\code{sim.LPA}/\code{sim.LTA})}{
 #'     Displays simulation design and true parameter structure:
 #'     \itemize{
 #'       \item Configuration (N, I, L, times, constraint, distribution)
@@ -59,17 +69,17 @@
 #'     Output is truncated for high-dimensional structures using \code{I.max} and \code{L.max}.
 #'   }
 #'
-#'   \item{\strong{Fit Index Objects (\code{fit.index})}}{
+#'   \item{Fit index objects (\code{\link[LCPA:get.fit.index]{fit.index}})}{
 #'     Presents a clean table of model fit criteria:
 #'     \itemize{
 #'       \item Header with dimensions (N, I, L, npar)
 #'       \item Formatted table: AIC, BIC, SABIC, CAIC, AWE, -2LL, SIC
-#'       \item Interpretation note: “Lower values preferred for ICs”
+#'       \item Interpretation note: lower values are preferred for information criteria
 #'       \item Values rounded to \code{digits} decimal places
 #'     }
 #'   }
 #'
-#'   \item{\strong{Model Comparison Objects (\code{compare.model})}}{
+#'   \item{Model comparison objects (\code{compare.model})}{
 #'     Compares two nested models with statistical tests:
 #'     \itemize{
 #'       \item Comparative fit table (npar, LogLik, AIC, BIC, entropy)
@@ -80,18 +90,19 @@
 #'     }
 #'   }
 #'
-#'   \item{\strong{Standard Error Objects (\code{SE})}}{
+#'   \item{Standard error objects (\code{\link[LCPA:get.SE]{SE}})}{
 #'     Displays uncertainty estimates for model parameters:
 #'     \itemize{
 #'       \item Class probability SEs (always fully shown)
 #'       \item Profile means SEs (\code{LPA}) or item-response SEs (\code{LCA}), truncated by \code{L.max}/\code{I.max}
-#'       \item Covariance SE summary (non-zero count only; full access via \code{extract()})
-#'       \item Diagnostics: Bootstrap completion % or Hessian condition number with stability warnings
+#'       \item Covariance SE summary (non-zero count only; full access via \code{\link[LCPA]{extract}()})
+#'       \item Method-specific diagnostics
 #'     }
 #'   }
 #'
-#'   \item{\strong{Summary Objects}}{
-#'     All \code{summary.*} methods are called internally by their corresponding \code{print.*} methods.
+#'   \item{Summary objects}{
+#'     All summary methods are called internally by their corresponding
+#'     \code{\link[LCPA]{print}} methods.
 #'     They pre-compute and structure output for consistent formatting. Direct calls are also supported.
 #'   }
 #' }
@@ -101,23 +112,22 @@
 #'   \item Numeric values are typically rounded to 4 decimal places unless overridden by \code{digits}.
 #'   \item Large matrices (e.g., item parameters, transition coefficients) are truncated with clear messages.
 #'   \item Significance markers: \code{***} (<0.001), \code{**} (<0.01), \code{*} (<0.05), \code{.} (<0.1).
-#'   \item 95% confidence intervals computed as: Estimate ± 1.96 × Std_Error.
+#'   \item 95% confidence intervals computed as: Estimate ± 1.96 × Std.Error.
 #'   \item Reference classes (for multinomial models) are explicitly stated.
-#'   \item Warnings appear for unstable SEs (high condition number) or incomplete Bootstrap runs.
 #' }
 #'
 #' @name print
 NULL
 
 #' @describeIn print Print method for \code{LCA} objects
-#' @export
+#' @exportS3Method print LCA
 print.LCA <- function(x, ...) {
   print.summary.LCA(summary(x))
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.LCA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.LCA}} objects
+#' @exportS3Method print summary.LCA
 print.summary.LCA <- function(x, ...) {
   digits <- x$digits
 
@@ -133,14 +143,14 @@ print.summary.LCA <- function(x, ...) {
 
   # Model Configuration
   cat("\nLatent Class Analysis Model\n")
-  cat(paste("Latent Classes:", x$model.config$latent_classes, "\n"))
+  cat(paste("Latent Classes:", x$model.config$L, "\n"))
   cat(paste("Estimation Method:", x$model.config$method, "\n"))
 
   # Data Characteristics
   cat("\nData Characteristics:\n")
   cat(sprintf("  Sample Size: %d observations\n", x$data.info$N))
   cat(sprintf("  Items: %d\n", x$data.info$I))
-  if (x$data.info$uniform_categories) {
+  if (x$data.info$categories.uniform) {
     cat(sprintf("  Response Categories per Item: %d (uniform)\n", x$data.info$poly.value[1]))
   } else {
     cat("  Response Categories per Item:\n")
@@ -181,20 +191,23 @@ print.summary.LCA <- function(x, ...) {
     conv <- x$convergence
     cat(sprintf("  Algorithm: %s\n", conv$algorithm))
     if(!is.null(conv$iterations)){
-      cat(sprintf("  Converged after %d iterations\n", conv$iterations))
+      cat(sprintf("  Iterations: %s\n", paste(conv$iterations, collapse = ", ")))
     }
+    if(!is.null(conv$initialization)) cat(sprintf("  Initialization: %s\n", conv$initialization))
+    if(!is.null(conv$criterion)) cat(sprintf("  Selection criterion: %s\n", conv$criterion))
     if(!is.null(conv$note)){
       cat(sprintf("  Note: %s\n", conv$note))
     }
-    if (!is.null(conv$tolerance)) {
-      cat(sprintf("  Convergence tolerance: %.1e\n", conv$tolerance))
+    if (!is.null(conv$tol)) {
+      cat(sprintf("  Convergence tolerance: %s\n",
+                  paste(format(conv$tol, scientific = TRUE), collapse = ", ")))
     }
-    if (!is.null(conv$early_stop_threshold)) {
-      cat(sprintf("  Early stopping threshold: %d iterations\n", conv$early_stop_threshold))
+    if (!is.null(conv$patience)) {
+      cat(sprintf("  Early stopping patience: %d iterations\n", conv$patience))
     }
-    if(!is.null(conv$loglik_change)){
+    if(!is.null(conv$Log.Lik.change)){
       cat(sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
-                  conv$loglik_initial, conv$loglik_final, conv$loglik_change))
+                  conv$Log.Lik.initial, conv$Log.Lik.final, conv$Log.Lik.change))
     }
     if(!is.null(conv$hardware)){
       cat(sprintf("  The LCA is run on %s\n", conv$hardware))
@@ -212,14 +225,14 @@ print.summary.LCA <- function(x, ...) {
 }
 
 #' @describeIn print Print method for \code{LPA} objects
-#' @export
+#' @exportS3Method print LPA
 print.LPA <- function(x, ...) {
   print.summary.LPA(summary(x))
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.LPA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.LPA}} objects
+#' @exportS3Method print summary.LPA
 print.summary.LPA <- function(x, ...) {
   digits <- x$digits
 
@@ -235,8 +248,8 @@ print.summary.LPA <- function(x, ...) {
 
   # Model Configuration
   cat("\nModel Configuration:\n")
-  cat(paste("  Latent Profiles:", x$model.config$latent_profiles, "\n"))
-  cat(paste("  Structure:\n", x$model.config$cov_structure, "\n"))
+  cat(paste("  Latent Profiles:", x$model.config$L, "\n"))
+  cat(paste("  Structure:\n", x$model.config$constraint.description, "\n"))
   cat(paste("  Estimation Method:", x$model.config$method, "\n"))
 
   # Data Characteristics
@@ -278,16 +291,21 @@ print.summary.LPA <- function(x, ...) {
       cat(sprintf("  Note: %s\n", conv$note))
     }
     if (!is.null(conv$iterations)) {
-      cat(sprintf("  Converged after %d iterations\n", conv$iterations))
-      if (!is.null(conv$tolerance)) {
-        cat(sprintf("  Convergence tolerance: %.1e\n", conv$tolerance))
+      cat(sprintf("  Iterations: %s\n", paste(conv$iterations, collapse = ", ")))
+      if (!is.null(conv$tol)) {
+        cat(sprintf("  Convergence tolerance: %s\n",
+                    paste(format(conv$tol, scientific = TRUE), collapse = ", ")))
       }
-      if (!is.null(conv$early_stop_threshold)) {
-        cat(sprintf("  Early stopping threshold: %d iterations\n", conv$early_stop_threshold))
+      if (!is.null(conv$patience)) {
+        cat(sprintf("  Early stopping patience: %d iterations\n", conv$patience))
       }
-      cat(sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
-                  conv$loglik_initial, conv$loglik_final, conv$loglik_change))
+      if(!is.null(conv$Log.Lik.change)){
+        cat(sprintf("  Log-likelihood change: |%.2f - %.2f| = %.4f\n",
+                    conv$Log.Lik.initial, conv$Log.Lik.final, conv$Log.Lik.change))
+      }
     }
+    if(!is.null(conv$initialization)) cat(sprintf("  Initialization: %s\n", conv$initialization))
+    if(!is.null(conv$criterion)) cat(sprintf("  Selection criterion: %s\n", conv$criterion))
     if(!is.null(conv$hardware)){
       cat(sprintf("  The LPA is run on %s\n", conv$hardware))
     }
@@ -305,20 +323,23 @@ print.summary.LPA <- function(x, ...) {
 }
 
 #' @describeIn print Print method for \code{LTA} objects
-#' @export
+#' @exportS3Method print LTA
 print.LTA <- function(x, ...) {
   print.summary.LTA(summary(x))
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.LTA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.LTA}} objects
+#' @exportS3Method print summary.LTA
 print.summary.LTA <- function(x, ...) {
+  if(identical(x$type.analysis, "ZY")){
+    return(.print.summary.ZY(x, "LATENT TRANSITION ANALYSIS"))
+  }
   digits <- x$digits
 
   # Print package info and title
   cat("==============================================\n")
-  cat("LATENT TRANSITION ANALYSIS SUMMARY\n")
+  cat("LATENT TRANSITION ANALYSIS SUMMARY: X -> Z\n")
   cat("==============================================\n\n")
 
   # Model Call
@@ -327,19 +348,33 @@ print.summary.LTA <- function(x, ...) {
 
   # Model Configuration
   cat("\nModel Configuration:\n")
-  cat(sprintf("  Time Points: %d\n", x$model.config$time_points))
-  cat(sprintf("  Latent Classes: %d\n", x$model.config$latent_classes))
-  cat(sprintf("  Model Type: %s\n", x$model.config$model_type))
-  cat(sprintf("  Reference Class: %d\n", x$model.config$reference_class))
-  cat(sprintf("  Covariates Mode: %s\n", x$model.config$covariates_mode))
-  cat(sprintf("  CEP Handling: %s\n", x$model.config$CEP_handling))
-  cat(sprintf("  Transition Mode: %s\n", x$model.config$transition_mode))
+  cat(sprintf("  Time Points: %d\n", x$model.config$times))
+  latent.group.label <- .latent.group.label(x$model.config$type.model)
+  latent.group.name <- paste(
+    "Latent", .latent.group.label(x$model.config$type.model, plural = TRUE)
+  )
+  cat(sprintf("  %s: %d\n", latent.group.name, x$model.config$L))
+  cat(sprintf("  Model Type: %s\n", x$model.config$type))
+  cat(sprintf("  Step 1 Method: %s\n", x$model.config$method.model))
+  cat(sprintf("  Three-Step Method: %s\n", x$model.config$method.3step))
+  cat(sprintf("  Regression / SE: %s / %s\n",
+              x$model.config$method.regression, x$model.config$method.SE))
+  cat(sprintf("  Step 1 Data: %s\n", x$model.config$step1.source))
+  cat(sprintf(
+    "  Reference %s: %s\n", latent.group.label,
+    .latent.group.names(x$model.config$L, x$model.config$type.model)[
+      x$model.config$ref.class
+    ]
+  ))
+  cat(sprintf("  Covariates Mode: %s\n", x$model.config$covariates.mode))
+  cat(sprintf("  CEP Handling: %s\n", x$model.config$CEP.handling))
+  cat(sprintf("  Transition Mode: %s\n", x$model.config$transition.mode))
 
   # Data Information
   cat("\nData Information:\n")
-  cat(sprintf("  Sample Size: %d\n", x$data.info$sample_size))
+  cat(sprintf("  Sample Size: %d\n", x$data.info$N))
   cat(sprintf("  Variables: %d\n", x$data.info$variables))
-  cat(sprintf("  Time Points: %d\n", x$data.info$time_points))
+  cat(sprintf("  Time Points: %d\n", x$data.info$times))
 
   # Fit Statistics
   cat("\nFit Statistics:\n")
@@ -348,44 +383,56 @@ print.summary.LTA <- function(x, ...) {
   cat(sprintf("  BIC: %.*f\n", digits, x$fit.stats$BIC))
   cat(sprintf("  Free Parameters: %d\n", x$fit.stats$npar))
 
-  # Class Probabilities Over Time
-  cat("\nClass Probabilities Over Time:\n")
+  cat(sprintf("\n%s Probabilities Over Time:\n", latent.group.label))
   for (t in 1:length(x$class.probs)) {
     cat(sprintf("\nTime Point %d:\n", t))
     probs_df <- x$class.probs[[t]]
     probs_df$Probability <- format(as.numeric(probs_df$Probability), digits = digits)
-    print(probs_df[, c("Class", "Probability", "Proportion", "Frequency")],
-          row.names = FALSE, right = TRUE)
+    probs_df <- probs_df[
+      , c(latent.group.label, "Probability", "Proportion", "Frequency")
+    ]
+    print(probs_df, row.names = FALSE, right = TRUE)
   }
 
-  # Initial State Model
-  cat("\nInitial State Model (Time 1):\n")
-  cat(sprintf("  Reference Class: Class %d (coefficients fixed to zero)\n", x$initial_model$reference_class))
-  if (nrow(x$initial_model$coefficients) > 0) {
-    print_coef_table(x$initial_model$coefficients, digits)
+  cat(sprintf("\nInitial %s Model (Time 1):\n", latent.group.label))
+  cat(sprintf(
+    "  Reference %s: %s (coefficients fixed to zero)\n",
+    latent.group.label,
+    .latent.group.names(x$model.config$L, x$model.config$type.model)[
+      x$initial.model$ref.class
+    ]
+  ))
+  if (nrow(x$initial.model$coefficients) > 0) {
+    print_coef_table(x$initial.model$coefficients, digits, latent.group.label)
   } else {
-    cat("  No covariate effects on initial state\n")
+    cat(sprintf("  No covariate effects on initial %s\n",
+                tolower(latent.group.label)))
   }
 
   # Transition Models - CORRECTED EXPLANATION
   cat("\nTransition Models:\n")
-  cat(sprintf("  Reference Destination Class: Class %d (all transitions are relative to this class)\n", x$reference_class))
+  cat(sprintf(
+    "  Reference Destination %s: %s (all transitions are relative to this %s)\n",
+    latent.group.label,
+    .latent.group.names(x$model.config$L, x$model.config$type.model)[x$ref.class],
+    tolower(latent.group.label)
+  ))
 
-  if (x$covariates.timeCross) {
+  if (x$covariates.time.cross) {
     cat("  Time-invariant transition effects (coefficients constant across time):\n")
-    if (nrow(x$transition_models[[1]]) > 0) {
+    if (nrow(x$transition.models[[1]]) > 0) {
       cat("\nRepresentative Transition (Time 1 -> Time 2):\n")
-      print_transition_table(x$transition_models[[1]], digits)
+      print_transition_table(x$transition.models[[1]], digits, latent.group.label)
       cat("\n[All time points share these same transition coefficients]\n")
     } else {
       cat("  No covariate effects on transitions\n")
     }
   } else {
-    for (name in names(x$transition_models)) {
-      trans_df <- x$transition_models[[name]]
+    for (name in names(x$transition.models)) {
+      trans_df <- x$transition.models[[name]]
       if (nrow(trans_df) > 0) {
         cat(sprintf("\n%s:\n", name))
-        print_transition_table(trans_df, digits)
+        print_transition_table(trans_df, digits, latent.group.label)
       } else {
         cat(sprintf("\n%s: No covariate effects on transitions\n", name))
       }
@@ -394,23 +441,23 @@ print.summary.LTA <- function(x, ...) {
 
   # Convergence Information
   cat("\nConvergence Information:\n")
-  cat(sprintf("  Coveraged: %s\n", x$convergence$coveraged))
+  cat(sprintf("  Converged: %s\n", x$convergence$converged))
   cat(sprintf("  Iterations: %d\n", x$convergence$iterations))
-  cat(sprintf("  Status: %s\n", x$convergence$converg_note))
+  cat(sprintf("  Status: %s\n", x$convergence$note))
 
   cat("\n")
   invisible(x)
 }
 
 # Helper function to print coefficient tables with significance markers and 95% CI
-print_coef_table <- function(df, digits) {
+print_coef_table <- function(df, digits, group.label = "Class") {
   if (nrow(df) == 0) return(cat("  No coefficients to display\n"))
 
-  # 1. Add significance markers (Sig column) based on p_value
-  if ("p_value" %in% names(df)) {
+  # 1. Add significance markers (Sig column) based on p.value
+  if ("p.value" %in% names(df)) {
     df$Sig <- ""
-    # Ensure p_values are numeric for comparison
-    p_vals_num <- suppressWarnings(as.numeric(df$p_value))
+    # Ensure p.values are numeric for comparison
+    p_vals_num <- suppressWarnings(as.numeric(df$p.value))
 
     df$Sig[!is.na(p_vals_num) & p_vals_num < 0.001] <- "***"
     df$Sig[!is.na(p_vals_num) & p_vals_num < 0.01 & p_vals_num >= 0.001] <- "** "
@@ -419,8 +466,8 @@ print_coef_table <- function(df, digits) {
   }
 
   # 2. Format P Value for display (New Column: P Value)
-  if ("p_value" %in% names(df)) {
-    p_vals_num <- suppressWarnings(as.numeric(df$p_value))
+  if ("p.value" %in% names(df)) {
+    p_vals_num <- suppressWarnings(as.numeric(df$p.value))
     df$`P Value` <- NA_character_
 
     valid_p <- !is.na(p_vals_num) & is.finite(p_vals_num)
@@ -434,10 +481,10 @@ print_coef_table <- function(df, digits) {
   }
 
   # 3. Create 95% CI column
-  if ("lower_95" %in% names(df) && "upper_95" %in% names(df)) {
-    valid_ci <- !is.na(df$lower_95) & !is.na(df$upper_95) & is.finite(df$lower_95) & is.finite(df$upper_95)
+  if ("lower.95" %in% names(df) && "upper.95" %in% names(df)) {
+    valid_ci <- !is.na(df$lower.95) & !is.na(df$upper.95) & is.finite(df$lower.95) & is.finite(df$upper.95)
     df$`95% CI` <- "NA"
-    df$`95% CI`[valid_ci] <- sprintf("(%.*f, %.*f)", digits, df$lower_95[valid_ci], digits, df$upper_95[valid_ci])
+    df$`95% CI`[valid_ci] <- sprintf("(%.*f, %.*f)", digits, df$lower.95[valid_ci], digits, df$upper.95[valid_ci])
   }
 
   # 4. Format numeric columns to character strings for aligned printing
@@ -456,18 +503,18 @@ print_coef_table <- function(df, digits) {
   }
 
   df <- format_numeric_col("Estimate", df, digits)
-  df <- format_numeric_col("Std_Error", df, digits)
-  df <- format_numeric_col("z_value", df, 4) # z-value usually looks better with 4 digits
+  df <- format_numeric_col("Std.Error", df, digits)
+  df <- format_numeric_col("z.value", df, 4) # z-value usually looks better with 4 digits
 
   # 5. Define column order
-  # Order: Class, Covariate, Estimate, Std_Error, 95% CI, z_value, P Value, Sig
-  cols <- c("Class", "Covariate", "Estimate", "Std_Error")
+  # Order: Class, Covariate, Estimate, Std.Error, 95% CI, z.value, P Value, Sig
+  cols <- c(group.label, "Covariate", "Estimate", "Std.Error")
 
   if ("95% CI" %in% names(df)) {
     cols <- c(cols, "95% CI")
   }
 
-  cols <- c(cols, "z_value")
+  cols <- c(cols, "z.value")
 
   # Insert P Value BEFORE Sig
   if ("P Value" %in% names(df)) {
@@ -480,7 +527,6 @@ print_coef_table <- function(df, digits) {
 
   # Subset dataframe to selected columns
   print_df <- df[, cols, drop = FALSE]
-
   # Clean up column names for display (replace underscores with spaces)
   colnames(print_df) <- gsub("_", " ", colnames(print_df))
 
@@ -491,29 +537,35 @@ print_coef_table <- function(df, digits) {
   if ("Sig" %in% names(df)) {
     cat("\nSignif. codes:  *** < 0.001, ** < 0.01, * < 0.05, . < 0.1\n")
   }
-  cat("95% confidence intervals calculated as: Estimate +/- 1.96 * Std_Error\n")
+  cat("95% confidence intervals calculated as: Estimate +/- 1.96 * Std.Error\n")
 }
 
 
 # Helper function to print transition tables with significance markers and 95% CI
-print_transition_table <- function(df, digits) {
+print_transition_table <- function(df, digits, group.label = "Class") {
   if (nrow(df) == 0) return(cat("  No coefficients to display\n"))
 
   # Add significance markers
-  if ("p_value" %in% names(df)) {
+  if ("p.value" %in% names(df)) {
     df$Sig <- ""
-    p_vals <- as.numeric(df$p_value)
+    p_vals <- suppressWarnings(as.numeric(df$p.value))
     df$Sig[!is.na(p_vals) & p_vals < 0.001] <- "***"
     df$Sig[!is.na(p_vals) & p_vals < 0.01 & p_vals >= 0.001] <- "**"
     df$Sig[!is.na(p_vals) & p_vals < 0.05 & p_vals >= 0.01] <- "*"
     df$Sig[!is.na(p_vals) & p_vals < 0.1 & p_vals >= 0.05] <- "."
+    df$`P Value` <- "NA"
+    valid_p <- is.finite(p_vals)
+    df$`P Value`[valid_p & p_vals < 0.0001] <- "< 0.0001"
+    df$`P Value`[valid_p & p_vals >= 0.0001] <- sprintf(
+      "%.4f", p_vals[valid_p & p_vals >= 0.0001]
+    )
   }
 
   # Create 95% CI column
-  if ("lower_95" %in% names(df) && "upper_95" %in% names(df)) {
-    valid_ci <- !is.na(df$lower_95) & !is.na(df$upper_95) & is.finite(df$lower_95) & is.finite(df$upper_95)
+  if ("lower.95" %in% names(df) && "upper.95" %in% names(df)) {
+    valid_ci <- !is.na(df$lower.95) & !is.na(df$upper.95) & is.finite(df$lower.95) & is.finite(df$upper.95)
     df$`95% CI` <- "NA"
-    df$`95% CI`[valid_ci] <- sprintf("(%.*f, %.*f)", digits, df$lower_95[valid_ci], digits, df$upper_95[valid_ci])
+    df$`95% CI`[valid_ci] <- sprintf("(%.*f, %.*f)", digits, df$lower.95[valid_ci], digits, df$upper.95[valid_ci])
   }
 
   # Format numeric columns
@@ -523,22 +575,25 @@ print_transition_table <- function(df, digits) {
     df$Estimate[valid_est] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$Estimate[valid_est]))
   }
 
-  if ("Std_Error" %in% names(df)) {
-    valid_se <- !is.na(df$Std_Error) & is.finite(df$Std_Error)
-    df$Std_Error <- as.character(df$Std_Error)
-    df$Std_Error[valid_se] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$Std_Error[valid_se]))
+  if ("Std.Error" %in% names(df)) {
+    valid_se <- !is.na(df$Std.Error) & is.finite(df$Std.Error)
+    df$Std.Error <- as.character(df$Std.Error)
+    df$Std.Error[valid_se] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$Std.Error[valid_se]))
   }
 
-  if ("z_value" %in% names(df)) {
-    valid_z <- !is.na(df$z_value) & is.finite(df$z_value)
-    df$z_value <- as.character(df$z_value)
-    df$z_value[valid_z] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$z_value[valid_z]))
+  if ("z.value" %in% names(df)) {
+    valid_z <- !is.na(df$z.value) & is.finite(df$z.value)
+    df$z.value <- as.character(df$z.value)
+    df$z.value[valid_z] <- sprintf(paste0("%.", digits, "f"), as.numeric(df$z.value[valid_z]))
   }
 
-  # Define column order with 95% CI after Std_Error
-  cols <- c("From_Class", "To_Class", "Covariate", "Estimate", "Std_Error")
+  # Define column order with 95% CI after Std.Error
+  from.group.label <- paste0("From.", group.label)
+  to.group.label <- paste0("To.", group.label)
+  cols <- c(from.group.label, to.group.label, "Covariate", "Estimate", "Std.Error")
   if ("95% CI" %in% names(df)) cols <- c(cols, "95% CI")
-  cols <- c(cols, "z_value")
+  cols <- c(cols, "z.value")
+  if ("P Value" %in% names(df)) cols <- c(cols, "P Value")
   if ("Sig" %in% names(df)) cols <- c(cols, "Sig")
 
   print_df <- df[, cols, drop = FALSE]
@@ -548,29 +603,37 @@ print_transition_table <- function(df, digits) {
   if ("Sig" %in% names(df)) {
     cat("Signif. codes:  *** < 0.001, ** < 0.01, * < 0.05, . < 0.1\n")
   }
-  cat("Interpretation: Coefficients represent log odds of transitioning to 'To Class'\n")
-  cat("                relative to reference destination class (Class ")
-  cat(attr(df, "ref_class_note", exact = TRUE))
-  cat(")\n")
-  cat("95% confidence intervals calculated as: Estimate +/- 1.96 * Std_Error\n")
+  cat(sprintf(
+    "Interpretation: Coefficients represent log odds of transitioning to 'To %s'\n",
+    group.label
+  ))
+  cat(sprintf(
+    "                relative to the reference destination %s.\n",
+    tolower(group.label)
+  ))
+  cat("                ", attr(df, "ref_class_note", exact = TRUE), ".\n", sep = "")
+  cat("95% confidence intervals calculated as: Estimate +/- 1.96 * Std.Error\n")
 }
 
 #' @describeIn print Print method for \code{LCPA} objects
-#' @export
+#' @exportS3Method print LCPA
 print.LCPA <- function(x, ...) {
   print.summary.LCPA(summary(x))
   invisible(x)
 }
 
 
-#' @describeIn print Print method for \code{summary.LCPA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.LCPA}} objects
+#' @exportS3Method print summary.LCPA
 print.summary.LCPA <- function(x, ...) {
+  if(identical(x$type.analysis, "ZY")){
+    return(.print.summary.ZY(x, "LATENT CLASS/PROFILE ANALYSIS"))
+  }
   digits <- x$digits
 
   # Print package info and title
   cat("================================================\n")
-  cat("LATENT CLASS/PROFILE ANALYSIS SUMMARY (CROSS-SECTIONAL)\n")
+  cat("LATENT CLASS/PROFILE ANALYSIS SUMMARY: X -> Z\n")
   cat("================================================\n\n")
 
   # Model Call
@@ -579,15 +642,29 @@ print.summary.LCPA <- function(x, ...) {
 
   # Model Configuration
   cat("\nModel Configuration:\n")
-  cat(sprintf("  Latent Classes: %d\n", x$model.config$latent_classes))
-  cat(sprintf("  Model Type: %s\n", x$model.config$model_type))
-  cat(sprintf("  Reference Class: %d (coefficients fixed to zero)\n", x$model.config$reference_class))
-  cat(sprintf("  Covariates Mode: %s\n", x$model.config$covariates_mode))
-  cat(sprintf("  CEP Handling: %s\n", x$model.config$CEP_handling))
+  latent.group.label <- .latent.group.label(x$model.config$type.model)
+  latent.group.name <- paste(
+    "Latent", .latent.group.label(x$model.config$type.model, plural = TRUE)
+  )
+  cat(sprintf("  %s: %d\n", latent.group.name, x$model.config$L))
+  cat(sprintf("  Model Type: %s\n", x$model.config$type))
+  cat(sprintf("  Step 1 Method: %s\n", x$model.config$method.model))
+  cat(sprintf("  Three-Step Method: %s\n", x$model.config$method.3step))
+  cat(sprintf("  Regression / SE: %s / %s\n",
+              x$model.config$method.regression, x$model.config$method.SE))
+  reference.group <- .latent.group.names(
+    x$model.config$L, x$model.config$type.model
+  )[x$model.config$ref.class]
+  cat(sprintf(
+    "  Reference %s: %s (coefficients fixed to zero)\n",
+    latent.group.label, reference.group
+  ))
+  cat(sprintf("  Covariates Mode: %s\n", x$model.config$covariates.mode))
+  cat(sprintf("  CEP Handling: %s\n", x$model.config$CEP.handling))
 
   # Data Information
   cat("\nData Information:\n")
-  cat(sprintf("  Sample Size: %d\n", x$data.info$sample_size))
+  cat(sprintf("  Sample Size: %d\n", x$data.info$N))
   cat(sprintf("  Variables: %d\n", x$data.info$variables))
 
   # Fit Statistics
@@ -597,19 +674,24 @@ print.summary.LCPA <- function(x, ...) {
   cat(sprintf("  BIC: %.*f\n", digits, x$fit.stats$BIC))
   cat(sprintf("  Free Parameters: %d\n", x$fit.stats$npar))
 
-  # Class Probabilities
-  cat("\nClass Membership Probabilities:\n")
+  cat(sprintf("\n%s Membership Probabilities:\n", latent.group.label))
   probs_df <- x$class.probs
   probs_df$Probability <- format(as.numeric(probs_df$Probability), digits = digits)
-  print(probs_df[, c("Class", "Probability", "Proportion", "Frequency")],
-        row.names = FALSE, right = TRUE)
+  probs_df <- probs_df[
+    , c(latent.group.label, "Probability", "Proportion", "Frequency")
+  ]
+  print(probs_df, row.names = FALSE, right = TRUE)
 
   # Coefficients Table
-  cat("\nClass Membership Model (Multinomial Logit):\n")
-  cat(sprintf("  Reference Class: Class %d (all coefficients relative to this class)\n", x$reference_class))
+  cat(sprintf("\n%s Membership Model (Multinomial Logit):\n",
+              latent.group.label))
+  cat(sprintf(
+    "  Reference %s: %s (all coefficients relative to this %s)\n",
+    latent.group.label, reference.group, tolower(latent.group.label)
+  ))
 
   if (nrow(x$coefficients) > 0) {
-    print_coef_table(x$coefficients, digits)
+    print_coef_table(x$coefficients, digits, latent.group.label)
   } else {
     cat("  No covariate effects estimated (intercept-only model)\n")
   }
@@ -622,16 +704,246 @@ print.summary.LCPA <- function(x, ...) {
 
   # Convergence Information
   cat("\nConvergence Information:\n")
-  cat(sprintf("  Coveraged: %s\n", x$convergence$coveraged))
+  cat(sprintf("  Converged: %s\n", x$convergence$converged))
   cat(sprintf("  Iterations: %d\n", x$convergence$iterations))
-  cat(sprintf("  Status: %s", x$convergence$converg_note))
+  cat(sprintf("  Status: %s", x$convergence$note))
 
   cat("\n")
   invisible(x)
 }
 
+.ZY.print.confidence.interval <- function(estimate, se, digits) {
+  value <- rep("NA", length(estimate))
+  valid <- is.finite(estimate) & is.finite(se)
+  value[valid] <- sprintf(
+    "(%.*f, %.*f)", digits, estimate[valid] - 1.96 * se[valid],
+    digits, estimate[valid] + 1.96 * se[valid]
+  )
+  value
+}
+
+.ZY.print.p.value <- function(p.value) {
+  if(!length(p.value) || !is.finite(p.value)) return("NA")
+  if(p.value < 1e-4) "< 0.0001" else sprintf("= %.4f", p.value)
+}
+
+.ZY.print.group.names <- function(group.names, group.label) {
+  group.names
+}
+
+.ZY.print.omnibus <- function(test, label, digits) {
+  statistic <- unname(test$statistic)
+  df <- unname(test$parameter)
+  p.value <- unname(test$p.value)
+  if(!length(statistic) || !is.finite(statistic) ||
+     !length(df) || !is.finite(df)) {
+    cat(sprintf("  %s: unavailable\n", label))
+  } else {
+    cat(sprintf(
+      "  %s: Wald(%d) = %.*f, p %s\n",
+      label, as.integer(df), digits, statistic, .ZY.print.p.value(p.value)
+    ))
+  }
+}
+
+.ZY.print.group.information <- function(model, group.label, digits) {
+  group.names <- names(model$class.mass)
+  if(is.null(group.names)) {
+    group.names <- if(is.matrix(model$estimate)) {
+      rownames(model$estimate)
+    } else {
+      names(model$estimate)
+    }
+  }
+  group.names <- .ZY.print.group.names(group.names, group.label)
+  table <- data.frame(
+    Group = group.names,
+    Weight.Mass = round(as.numeric(model$class.mass), digits),
+    Proportion = sprintf("%.1f%%", as.numeric(model$prior) * 100),
+    row.names = NULL
+  )
+  names(table)[1L] <- group.label
+  print(table, row.names = FALSE, right = TRUE)
+}
+
+.print.summary.ZY <- function(x, title) {
+  digits <- x$digits
+  cat("================================================\n")
+  cat(title, " SUMMARY: Z -> Y\n", sep = "")
+  cat("================================================\n\n")
+  cat("Call:\n")
+  print(x$call)
+  cat("\nModel Configuration:\n")
+  if(x$model.config$times > 1L){
+    cat(sprintf("  Time Points: %d\n", x$model.config$times))
+  }
+  latent.group.label <- .latent.group.label(x$model.config$type.model)
+  latent.group.name <- paste(
+    "Latent", .latent.group.label(x$model.config$type.model, plural = TRUE)
+  )
+  cat(sprintf("  %s: %d\n", latent.group.name, x$model.config$L))
+  cat(sprintf("  Model Type: %s\n", x$model.config$type))
+  cat(sprintf("  Step 1 Method: %s\n", x$model.config$method.model))
+  cat(sprintf("  Three-Step Method: %s\n", x$model.config$method.3step))
+  cat(sprintf("  Regression / SE: %s / %s\n",
+              x$model.config$method.regression, x$model.config$method.SE))
+  cat(sprintf("  Step 1 Data: %s\n", x$model.config$step1.source))
+  cat(sprintf("  CEP Handling: %s\n", x$model.config$CEP.handling))
+  cat(sprintf("  Dependent Variable Structure: %s\n",
+              x$model.config$dependent.variable.structure))
+  cat(sprintf("  Step 3 Free Parameters: %d\n", x$model.config$npar))
+  if(x$model.config$times > 1L){
+    cat(sprintf("  Dependent Variable Time Points: %s\n",
+                paste(x$model.config$dependent.variable.time, collapse = ", ")))
+    cat(sprintf("  Dependent Variable Effects Constrained Across Time: %s\n",
+                x$model.config$dependent.variable.time.cross))
+  }
+
+  cat("\nData Information:\n")
+  cat(sprintf("  Sample Size: %d\n", x$data.info$N))
+  cat(sprintf("  Indicator Variables per Time Point: %d\n", x$data.info$variables))
+  if(x$data.info$times > 1L){
+    cat(sprintf("  Time Points: %d\n", x$data.info$times))
+  }
+  cat(sprintf("  Dependent Variable Models: %d\n",
+              x$data.info$dependent.variable.models))
+
+  cat(sprintf(
+    if(x$model.config$times > 1L){
+      "\nStep 1 Latent %s Probabilities Over Time:\n"
+    }else{
+      "\nStep 1 Latent %s Membership Probabilities:\n"
+    },
+    latent.group.label
+  ))
+  for(t in seq_along(x$class.probs)){
+    if(x$model.config$times > 1L) cat(sprintf("\nTime Point %d:\n", t))
+    probability <- x$class.probs[[t]]
+    probability$Probability <- format(
+      as.numeric(probability$Probability), digits = digits
+    )
+    probability <- probability[
+      , c(latent.group.label, "Probability", "Proportion", "Frequency"),
+      drop = FALSE
+    ]
+    print(probability, row.names = FALSE, right = TRUE)
+  }
+
+  cat("\nDependent Variable Results:\n")
+  for(group.name in names(x$dependent.variables)){
+    cat(sprintf("\nModel: %s\n", group.name))
+    for(dependent.variable.name in names(x$dependent.variables[[group.name]])){
+      model <- x$dependent.variables[[group.name]][[dependent.variable.name]]
+      cat(sprintf("\n%s (%s):\n", dependent.variable.name, model$family))
+      group.label <- if(identical(x$model.config$dependent.variable.structure, "Path")){
+        "Path"
+      }else{
+        latent.group.label
+      }
+      cat(sprintf("  Observations: %d; Omitted: %d\n",
+                  model$observations, model$omitted))
+      cat("\n  Group Information:\n")
+      .ZY.print.group.information(model, group.label, digits)
+      if(model$family == "gaussian"){
+        mean.table <- data.frame(
+          Group = .ZY.print.group.names(names(model$estimate), group.label),
+          Mean = round(model$estimate, digits),
+          Std.Error = round(model$se, digits),
+          `95% CI` = .ZY.print.confidence.interval(
+            model$estimate, model$se, digits
+          ),
+          row.names = NULL,
+          check.names = FALSE
+        )
+        names(mean.table)[1L] <- group.label
+        cat("\n  Conditional Means:\n")
+        print(mean.table, row.names = FALSE, right = TRUE)
+        .ZY.print.omnibus(
+          model$omnibus, "Equality of conditional means", digits
+        )
+
+        variance.table <- data.frame(
+          Group = .ZY.print.group.names(names(model$variance), group.label),
+          Variance = round(model$variance, digits),
+          Std.Error = round(model$variance.se, digits),
+          `95% CI` = .ZY.print.confidence.interval(
+            model$variance, model$variance.se, digits
+          ),
+          row.names = NULL,
+          check.names = FALSE
+        )
+        names(variance.table)[1L] <- group.label
+        cat("\n  Conditional Variances:\n")
+        print(variance.table, row.names = FALSE, right = TRUE)
+        .ZY.print.omnibus(
+          model$omnibus.variance, "Equality of conditional variances", digits
+        )
+      }else{
+        probability.table <- data.frame(
+          Group = rep(
+            .ZY.print.group.names(rownames(model$estimate), group.label),
+            each = ncol(model$estimate)
+          ),
+          Category = rep(colnames(model$estimate), nrow(model$estimate)),
+          Probability = round(as.vector(t(model$estimate)), digits),
+          Std.Error = round(as.vector(t(model$se)), digits),
+          `95% CI` = .ZY.print.confidence.interval(
+            as.vector(t(model$estimate)), as.vector(t(model$se)), digits
+          ),
+          row.names = NULL,
+          check.names = FALSE
+        )
+        names(probability.table)[1L] <- group.label
+        cat("\n  Conditional Category Probabilities:\n")
+        print(probability.table, row.names = FALSE, right = TRUE)
+        .ZY.print.omnibus(
+          model$omnibus, "Equality of conditional category distributions", digits
+        )
+      }
+    }
+  }
+
+  cat("\nConvergence Information:\n")
+  cat(sprintf("  Overall Converged: %s\n", x$convergence$converged))
+  convergence <- x$convergence$models
+  print(
+    convergence[, c("Model", "Dependent.Variable", "Family",
+                    "Converged", "Iterations")],
+    row.names = FALSE, right = TRUE
+  )
+
+  cat("\nStep 3 Diagnostics:\n")
+  cat(sprintf("  Standard Error Method: %s\n", x$model.config$method.SE))
+  if(!is.null(x$diagnostics$class.shift)){
+    class.shift <- unlist(x$diagnostics$class.shift)
+    class.shift <- class.shift[is.finite(class.shift)]
+    if(length(class.shift)){
+      cat(sprintf("  Maximum Classification Shift: %.2f%%\n",
+                  100 * max(class.shift)))
+    }
+  }
+  if(!is.null(x$diagnostics$negative.weight.proportion)){
+    negative.weight <- x$diagnostics$negative.weight.proportion
+    negative.weight <- negative.weight[is.finite(negative.weight)]
+    if(length(negative.weight)){
+      cat(sprintf("  Maximum Negative BCH-Weight Proportion: %.2f%%\n",
+                  100 * max(negative.weight)))
+    }
+  }
+  if(identical(x$model.config$method.SE, "Bootstrap")){
+    bootstrap.diagnostics <- x$SE.diagnostics
+    if(!is.null(bootstrap.diagnostics$successful)){
+      cat(sprintf("  Successful Bootstrap Replications: %d / %d\n",
+                  bootstrap.diagnostics$successful,
+                  bootstrap.diagnostics$attempted))
+    }
+  }
+  cat("\n")
+  invisible(x)
+}
+
 #' @describeIn print Print method for \code{sim.LCA} objects
-#' @export
+#' @exportS3Method print sim.LCA
 print.sim.LCA <- function(x, ...) {
   printPackageInfo()
   cat("==============================================\n")
@@ -667,17 +979,17 @@ print.sim.LCA <- function(x, ...) {
   # Class proportions
   cat("\nClass Proportions:\n")
   class_props <- data.frame(
-    Class = paste0("L", 1:L),
+    Class = .latent.group.names(L, "LCA"),
     Proportion = sprintf("%.1f%%", round(x$P.Z * 100, 1)),
-    Frequency = as.vector(table(x$Z))
+    Frequency = as.vector(table(factor(x$Z, levels = seq_len(L))))
   )
   print(class_props, row.names = FALSE)
 
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.sim.LCA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.sim.LCA}} objects
+#' @exportS3Method print summary.sim.LCA
 print.summary.sim.LCA <- function(x, ...) {
   digits <- x$digits
 
@@ -699,7 +1011,7 @@ print.summary.sim.LCA <- function(x, ...) {
   cat(sprintf("  Class Distribution: %s\n", x$config$distribution))
 
   # Response structure
-  if (x$config$uniform_categories) {
+  if (x$config$categories.uniform) {
     cat(sprintf("\nResponse Structure:\n  Categories per Variable: %d (uniform)\n",
                 x$config$poly.value[1]))
   } else {
@@ -730,7 +1042,7 @@ print.summary.sim.LCA <- function(x, ...) {
 }
 
 #' @describeIn print Print method for \code{sim.LPA} objects
-#' @export
+#' @exportS3Method print sim.LPA
 print.sim.LPA <- function(x, ...) {
   # Print package info and title
   printPackageInfo()
@@ -764,9 +1076,9 @@ print.sim.LPA <- function(x, ...) {
   # Class proportions
   cat("\nTrue Profile Proportions:\n")
   class_props <- data.frame(
-    Profile = names(x$P.Z),
+    Profile = .latent.group.names(L, "LPA"),
     Proportion = sprintf("%.1f%%", x$P.Z * 100),
-    Frequency = as.vector(table(x$Z))
+    Frequency = as.vector(table(factor(x$Z, levels = seq_len(L))))
   )
   print(class_props, row.names = FALSE, right = TRUE)
 
@@ -777,8 +1089,8 @@ print.sim.LPA <- function(x, ...) {
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.sim.LPA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.sim.LPA}} objects
+#' @exportS3Method print summary.sim.LPA
 print.summary.sim.LPA <- function(x, ...) {
   digits <- x$digits
 
@@ -842,7 +1154,7 @@ print.summary.sim.LPA <- function(x, ...) {
 }
 
 #' @describeIn print Print method for \code{sim.LTA} objects
-#' @export
+#' @exportS3Method print sim.LTA
 print.sim.LTA <- function(x, ...) {
   printPackageInfo()
   cat("==============================================\n")
@@ -863,7 +1175,9 @@ print.sim.LTA <- function(x, ...) {
   cat("\nConfiguration:\n")
   cat(sprintf("  Sample Size: %d\n", N))
   cat(sprintf("  Variables/Items: %d\n", I))
-  cat(sprintf("  Latent Classes/Profiles: %d\n", L))
+  group.label <- .latent.group.label(type)
+  cat(sprintf("  Latent %s: %d\n",
+              .latent.group.label(type, plural = TRUE), L))
   cat(sprintf("  Time Points: %d\n", times))
   cat(sprintf("  Model Type: %s\n", ifelse(type == "LCA",
                                            "Latent Class Analysis",
@@ -874,14 +1188,15 @@ print.sim.LTA <- function(x, ...) {
   cat(sprintf("  Transition Mode: %s\n", ifelse(use_covariates, "Covariate-dependent", "Fixed probabilities")))
 
   # Class proportions at each time point
-  cat("\nClass/Profile Proportions by Time Point:\n")
+  cat(sprintf("\n%s Proportions by Time Point:\n", group.label))
   for (t in 1:times) {
     class_props <- data.frame(
-      Class = paste0("L", 1:L),
+      Group = .latent.group.names(L, type),
       Proportion = sprintf("%.1f%%", round(x$P.Zs[[t]] * 100, 1)),
-      Frequency = as.vector(table(x$Zs[[t]]))
+      Frequency = as.vector(table(factor(x$Zs[[t]], levels = seq_len(L))))
     )
     cat(sprintf("\nTime %d:\n", t))
+    names(class_props)[1L] <- group.label
     print(class_props, row.names = FALSE)
   }
 
@@ -889,8 +1204,8 @@ print.sim.LTA <- function(x, ...) {
 }
 
 
-#' @describeIn print Print method for \code{summary.sim.LTA} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.sim.LTA}} objects
+#' @exportS3Method print summary.sim.LTA
 print.summary.sim.LTA <- function(x, ...) {
   digits <- x$digits
 
@@ -905,7 +1220,9 @@ print.summary.sim.LTA <- function(x, ...) {
   cat("\nSimulation Configuration:\n")
   cat(sprintf("  Sample Size: %d observations\n", x$config$N))
   cat(sprintf("  Variables/Items: %d\n", x$config$I))
-  cat(sprintf("  Latent Classes/Profiles: %d\n", x$config$L))
+  group.label <- .latent.group.label(x$config$type)
+  cat(sprintf("  Latent %s: %d\n",
+              .latent.group.label(x$config$type, plural = TRUE), x$config$L))
   cat(sprintf("  Time Points: %d\n", x$config$times))
   cat(sprintf("  Model Type: %s\n", ifelse(x$config$type == "LCA",
                                            "Latent Class Analysis (categorical indicators)",
@@ -918,13 +1235,13 @@ print.summary.sim.LTA <- function(x, ...) {
   cat(sprintf("  Class Distribution: %s\n", x$config$distribution))
 
   # Class probabilities
-  cat("\nTrue Class/Profile Proportions:\n")
+  cat(sprintf("\nTrue %s Proportions:\n", group.label))
   for (t in 1:length(x$class.probs)) {
     cat(sprintf("\nTime Point %d:\n", t))
     probs_df <- x$class.probs[[t]]
     probs_df$Probability <- sprintf(paste0("%.", digits, "f"), probs_df$Probability)
     probs_df$Proportion <- sprintf("%.1f%%", as.numeric(probs_df$Probability) * 100)
-    print(probs_df[, c("Class", "Probability", "Proportion", "Frequency")],
+    print(probs_df[, c(group.label, "Probability", "Proportion", "Frequency")],
           row.names = FALSE, right = TRUE)
   }
 
@@ -946,8 +1263,8 @@ print.summary.sim.LTA <- function(x, ...) {
       }
     }
   } else { # LPA
-    cat(sprintf("\nTrue Class/Profile Means (first %d variables at each time point):\n",
-                x$I.max.shown))
+    cat(sprintf("\nTrue %s Means (first %d variables at each time point):\n",
+                group.label, x$I.max.shown))
 
     for (t in 1:length(x$class.means)) {
       cat(sprintf("\nTime Point %d:\n", t))
@@ -969,9 +1286,9 @@ print.summary.sim.LTA <- function(x, ...) {
       cat("  Mode: Fixed transition probabilities\n")
 
       # Get time points directly from stored data frame
-      for (i in 1:nrow(x$transition$time_points)) {
-        from_time <- x$transition$time_points$from[i]
-        to_time <- x$transition$time_points$to[i]
+      for (i in 1:nrow(x$transition$times)) {
+        from_time <- x$transition$times$from[i]
+        to_time <- x$transition$times$to[i]
 
         cat(sprintf("\nTransition Probabilities (Time %d -> Time %d):\n",
                     from_time, to_time))
@@ -979,6 +1296,11 @@ print.summary.sim.LTA <- function(x, ...) {
       }
     } else if (x$transition$mode == "covariate") {
       cat("  Mode: Covariate-dependent transitions\n")
+      cat(sprintf(
+        "  Reference %s: %s (coefficients fixed to zero)\n",
+        group.label,
+        .latent.group.names(x$config$L, x$config$type)[x$config$ref.class]
+      ))
 
       # Initial state coefficients (beta)
       cat("\nInitial State Coefficients (beta):\n")
@@ -986,15 +1308,16 @@ print.summary.sim.LTA <- function(x, ...) {
 
       # Transition coefficients (gamma)
       for (t in 1:length(x$transition$gamma)) {
-        from_time <- x$transition$time_points$from[t]
-        to_time <- x$transition$time_points$to[t]
+        from_time <- x$transition$times$from[t]
+        to_time <- x$transition$times$to[t]
 
         cat(sprintf("\nTransition Coefficients (Time %d -> Time %d):\n",
                     from_time, to_time))
 
         gamma_t <- x$transition$gamma[[t]]
         for (l in 1:min(x$L.max.shown, x$config$L)) {
-          cat(sprintf("\nFrom Class %d:\n", l))
+          cat(sprintf("\nFrom %s:\n",
+                      .latent.group.names(x$config$L, x$config$type)[l]))
           print(gamma_t[[l]], digits = digits)
         }
 
@@ -1021,16 +1344,16 @@ print.summary.sim.LTA <- function(x, ...) {
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{fit.index} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA:get.fit.index]{fit.index}} objects
+#' @exportS3Method print fit.index
 print.fit.index <- function(x, ...) {
   sum_obj <- summary(x, ...)
   print.summary.fit.index(sum_obj)
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.fit.index} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.fit.index}} objects
+#' @exportS3Method print summary.fit.index
 print.summary.fit.index <- function(x, ...) {
 
   digits <- x$digits
@@ -1050,11 +1373,11 @@ print.summary.fit.index <- function(x, ...) {
 
   cat("\nModel Fit Indices:\n")
   fit_data <- x$fit.table
-  fit_data$Value_Formatted <- sprintf(paste0("%.", digits, "f"), as.numeric(fit_data$Value))
+  fit_data$Value.Formatted <- sprintf(paste0("%.", digits, "f"), as.numeric(fit_data$Value))
 
   print_table <- data.frame(
     Indices = fit_data$Statistic,
-    Value = fit_data$Value_Formatted,
+    Value = fit_data$Value.Formatted,
     Criterion = fit_data$Description,
     stringsAsFactors = FALSE
   )
@@ -1069,15 +1392,15 @@ print.summary.fit.index <- function(x, ...) {
 }
 
 #' @describeIn print Print method for \code{compare.model} objects
-#' @export
+#' @exportS3Method print compare.model
 print.compare.model <- function(x, ...) {
   sum_obj <- summary(x, ...)
   print.summary.compare.model(sum_obj)
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{summary.compare.model} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA]{summary.compare.model}} objects
+#' @exportS3Method print summary.compare.model
 print.summary.compare.model <- function(x, ...) {
   digits <- x$digits
 
@@ -1098,16 +1421,16 @@ print.summary.compare.model <- function(x, ...) {
   print(x$fit.table, row.names = FALSE)
 
   cat("\nClassification Performance:\n")
-  colnames(x$model_comparison) <- c("Classes", "npar", "AvePP", "Entropy")
-  print(x$model_comparison, row.names = FALSE)
+  colnames(x$model.comparison) <- c("Classes", "npar", "AvePP", "Entropy")
+  print(x$model.comparison, row.names = FALSE)
 
   cat("\nBayes Factor (BF):", ifelse(is.na(x$BF), "Not available", format(x$BF, digits = x$digits)), "\n")
-  cat("Interpretation:", x$BF_interpretation, "\n")
+  cat("Interpretation:", x$BF.interpretation, "\n")
 
-  if (!is.null(x$lrt_table)) {
+  if (!is.null(x$LRT.table)) {
     cat("\nLikelihood Ratio Tests:\n")
-    names(x$lrt_table)[names(x$lrt_table) == "p-value"] <- "p.value"
-    print(x$lrt_table, row.names = FALSE)
+    names(x$LRT.table)[names(x$LRT.table) == "p-value"] <- "p.value"
+    print(x$LRT.table, row.names = FALSE)
     cat("Signif. codes:  *** < 0.001, ** < 0.01, * < 0.05\n")
   } else {
     cat("\nNo Likelihood Ratio Tests available.\n")
@@ -1117,8 +1440,8 @@ print.summary.compare.model <- function(x, ...) {
   invisible(x)
 }
 
-#' @describeIn print Print method for \code{SE} objects
-#' @export
+#' @describeIn print Print method for \code{\link[LCPA:get.SE]{SE}} objects
+#' @exportS3Method print SE
 print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
 
   printPackageInfo()
@@ -1129,7 +1452,7 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
   cat("\nCall:\n")
   print(x$call)
 
-  model_type <- if (!is.null(x$se$means)) "LPA" else if (!is.null(x$se$par)) "LCA" else "Unknown"
+  type <- if (!is.null(x$se$means)) "LPA" else if (!is.null(x$se$par)) "LCA" else "Unknown"
 
   # Class probabilities SEs (always show all)
   cat("\nClass Probability Standard Errors:\n")
@@ -1137,7 +1460,7 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
   cat("\n")
 
   # Model-specific parameters
-  if (model_type == "LPA") {
+  if (type == "LPA") {
     cat("Latent Profile Means Standard Errors:\n")
 
     # Determine display dimensions
@@ -1146,7 +1469,7 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
 
     # Create truncated matrix with proper dimnames
     means_se <- round(x$se$means[1:L_to_show, 1:I_to_show, drop = FALSE], digits)
-    rownames(means_se) <- paste0("Class", 1:L_to_show)
+    rownames(means_se) <- .latent.group.names(L_to_show, "LPA")
     colnames(means_se) <- colnames(x$se$means)[1:I_to_show]
 
     print(means_se, digits = digits)
@@ -1161,7 +1484,7 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
     cat("  Total non-zero SEs:", sum(x$se$covs != 0, na.rm = TRUE), "/", length(x$se$covs), "\n")
     cat("  [Use extract(x, 'covs') to access full array]\n")
 
-  } else if (model_type == "LCA") {
+  } else if (type == "LCA") {
     cat("Item Response Probability Standard Errors:\n")
 
     # Determine display dimensions
@@ -1176,14 +1499,14 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
       # Extract and format first item's SEs
       item_se <- round(x$se$par[1:L_to_show, 1, , drop = FALSE], digits)
       dimnames(item_se) <- list(
-        Class = paste0("Class", 1:L_to_show),
+        Class = .latent.group.names(L_to_show, "LCA"),
         Item = "Item1",
         Category = paste0("Cat", 1:n_cats)
       )
 
       # Print as matrix for readability
       item_se_mat <- matrix(item_se, nrow = L_to_show,
-                            dimnames = list(paste0("Class", 1:L_to_show),
+                            dimnames = list(.latent.group.names(L_to_show, "LCA"),
                                             paste0("Cat", 1:n_cats)))
       print(item_se_mat, digits = digits)
 
@@ -1198,13 +1521,19 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
   cat(strrep("-", 30), "\n")
   cat("Diagnostics:\n")
   if (x$diagnostics$method == "Bootstrap") {
-    req <- x$diagnostics$n.Bootstrap.requested
-    comp <- if (!is.null(x$diagnostics$n.Bootstrap.completed)) x$diagnostics$n.Bootstrap.completed else req
+    req <- x$diagnostics$nrep.bootstrap.requested
+    comp <- if (!is.null(x$diagnostics$nrep.bootstrap.completed)) x$diagnostics$nrep.bootstrap.completed else req
     cat(sprintf("  Bootstrap replicates: %d completed / %d requested (%.1f%%)\n",
                 comp, req, 100 * comp/req))
     if (comp < req) cat("  ! Warning: Incomplete replicates may reduce accuracy\n")
-  } else if (x$diagnostics$method == "Obs") {
-    cond_num <- if (!is.null(x$diagnostics$hessian_cond_number)) x$diagnostics$hessian_cond_number else NA
+  } else if (x$diagnostics$method %in% c("Obs", "Louis")) {
+    cond_num <- if (!is.null(x$diagnostics$hessian_cond_number_initial)) {
+      x$diagnostics$hessian_cond_number_initial
+    } else if (!is.null(x$diagnostics$hessian_cond_number)) {
+      x$diagnostics$hessian_cond_number
+    } else {
+      NA
+    }
     if (!is.na(cond_num)) {
       cat(sprintf("  Hessian condition number: %.2e\n", cond_num))
       if (cond_num > 1e6) {
@@ -1217,7 +1546,7 @@ print.SE <- function(x, digits = 4, I.max = 5, L.max = 3, ...) {
 }
 
 #' @describeIn print Print method for summary.SE objects
-#' @export
+#' @exportS3Method print summary.SE
 print.summary.SE <- function(x, ...) {
 
   printPackageInfo()
@@ -1229,40 +1558,46 @@ print.summary.SE <- function(x, ...) {
   print(x$call)
 
   # Model information
-  cat("Model Type:", ifelse(x$model_type == "LPA", "Latent Profile Analysis", "Latent Class Analysis"), "\n")
+  cat("Model Type:", ifelse(x$type == "LPA", "Latent Profile Analysis", "Latent Class Analysis"), "\n")
   cat("Latent Classes:", x$L, "\n")
   if (!is.na(x$I)) {
-    cat(ifelse(x$model_type == "LPA", "Variables", "Items"), ":", x$I, "\n")
+    cat(ifelse(x$type == "LPA", "Variables", "Items"), ":", x$I, "\n")
   }
 
   # Parameter coverage
   cat("\nParameter Coverage:\n")
   cat(sprintf("  Class Probabilities: %d/%d non-zero SEs\n",
-              x$nonzero_counts$P.Z, x$total_PZ))
+              x$nonzero.counts$P.Z, x$total.P.Z))
 
-  if (x$model_type == "LPA") {
+  if (x$type == "LPA") {
     cat(sprintf("  Means Parameters   : %d/%d non-zero SEs\n",
-                x$nonzero_counts$means, x$L * x$I))
+                x$nonzero.counts$means, x$L * x$I))
     cat(sprintf("  Covariance Params  : %d non-zero SEs\n",
-                x$nonzero_counts$covs))
-  } else if (x$model_type == "LCA") {
+                x$nonzero.counts$covs))
+  } else if (x$type == "LCA") {
     total_params <- sum(sapply(1:x$I, function(i) {
       # Assuming each item has varying categories - this is approximate
-      x$L * (ifelse(i <= length(x$nonzero_counts), x$nonzero_counts[[i]], 2) - 1)
+      x$L * (ifelse(i <= length(x$nonzero.counts), x$nonzero.counts[[i]], 2) - 1)
     }))
     cat(sprintf("  Item Parameters    : %d non-zero SEs\n",
-                x$nonzero_counts$par))
+                x$nonzero.counts$par))
   }
 
   # Diagnostics
   cat("\nDiagnostics:\n")
   if (x$method == "Bootstrap") {
-    req <- x$diagnostics$n.Bootstrap.requested
-    comp <- if (!is.null(x$diagnostics$n.Bootstrap.completed)) x$diagnostics$n.Bootstrap.completed else req
+    req <- x$diagnostics$nrep.bootstrap.requested
+    comp <- if (!is.null(x$diagnostics$nrep.bootstrap.completed)) x$diagnostics$nrep.bootstrap.completed else req
     cat(sprintf("  Bootstrap replicates: %d completed / %d requested (%.1f%%)\n",
                 comp, req, 100 * comp/req))
-  } else if (x$method == "Obs") {
-    cond_num <- if (!is.null(x$diagnostics$hessian_cond_number)) x$diagnostics$hessian_cond_number else NA
+  } else if (x$method %in% c("Obs", "Louis")) {
+    cond_num <- if (!is.null(x$diagnostics$hessian_cond_number_initial)) {
+      x$diagnostics$hessian_cond_number_initial
+    } else if (!is.null(x$diagnostics$hessian_cond_number)) {
+      x$diagnostics$hessian_cond_number
+    } else {
+      NA
+    }
     if (!is.na(cond_num)) {
       cat(sprintf("  Hessian condition number: %.2e\n", cond_num))
     }

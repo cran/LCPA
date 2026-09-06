@@ -10,7 +10,7 @@ sim.correlation(
   skew = 0,
   positive = FALSE,
   permute = TRUE,
-  maxiter = 10
+  maxattempts = 10
 )
 }
 \arguments{
@@ -32,7 +32,7 @@ to theoretically guarantee positive definiteness (Theorem 1, Joe & Kurowicka 202
 
 \item{permute}{Logical. If \code{TRUE}, applies a random permutation to rows/columns to ensure exchangeability (invariance to variable ordering). Default is \code{TRUE}.}
 
-\item{maxiter}{Integer. Maximum number of generation attempts before numerical adjustment when \code{positive = TRUE}. Default is 10.}
+\item{maxattempts}{Integer. Maximum number of matrix draws when \code{positive = TRUE}. Default is 10.}
 }
 \value{
 An \eqn{I \times I} positive definite correlation matrix with unit diagonal.
@@ -72,19 +72,15 @@ The correlation matrix \eqn{\mathbf{R}} is built without matrix inversion using 
   }
 }
 This implements the dynamic programming approach from Joe & Kurowicka (2026, Section 2.1).
-\item Positive definiteness enforcement (when \code{positive = TRUE}):
-\itemize{
-\item Attempt up to \code{maxiter} generations
-\item On failure, project to nearest positive definite correlation matrix using \code{\link[Matrix]{nearPD}} with \code{corr = TRUE}
-\item Final matrix has minimum eigenvalue > 1e-8
-}
+\item Positive definiteness (when \code{positive = TRUE}):
+The returned matrix is positive definite.
 \item Exchangeability (optional):
 If \code{permute = TRUE}, rows/columns are randomly permuted before returning the matrix.
 }
 }
 \note{
-When \code{positive = TRUE}, the function guarantees positive definiteness either through direct generation
-(with retries) or numerical projection. The theoretical guarantee \eqn{\eta > (I-2)/2} is recommended for high dimensions.
+The theoretical condition \eqn{\eta > (I-2)/2} is recommended for
+positive-definite matrices in high dimensions.
 }
 \examples{
 # Default 3x3 correlation matrix
@@ -98,7 +94,7 @@ sim.correlation(4, skew = 0.7, permute = FALSE)
 
 # Positive partial correlations (enforced positive definiteness)
 R <- sim.correlation(6, positive = TRUE)
-min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)  # > 1e-8
+min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)  # > 0
 
 # High-dimensional case (I=20) with theoretical guarantee
 R <- sim.correlation(20, eta = 10)  # eta=10 > (20-2)/2=9
@@ -106,5 +102,7 @@ min(eigen(R, symmetric = TRUE, only.values = TRUE)$values)
 
 }
 \references{
-Joe, H., & Kurowicka, D. (2026). Random correlation matrices generated via partial correlation C-vines. Journal of Multivariate Analysis, 211, 105519. https://doi.org/10.1016/j.jmva.2025.105519
+Joe, H., & Kurowicka, D. (2026). Random correlation matrices generated via
+partial correlation C-vines. \emph{Journal of Multivariate Analysis, 211}, 105519.
+\doi{10.1016/j.jmva.2025.105519}
 }

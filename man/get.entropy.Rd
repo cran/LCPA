@@ -29,7 +29,8 @@ where:
 \itemize{
 \item \eqn{N} = Sample size
 \item \eqn{L} = Number of latent classes
-\item \eqn{p_{nl}} = Posterior probability of observation \eqn{n} belonging to class \eqn{l}
+\item \eqn{p_{nl}} = Posterior probability of participant \eqn{n}
+belonging to class \eqn{l}
 }
 }
 \description{
@@ -39,9 +40,6 @@ measures how accurately cases are assigned to latent classes based on posterior
 probabilities, with values closer to 1 indicating better separation between classes.
 }
 \note{
-The calculation includes a small constant (\code{1e-10}) to avoid \code{log(0)}
-instability when posterior probabilities are exactly zero.
-
 Values should be interpreted alongside other diagnostics (BIC, bootstrapped LRT)
 as high entropy alone doesn't guarantee model validity. Low entropy may indicate:
 \itemize{
@@ -67,7 +65,14 @@ cat("Classification entropy:", round(entropy_value, 3), "\n")
 
 }
 \references{
-Nylund-Gibson, K., & Choi, A. Y. (2018). Ten frequently asked questions about latent class analysis. Translational Issues in Psychological Science, 4(4), 440-461. https://doi.org/10.1037/tps0000176
+Clark, S. L., Muthén, B., Kaprio, J., D'Onofrio, B. M., Viken, R., & Rose,
+R. J. (2013). Models and strategies for factor mixture analysis: An example
+concerning the structure underlying psychological disorders. \emph{Structural
+Equation Modeling: A Multidisciplinary Journal, 20}(4), 681--703.
+\doi{10.1080/10705511.2013.824786}
 
-Clark, S. L., Muthén, B., Kaprio, J., D'Onofrio, B. M., Viken, R., & Rose, R. J. (2013). Models and Strategies for Factor Mixture Analysis: An Example Concerning the Structure Underlying Psychological Disorders. Structural Equation Modeling: A Multidisciplinary Journal, 20(4), 681-703. https://doi.org/10.1080/10705511.2013.824786
+Nylund-Gibson, K., & Choi, A. Y. (2018). Ten frequently asked questions
+about latent class analysis. \emph{Translational Issues in Psychological Science,
+4}(4), 440--461.
+\doi{10.1037/tps0000176}
 }

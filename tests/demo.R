@@ -13,7 +13,7 @@
 # dim.feedforward=16
 # eps=1e-8
 # maxiter <- 1000
-# maxiter.early <- 100
+# patience.early <- 100
 # maxcycle <- 20
 # initial.temperature <- 1000
 # cooling.rate <- 0.5
@@ -27,7 +27,7 @@
 # par.ini <- "random"
 # nrep <- 20
 # starts <- 100
-# maxiter.wa <- 20
+# maxiter.warmup <- 20
 # device <- "CPU"
 # vis <- TRUE
 #
@@ -71,11 +71,11 @@
 #   time.NNE <- system.time({
 #     res.NNE <- LPA(response,
 #                    L = l, par.ini = par.ini,
-#                    method="NNE", nrep = nrep, starts=starts, maxiter.wa=maxiter.wa, vis = vis,
+#                    method="NNE", nrep = nrep, starts=starts, maxiter.warmup=maxiter.warmup, vis = vis,
 #                    control.NNE=list(hidden.layers=hidden.layers, activation.function=activation.function,
 #                                     d.model=d.model, nhead=nhead, dim.feedforward=dim.feedforward, eps=eps,
 #                                     initial.temperature=initial.temperature, cooling.rate=cooling.rate, maxiter.sa=maxiter.sa, threshold.sa=threshold.sa,
-#                                     maxiter=maxiter, maxiter.early=maxiter.early, maxcycle=maxcycle,
+#                                     maxiter=maxiter, patience.early=patience.early, maxcycle=maxcycle,
 #                                     lr = lr, scheduler.patience = scheduler.patience, scheduler.factor = scheduler.factor,
 #                                     plot.interval=plot.interval,
 #                                     device=device))
@@ -87,7 +87,7 @@
 #   time.Mplus <- system.time({
 #     res.Mplus <- tryCatch({
 #       temp <- LPA(response,
-#                   L=l, par.ini=par.ini, method="Mplus", nrep=nrep, starts=starts, maxiter.wa=maxiter.wa, vis=vis,
+#                   L=l, par.ini=par.ini, method="Mplus", nrep=nrep, starts=starts, maxiter.warmup=maxiter.warmup, vis=vis,
 #                   control.Mplus=list(maxiter=2000, tol=1e-4, files.path=paste0(files.path, paste0("/L=", l)), files.clean=files.clean))
 #
 #       if (is.null(temp) ||
@@ -128,7 +128,7 @@
 # library(LCPA)
 # set.seed(56756765)
 # L.max <- 10
-# n.Bootstrap <- 100
+# nrep.bootstrap <- 100
 # for(l in 2:L.max){
 #   cat("=========================== Starting: L =", l, " ===========================\n")
 #   results.NNE <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))
@@ -136,7 +136,7 @@
 #   if(is.null(results.NNE[[l]]$bootstrap.obj.NNE)){
 #     results.NNE[[l]]$bootstrap.obj.NNE <- LRT.test.Bootstrap(results.NNE[[l-1]]$res.NNE,
 #                                                              results.NNE[[l]]$res.NNE,
-#                                                              n.Bootstrap = n.Bootstrap,
+#                                                              nrep.bootstrap = nrep.bootstrap,
 #                                                              vis = TRUE)
 #
 #     temp <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))
@@ -149,7 +149,7 @@
 # library(LCPA)
 # set.seed(56756765)
 # L.max <- 10
-# n.Bootstrap <- 100
+# nrep.bootstrap <- 100
 # for(l in 2:L.max){
 #   cat("=========================== Starting: L =", l, " ===========================\n")
 #   results.Mplus <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))
@@ -157,7 +157,7 @@
 #   if(is.null(results.Mplus[[l]]$bootstrap.obj.Mplus)){
 #     results.Mplus[[l]]$bootstrap.obj.Mplus <- LRT.test.Bootstrap(results.Mplus[[l-1]]$res.Mplus,
 #                                                                  results.Mplus[[l]]$res.Mplus,
-#                                                                  n.Bootstrap = n.Bootstrap,
+#                                                                  nrep.bootstrap = nrep.bootstrap,
 #                                                                  vis = TRUE)
 #
 #     temp <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))
@@ -171,19 +171,19 @@
 # library(LCPA)
 # set.seed(56756765)
 # L.max <- 10
-# n.Bootstrap <- 100
+# nrep.bootstrap <- 100
 # for(l in 2:L.max){
 #   cat("=========================== Starting: L =", l, " ===========================\n")
 #   results.LPA <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))
 #
 #   results.LPA[[l]]$compare.obj.Mplus <- compare.model(results.LPA[[l-1]]$res.Mplus,
 #                                                       results.LPA[[l]]$res.Mplus,
-#                                                       n.Bootstrap = 0)
+#                                                       nrep.bootstrap = 0)
 #   results.LPA[[l]]$compare.obj.Mplus$LRT.Bootstrap.obj <- results.LPA[[l]]$bootstrap.obj.Mplus
 #
 #   results.LPA[[l]]$compare.obj.NNE <- compare.model(results.LPA[[l-1]]$res.NNE,
 #                                                     results.LPA[[l]]$res.NNE,
-#                                                     n.Bootstrap = 0)
+#                                                     nrep.bootstrap = 0)
 #   results.LPA[[l]]$compare.obj.NNE$LRT.Bootstrap.obj <- results.LPA[[l]]$bootstrap.obj.NNE
 #
 #   temp <- readRDS(paste0("results/empirical_studies/results_LPA.rds"))

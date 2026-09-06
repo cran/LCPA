@@ -1,8 +1,8 @@
 Package: LCPA
 Type: Package
-Title: A General Framework for Latent Classify and Profile Analysis
-Version: 1.0.2
-Date: 2026-04-10
+Title: A General Framework for Latent Class and Profile Analysis
+Version: 1.0.4
+Date: 2026-09-2
 Author: Haijiang Qin [aut, cre, cph] (ORCID:
     <https://orcid.org/0009-0000-6721-5653>),
   Lei Guo [aut, cph] (ORCID: <https://orcid.org/0000-0002-8273-3587>)
@@ -17,14 +17,42 @@ Authors@R: c(person(given = "Haijiang",
                     email = "happygl1229@swu.edu.cn", 
                     comment = c(ORCID = "0000-0002-8273-3587")))
 Maintainer: Haijiang Qin <haijiang133@outlook.com>
-Description: A unified latent class modeling framework that encompasses both latent class analysis (LCA) and latent profile analysis (LPA), offering a one-stop solution for latent class modeling. It implements state-of-the-art parameter estimation methods, including the expectation–maximization (EM) algorithm, neural network estimation (NNE; requires users to have 'Python' and its dependent libraries installed on their computer), and integration with 'Mplus' (requires users to have 'Mplus' installed on their computer). In addition, it provides commonly used model fit indices such as the Akaike information criterion (AIC) and Bayesian information criterion (BIC), as well as classification accuracy measures such as entropy. The package also includes fully functional likelihood ratio tests (LRT) and bootstrap likelihood ratio tests (BLRT) to facilitate model comparison, along with bootstrap-based and observed information matrix-based standard error estimation. Furthermore, it supports the standard three-step approach for LCA, LPA, and latent transition analysis (LTA) with covariates, enabling detailed covariate analysis. Finally, it includes several user-friendly auxiliary functions to enhance interactive usability.
+Description: Provides a unified framework for finite-mixture latent variable
+  models, including latent class analysis (LCA), latent profile analysis (LPA),
+  latent class/profile analysis with covariates, and latent transition analysis
+  (LTA), within one consistent interface. Estimation methods include the
+  expectation-maximization (EM) algorithm; neural network estimation, which
+  requires 'Python' and its dependent libraries; integration with 'Mplus',
+  which requires an installed copy of 'Mplus'; and stochastic EM (SEM) through
+  the optional 'flexmix', 'Rmixmod', and 'RMixtComp' backends. 'flexmix' and the
+  default 'Rmixmod' path perform configurable warm-up trajectories and promote
+  the best candidates to full SEM replications. 'Rmixmod' additionally exposes
+  its native strategy interface, including chained SEM-to-EM estimation,
+  whereas 'RMixtComp' exposes its native SEM and Gibbs controls without the
+  external warm-up stage. Model assessment includes the Akaike information
+  criterion (AIC), Bayesian information criterion (BIC), Schwarz information
+  criterion (SIC), consistent AIC (CAIC), approximate weight of evidence (AWE),
+  sample-size-adjusted BIC (SABIC), entropy, and average posterior
+  probabilities. Model-comparison procedures include the ordinary
+  likelihood-ratio test, the Mplus TECH11 Vuong-Lo-Mendell-Rubin and adjusted
+  Lo-Mendell-Rubin tests, and fixed-replicate or sequential parametric bootstrap
+  likelihood-ratio tests. Standard errors can be estimated by nonparametric
+  bootstrap, numerical observed information, or analytic observed information
+  based on Louis' identity. Classification-error-adjusted maximum-likelihood
+  and Bolck-Croon-Hagenaars three-step methods support covariates predicting
+  latent membership, initial-status and transition regressions, and latent
+  classes or states predicting continuous and categorical external observed
+  dependent variables. Simulation,
+  posterior-probability, classification-error,
+  extraction, summary, plotting, model-adjustment, and update utilities are
+  also provided for reproducible workflows.
 License: GPL-3
 Depends: R (>= 4.1.0)
-Imports: reticulate, clue, ggplot2, tidyr, dplyr, mvtnorm, Matrix,
-        MASS, MplusAutomation, tidyselect, numDeriv, nloptr, patchwork,
-        Rcpp, reshape2, scales
+Imports: reticulate, methods, CompQuadForm, clue, ggplot2, tidyr,
+        dplyr, mvtnorm, Matrix, MASS, MplusAutomation, tidyselect,
+        numDeriv, nloptr, patchwork, Rcpp, reshape2, scales
+Suggests: flexmix, Rmixmod, RMixtComp, RMixtCompUtilities
 LinkingTo: Rcpp, RcppArmadillo
-RoxygenNote: 7.3.3
 Encoding: UTF-8
 NeedsCompilation: yes
 Collate: 'adjust.response.R' 'adjust.model.R' 'check.response.R'
@@ -33,13 +61,21 @@ Collate: 'adjust.response.R' 'adjust.model.R' 'check.response.R'
         'get.Log.Lik.LCA.R' 'get.Log.Lik.LPA.R' 'get.Log.Lik.LTA.R'
         'get.npar.LCA.R' 'get.npar.LPA.R' 'get.npar.LTA.R'
         'get.P.Z.Xn.LCA.R' 'get.P.Z.Xn.LPA.R' 'get.SE.R'
-        'install_python_dependencies.R' 'Kmeans.LCA.R' 'LCA.R' 'LCPA.R'
-        'logit.R' 'LPA.R' 'LTA.R' 'LRT.test.R' 'LRT.test.Bootstrap.R'
-        'LRT.test.VLMR.R' 'Mplus.LCA.R' 'Mplus.LPA.R' 'normalize.R'
-        'plotResponse.R' 'RcppExports.R' 'rdirichlet.R' 'S3extract.R'
-        'S3plot.R' 'S3print.R' 'S3summary.R' 'S3update.R'
-        'sim.correlation.R' 'sim.LCA.R' 'sim.LPA.R' 'sim.LTA.R'
-        'tools.R' 'utils.R' 'logpdf_component.R' 'zzz.R'
+        'three.step.utils.R' 'ZY.utils.R' 'ML.ZY.utils.R'
+        'BCH.XZ.utils.R' 'install_python_dependencies.R' 'Kmeans.LCA.R'
+        'Kmeans.LPA.R' 'LCA.R' 'ML.XZ.LCPA.R' 'BCH.XZ.LCPA.R'
+        'XZ.LCPA.R' 'BCH.ZY.LCPA.R' 'ML.ZY.LCPA.R' 'ZY.LCPA.R' 'LCPA.R'
+        'logit.R' 'LPA.R' 'ML.XZ.LTA.R' 'BCH.XZ.LTA.R' 'XZ.LTA.R'
+        'BCH.ZY.LTA.R' 'ML.ZY.LTA.R' 'ZY.LTA.R' 'LTA.R' 'LRT.test.R'
+        'LRT.test.Bootstrap.R' 'LRT.test.VLMR.R' 'Mplus.LCA.R'
+        'Mplus.LPA.R' 'normalize.R' 'plotResponse.R' 'Rmixmod.utils.R'
+        'Rmixmod.LCA.R' 'Rmixmod.LPA.R' 'RMixtComp.utils.R'
+        'RMixtComp.LCA.R' 'RMixtComp.LPA.R' 'flexmix.utils.R'
+        'flexmix.LCA.R' 'flexmix.LPA.R' 'RcppExports.R' 'rdirichlet.R'
+        'S3extract.R' 'S3plot.R' 'S3print.R' 'S3summary.R' 'S3update.R'
+        'simulation.utils.R' 'sim.correlation.R' 'sim.LCA.R'
+        'sim.LPA.R' 'sim.LTA.R' 'tools.R' 'utils.R' 'zzz.R'
 Repository: CRAN
-Packaged: 2026-04-10 02:16:14 UTC; Haijiang
-Date/Publication: 2026-04-10 05:10:37 UTC
+Config/roxygen2/version: 8.1.0
+Packaged: 2026-09-06 06:50:40 UTC; Haiji
+Date/Publication: 2026-09-06 22:50:10 UTC

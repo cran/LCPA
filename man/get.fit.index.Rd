@@ -18,31 +18,42 @@ get.fit.index(object)
 \value{
 An object of class \code{"fit.index"} containing:
 \describe{
+\item{N}{Number of observations used to fit the model}
 \item{npar}{Number of free parameters in the model}
 \item{Log.Lik}{Log-likelihood of the model: \eqn{\log \mathcal{L}}}
 \item{-2LL}{Deviance statistic: \eqn{-2 \log \mathcal{L}}
-\deqn{-2 \sum_{n=1}^N \log \left[ \sum_{l=1}^L \pi_l \cdot f(\mathbf{x}_n \mid \boldsymbol{\theta}_l) \right]},
+\deqn{
+      \begin{cases}
+      -2\sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+      \prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)\right\},
+      & \text{for LCA},\\
+      -2\sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+      \mathcal{N}(\mathbf{X}_n\mid\boldsymbol{\mu}_l,
+      \boldsymbol{\Sigma}_l)\right\},
+      & \text{for LPA},
+      \end{cases}}
 where \eqn{\pi_l} is the prior probability of class \eqn{l},
-\eqn{f(\cdot)} is the probability density/mass function (multivariate normal for LPA,
-multinomial for LCA), and \eqn{\boldsymbol{\theta}_l} are class-specific parameters.}
+and \eqn{\mathbf{X}_n} is participant \eqn{n}'s indicator vector.}
 \item{AIC}{Akaike Information Criterion:
 \eqn{\mathrm{AIC} = -2 \log \mathcal{L} + 2k},
 where \eqn{npar} = number of free parameters. Lower values indicate better fit.}
 \item{BIC}{Bayesian Information Criterion:
 \eqn{\mathrm{BIC} = -2 \log \mathcal{L} + npar \log(N)},
 where \eqn{N} = sample size. Incorporates stronger penalty for complexity than AIC.}
-\item{SIC}{Sample-Size Adjusted BIC:
+\item{SIC}{Schwarz information criterion on the log-likelihood scale:
 \eqn{\mathrm{SIC} = -\frac{1}{2} \mathrm{BIC}}.
 Equivalent to \eqn{\log \mathcal{L} - \frac{npar}{2} \log(N)}. Often used in latent class modeling.}
 \item{CAIC}{Consistent AIC:
 \eqn{\mathrm{CAIC} = -2 \log \mathcal{L} + npar \left[ \log(N) + 1 \right]}.
 Consistent version of AIC that converges to true model as \eqn{N \to \infty}.}
 \item{AWE}{Approximate Weight of Evidence:
-\eqn{\mathrm{AWE} = -2 \log \mathcal{L} + 1.5k \left[ \log(N) + 1 \right]}.
+\eqn{\mathrm{AWE} = -2 \log \mathcal{L} + npar \left[ \log(N) + 1.5 \right]}.
 Penalizes complexity more heavily than CAIC.}
 \item{SABIC}{Sample-Size Adjusted BIC:
 \eqn{\mathrm{SABIC} = -2 \log \mathcal{L} + npar \log \left( \frac{N + 2}{24} \right)}.
 Recommended for latent class/profile analysis with moderate sample sizes.}
+\item{arguments}{List containing the fitted model as \code{object}.}
+\item{call}{Matched function call.}
 }
 }
 \description{

@@ -46,7 +46,7 @@ The function performs the following steps for each dependency:
 \item Returns a logical list indicating initial installation status of each package.
 }
 
-\strong{Note:} This function requires \pkg{reticulate} to be loaded and a valid Python environment configured.
+Note: This function requires \pkg{reticulate} to be loaded and a valid Python environment configured.
 It does NOT automatically install \pkg{reticulate} or configure Python — that must be done separately.
 }
 \examples{
@@ -54,7 +54,7 @@ library(reticulate)
 
 # Ensure reticulate is loaded and Python is configured
 # need python
-\dontrun{
+\donttest{
 # Run dependency installer
 deps <- install_python_dependencies()
 

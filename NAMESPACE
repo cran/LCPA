@@ -17,6 +17,7 @@ S3method(print,LCPA)
 S3method(print,LPA)
 S3method(print,LTA)
 S3method(print,SE)
+S3method(print,VLMR)
 S3method(print,compare.model)
 S3method(print,fit.index)
 S3method(print,sim.LCA)
@@ -50,6 +51,7 @@ S3method(update,sim.LCA)
 S3method(update,sim.LPA)
 S3method(update,sim.LTA)
 export(Kmeans.LCA)
+export(Kmeans.LPA)
 export(LCA)
 export(LCPA)
 export(LPA)
@@ -87,65 +89,92 @@ export(sim.correlation)
 import(Rcpp)
 import(ggplot2)
 import(reticulate)
+importFrom(CompQuadForm,imhof)
 importFrom(MASS,ginv)
 importFrom(Matrix,nearPD)
-importFrom(MplusAutomation,mplusModeler)
-importFrom(MplusAutomation,mplusObject)
+importFrom(MplusAutomation,
+  mplusModeler,
+  mplusObject
+)
 importFrom(clue,solve_LSAP)
-importFrom(dplyr,"%>%")
-importFrom(dplyr,filter)
-importFrom(dplyr,mutate)
-importFrom(dplyr,n)
-importFrom(dplyr,select)
-importFrom(ggplot2,aes)
-importFrom(ggplot2,element_blank)
-importFrom(ggplot2,element_text)
-importFrom(ggplot2,geom_col)
-importFrom(ggplot2,geom_line)
-importFrom(ggplot2,geom_point)
-importFrom(ggplot2,geom_ribbon)
-importFrom(ggplot2,geom_tile)
-importFrom(ggplot2,ggplot)
-importFrom(ggplot2,guide_legend)
-importFrom(ggplot2,guides)
-importFrom(ggplot2,labs)
-importFrom(ggplot2,scale_fill_gradient2)
-importFrom(ggplot2,scale_x_continuous)
-importFrom(ggplot2,scale_y_continuous)
-importFrom(ggplot2,theme)
-importFrom(ggplot2,theme_minimal)
-importFrom(ggplot2,unit)
+importFrom(dplyr,
+  "%>%",
+  filter,
+  mutate,
+  n,
+  select
+)
+importFrom(ggplot2,
+  aes,
+  element_blank,
+  element_text,
+  geom_col,
+  geom_line,
+  geom_point,
+  geom_ribbon,
+  geom_tile,
+  ggplot,
+  guide_legend,
+  guides,
+  labs,
+  scale_fill_gradient2,
+  scale_x_continuous,
+  scale_y_continuous,
+  theme,
+  theme_minimal,
+  unit
+)
 importFrom(grDevices,hcl)
+importFrom(methods,
+  is,
+  new,
+  slot
+)
 importFrom(mvtnorm,rmvnorm)
 importFrom(nloptr,nloptr)
 importFrom(numDeriv,hessian)
-importFrom(patchwork,plot_layout)
-importFrom(patchwork,plot_spacer)
-importFrom(patchwork,wrap_plots)
+importFrom(patchwork,
+  plot_layout,
+  plot_spacer,
+  wrap_plots
+)
 importFrom(reshape2,melt)
-importFrom(reticulate,py_install)
-importFrom(reticulate,py_module_available)
-importFrom(scales,percent_format)
-importFrom(scales,squish)
-importFrom(stats,cov)
-importFrom(stats,kmeans)
-importFrom(stats,na.omit)
-importFrom(stats,pchisq)
-importFrom(stats,plogis)
-importFrom(stats,pnorm)
-importFrom(stats,qlogis)
-importFrom(stats,rbeta)
-importFrom(stats,rgamma)
-importFrom(stats,rnorm)
-importFrom(stats,runif)
-importFrom(stats,sd)
-importFrom(stats,setNames)
-importFrom(stats,var)
+importFrom(reticulate,
+  py_install,
+  py_module_available,
+  source_python
+)
+importFrom(scales,
+  breaks_width,
+  percent_format,
+  squish
+)
+importFrom(stats,
+  complete.cases,
+  cov,
+  dnorm,
+  kmeans,
+  na.omit,
+  optim,
+  pchisq,
+  pnorm,
+  quantile,
+  rbeta,
+  rgamma,
+  rnorm,
+  runif,
+  sd,
+  setNames,
+  var
+)
 importFrom(tidyr,pivot_longer)
 importFrom(tidyselect,all_of)
-importFrom(utils,combn)
-importFrom(utils,globalVariables)
-importFrom(utils,modifyList)
-importFrom(utils,packageVersion)
-importFrom(utils,tail)
+importFrom(utils,
+  combn,
+  globalVariables,
+  modifyList,
+  packageDescription,
+  packageVersion,
+  tail
+)
 useDynLib(LCPA, .registration = TRUE)

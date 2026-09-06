@@ -12,39 +12,46 @@
 #' @param distribution Character; distribution of class sizes. Options: \code{"random"} (default) or \code{"uniform"}.
 #' @param mean.range Numeric vector of length 2; range for sampling class-specific means.
 #'   Each variable's means are sampled uniformly from \code{mean.range[1]} to \code{mean.range[2]}.
-#'   Default: \code{c(-4, 4)}.
+#'   Default: \code{c(-2, 2)}.
 #' @param covs.range Numeric vector of length 2; range for sampling variance parameters (diagonal elements).
 #'   Must satisfy \code{covs.range[1] > 0} and \code{covs.range[2] > covs.range[1]}. Off-diagonal covariances
 #'   are derived from correlations scaled by these variances. Default: \code{c(0.01, 4)}.
 #' @param params List with fixed parameters for simulation:
 #'   \describe{
-#'     \item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities per latent class.}
-#'     \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
-#'     \item{\code{Z}}{Vector of length \eqn{N} containing the latent classes of observations. A fixed
-#'                     observation classes \code{Z} is applied directly to simulate data only when \code{P.Z}
-#'                     is \code{NULL} and \code{Z} is a \code{N} length vector.}
+#'     \item{\code{means}}{\eqn{L \times I} matrix of class-specific means in the final class order.}
+#'     \item{\code{covs}}{\eqn{I \times I \times L} array of class-specific
+#'       covariance matrices in the final class order.}
+#'     \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities in the final class order.}
+#'     \item{\code{Z}}{Vector of length \eqn{N} containing fixed class
+#'       assignments in the final class order. When supplied, \code{Z} takes precedence over
+#'       \code{P.Z}.}
 #'   }
-#' @param is.sort A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-#'                order according to \code{P.Z}. All other parameters will be adjusted accordingly
-#'                based on the reordered latent classes.
+#' @param is.sort A logical value. If \code{TRUE} (default), internally generated class probabilities
+#'   are ordered decreasingly before class-specific parameters and observations are generated.
+#'   Supplied parameters are already defined in this final order and are never reordered; supplied
+#'   \code{P.Z} or \code{Z} must therefore follow decreasing class proportions.
 #'
 #' @return A list containing:
 #'   \describe{
 #'     \item{response}{Numeric matrix (\eqn{N \times I}) of simulated observations. Rows are observations,
-#'       columns are variables named \code{"V1"}, \code{"V2"}, ..., or \code{"UV"} for univariate data.}
+#'       columns are variables named \code{"V1"}, \code{"V2"}, ..., or \code{"V"} for univariate data.}
 #'     \item{means}{Numeric matrix (\eqn{L \times I}) of true class-specific means.
-#'       Row names: \code{"Class1"}, \code{"Class2"}, ...; column names match \code{response}.}
+#'       Row names: `"Profile 1"`, `"Profile 2"`, and so on; column names
+#'       match `response`.}
 #'     \item{covs}{Array (\eqn{I \times I \times L}) of true class-specific covariance matrices.
 #'       Dimensions: variables x variables x classes. Constrained parameters have identical values across class slices.
 #'       Dimension names match \code{response} and class labels.}
 #'     \item{P.Z.Xn}{Numeric matrix (\eqn{N \times L}) of true class membership probabilities (one-hot encoded).
 #'       Row \code{i}, column \code{l} = 1 if observation \code{i} belongs to class \code{l}, else 0.
-#'       Row names: \code{"O1"}, \code{"O2"}, ...; column names: \code{"Class1"}, \code{"Class2"}, ...}
+#'       Row names: \code{"O1"}, \code{"O2"}, ...; column names:
+#'       `"Profile 1"`, `"Profile 2"`, and so on.}
 #'     \item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions.
-#'       Named with class labels (e.g., \code{"Class1"}).}
+#'       Named `"Profile 1"`, `"Profile 2"`, and so on.}
 #'     \item{Z}{Integer vector (length \eqn{N}) of true class assignments (1 to L).
 #'       Named with observation IDs (e.g., \code{"O1"}).}
 #'     \item{constraint}{Original constraint specification (character string or list) passed to the function.}
+#'     \item{call}{Matched simulation call.}
+#'     \item{arguments}{List of the effective simulation arguments.}
 #'   }
 #'
 #' @section Covariance Constraints:
@@ -69,12 +76,8 @@
 #'       \item{\code{c(i,j)}}{Constrains covariance between variables \code{i} and \code{j} to be equal across all classes
 #'         (symmetric: automatically includes \code{c(j,i)}).}
 #'     }
-#'     Unconstrained parameters vary freely. The algorithm ensures positive definiteness by:
-#'     \enumerate{
-#'       \item Generating a base positive definite matrix \code{S0}.
-#'       \item Applying constraints via a logical mask.
-#'       \item Adjusting unconstrained variances to maintain positive definiteness.
-#'     }
+#'     Unconstrained parameters vary freely, and the returned covariance matrices
+#'     are positive definite.
 #'     Critical requirements for custom constraints:
 #'     \describe{
 #'       \item{At least one variance must be unconstrained if any off-diagonal covariance is unconstrained.}{}
@@ -97,12 +100,8 @@
 #'
 #' Covariance Generation:
 #' \itemize{
-#'   \item \strong{Positive Definiteness:} All covariance matrices are adjusted using \code{Matrix::nearPD}
-#'     and eigenvalue thresholds (\eqn{> 10^{-8}}) to guarantee validity. Failed attempts trigger explicit errors.
-#'   \item \strong{Univariate Case (\code{I=1}):} Constraints \code{"UE"} and \code{"UV"} are enforced automatically.
+#'   \item Univariate case (\code{I=1}): Constraints \code{"UE"} and \code{"UV"} are enforced automatically.
 #'     Predefined constraints like \code{"E0"} map to \code{"UE"}.
-#'   \item \strong{VE Constraint:} Requires special handling—base off-diagonal elements are fixed, and diagonals
-#'     are sampled above a minimum threshold to maintain positive definiteness. May fail if \code{covs.range} is too narrow.
 #' }
 #'
 #' Class Assignment:
@@ -124,8 +123,8 @@
 #' sim_data <- sim.LPA(N = 500, I = 2, L = 3, constraint = "VV")
 #'
 #' # Example 2: Univariate data, equal variances
-#' # 'E0' automatically maps to 'UE' for I=2
-#' sim_uni <- sim.LPA(N = 200, I = 2, L = 2, constraint = "E0")
+#' # 'E0' automatically maps to 'UE' for I=1
+#' sim_uni <- sim.LPA(N = 200, I = 1, L = 2, constraint = "E0")
 #'
 #' # Example 3: Custom constraints
 #' # - Equal covariance between V1 and V2 across classes
@@ -208,7 +207,7 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
   if (is.null(params$covs)) {
     generate_covs <- function() {
       covs_attempt <- array(0, dim = c(I, I, L))
-      dimnames(covs_attempt) <- list(NULL, NULL, paste0("Class", 1:L))
+      dimnames(covs_attempt) <- list(NULL, NULL, .latent.group.names(L, "LPA"))
       is.univariate_local <- (I == 1)
 
       if (custom_constraint) {
@@ -254,22 +253,24 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
           diag_indices <- 1:I
           nonshared_diag_indices <- diag_indices[!mask[cbind(diag_indices, diag_indices)]]
 
-          current_min_eigen <- min(eigen(M, symmetric = TRUE, only.values = TRUE)$values)
-          max_attempts_adj <- 1000
+          maxattempts.adjust <- 1000
           attempt <- 0
-          while (current_min_eigen <= 1e-8 && attempt < max_attempts_adj && length(nonshared_diag_indices) > 0) {
-            adjust_vec <- rep(0, I)
-            current_diag <- diag(M)
-            increase_amount <- current_diag[nonshared_diag_indices] * 0.1
-            adjust_vec[nonshared_diag_indices] <- increase_amount
-            M <- M + diag(adjust_vec)
-            current_min_eigen <- min(eigen(M, symmetric = TRUE, only.values = TRUE)$values)
+          while (!is.positive.definite(M) && attempt < maxattempts.adjust &&
+                 length(nonshared_diag_indices) > 0) {
+            projected <- as.matrix(Matrix::nearPD(
+              M, corr = FALSE, keepDiag = FALSE,
+              eig.tol = .Machine$double.eps^(2 / 3),
+              posd.tol = sqrt(.Machine$double.eps)
+            )$mat)
+            adjustment <- pmax(diag(projected) - diag(M), 0)
+            diag(M)[nonshared_diag_indices] <-
+              diag(M)[nonshared_diag_indices] + adjustment[nonshared_diag_indices]
             attempt <- attempt + 1
           }
 
-          if (current_min_eigen <= 1e-8) {
+          if (!is.positive.definite(M)) {
             stop("Failed to make covariance matrix positive definite for class ", l,
-                 " after ", max_attempts_adj, " attempts. Consider wider covs.range or reducing I.")
+                 " after ", maxattempts.adjust, " attempts. Consider wider covs.range or reducing I.")
           }
           covs_attempt[, , l] <- M
         }
@@ -290,21 +291,23 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
             shared_cov <- diag(shared_vars)
             for (l in 1:L) covs_attempt[, , l] <- shared_cov
           } else if (constraint == "VE") {
-            max_attempts_ve <- 1000
+            maxattempts.ve <- 1000
             base_cov <- NULL
             non_diag_matrix <- NULL
             min_diag_val <- NULL
 
-            for (attempt in 1:max_attempts_ve) {
+            for (attempt in 1:maxattempts.ve) {
               base_cov <- generate_positive_definite_cov(I, covs.range)
               non_diag_matrix <- base_cov
               diag(non_diag_matrix) <- 0
               e_vals <- eigen(non_diag_matrix, symmetric = TRUE, only.values = TRUE)$values
               lambda_min <- min(e_vals)
-              min_diag_val <- max(covs.range[1], -lambda_min + 1e-6)
+              numerical.margin <- sqrt(.Machine$double.eps) *
+                max(1, max(abs(e_vals)))
+              min_diag_val <- max(covs.range[1], -lambda_min + numerical.margin)
 
               if (min_diag_val <= covs.range[2]) break
-              if (attempt == max_attempts_ve) {
+              if (attempt == maxattempts.ve) {
                 stop("Failed to generate VE constraint matrix within covs.range. ",
                      "Try increasing covs.range[2] or reducing dimension I.")
               }
@@ -337,52 +340,48 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
       return(covs_attempt)
     }
 
-    max_attempts_total <- 1000
+    maxattempts.total <- 1000
     covs <- NULL
-    for (attempt in 1:max_attempts_total) {
+    for (attempt in 1:maxattempts.total) {
       covs_temp <- try(generate_covs(), silent = TRUE)
       if (!inherits(covs_temp, "try-error")) {
         covs <- covs_temp
         break
       } else {
-        if (attempt < max_attempts_total) {
+        if (attempt < maxattempts.total) {
           message(sprintf("Attempt %d/%d: Failed to generate positive definite covariance matrices. Retrying...",
-                          attempt, max_attempts_total))
+                          attempt, maxattempts.total))
         }
       }
     }
     if (is.null(covs)) {
-      stop("Failed to generate positive definite covariance matrices after ", max_attempts_total, " attempts.")
+      stop("Failed to generate positive definite covariance matrices after ", maxattempts.total, " attempts.")
     }
   } else {
     covs <- params$covs
   }
 
   if(!is.null(params$Z)){
-    Z <- params$Z
-    P.Z <- table(params$Z) / sum(Z)
+    Z <- as.integer(params$Z)
+    if(length(Z) != N || any(!Z %in% seq_len(L))){
+      stop("params$Z must contain N class labels between 1 and L")
+    }
+    P.Z <- .class.proportions(Z, L)
+    .simulation.require.sorted(P.Z, is.sort, "params$Z")
   }else if(!is.null(params$P.Z)){
-    P.Z <- params$P.Z
-    sizes.class <- as.integer(round(P.Z * N))
-    diff <- N - sum(sizes.class)
-    if (diff != 0) sizes.class[which.max(sizes.class)] <- sizes.class[which.max(sizes.class)] + diff
-    Z <- rep(1:L, times = sizes.class)
-    Z <- sample(Z, N, replace = TRUE)
+    P.Z <- .simulation.probability(params$P.Z, L, "params$P.Z")
+    .simulation.require.sorted(P.Z, is.sort, "params$P.Z")
+    Z <- .simulation.sample.classes.from.pool(P.Z, N)
   }else{
     if (distribution == "random") {
-      alpha <- rep(3, L)
-      p <- rdirichlet(1, alpha)
-      sizes.class <- as.integer(round(p * N))
-      diff <- N - sum(sizes.class)
-      if (diff != 0) sizes.class[which.max(sizes.class)] <- sizes.class[which.max(sizes.class)] + diff
-      Z <- rep(1:L, times = sizes.class)
-      Z <- sample(Z, N, replace = TRUE)
+      P.Z <- as.numeric(rdirichlet(1, rep(3, L)))
     } else if (distribution == "uniform") {
-      Z <- sample(1:L, N, replace = TRUE)
+      P.Z <- rep(1 / L, L)
     } else {
       stop("Invalid 'distribution'. Choose 'random' or 'uniform'.")
     }
-    P.Z <- table(Z) / N
+    if(is.sort) P.Z <- sort(P.Z, decreasing = TRUE)
+    Z <- .simulation.sample.classes.from.pool(P.Z, N)
   }
 
   var_names <- if (is.univariate) "V" else paste0("V", 1:I)
@@ -396,44 +395,32 @@ sim.LPA <- function(N = 1000, I = 5, L = 2, constraint = "VV", distribution = "r
     covs.cur <- as.matrix(covs[, , l], I, I)
     mean_l <- means[l, , drop = FALSE]
 
-    if (I > 1) {
-      e_min <- min(eigen(covs.cur, symmetric = TRUE, only.values = TRUE)$values)
-      if (e_min <= 1e-8) {
-        nearPD_result <- Matrix::nearPD(covs.cur, corr = FALSE, keepDiag = TRUE)
+    if (I > 1 && !is.positive.definite(covs.cur)) {
+        nearPD_result <- Matrix::nearPD(
+          covs.cur, corr = FALSE, keepDiag = FALSE,
+          eig.tol = .Machine$double.eps^(2 / 3),
+          posd.tol = sqrt(.Machine$double.eps)
+        )
         covs.cur <- as.matrix(nearPD_result$mat)
-
-        e_min_new <- min(eigen(covs.cur, symmetric = TRUE, only.values = TRUE)$values)
-        if (e_min_new <= 1e-8) {
-          jitter <- abs(e_min_new) + 1e-6
-          diag(covs.cur) <- diag(covs.cur) + jitter
+        if(!is.positive.definite(covs.cur)){
+          stop("Matrix::nearPD failed to return a positive-definite covariance matrix")
         }
         covs[, , l] <- covs.cur
-      }
     }
 
     class_data <- mvtnorm::rmvnorm(n = n_l, mean = as.numeric(mean_l), sigma = (covs.cur + t(covs.cur)) / 2)
     response[Z == l, ] <- class_data
   }
-  P.Z.Xn <- matrix(0, nrow = N, ncol = L)
-  for (i in 1:N) P.Z.Xn[i, Z[i]] <- 1
-  P.Z <- colSums(P.Z.Xn) / N
-
-  if (is.sort) {
-    posi <- order(P.Z, decreasing = TRUE)
-    P.Z <- P.Z[posi]
-    means <- means[posi, , drop = FALSE]
-    covs  <- covs[, , posi, drop = FALSE]
-    P.Z.Xn <- P.Z.Xn[, posi, drop = FALSE]
-    Z <- match(Z, posi)
-  }
+  P.Z.Xn <- .class.indicator(Z, L)
+  P.Z <- .class.proportions(Z, L)
 
 
-  colnames(P.Z.Xn) <- paste0("Class.", 1:L)
+  colnames(P.Z.Xn) <- .latent.group.names(L, "LPA")
   rownames(P.Z.Xn) <- paste0("O", 1:N)
   names(P.Z) <- colnames(P.Z.Xn)
-  rownames(means) <- paste0("Class.", 1:L)
+  rownames(means) <- .latent.group.names(L, "LPA")
   colnames(means) <- var_names
-  dimnames(covs) <- list(var_names, var_names, paste0("Class.", 1:L))
+  dimnames(covs) <- list(var_names, var_names, .latent.group.names(L, "LPA"))
   names(Z) <- paste0("O", 1:N)
 
   res <- list(

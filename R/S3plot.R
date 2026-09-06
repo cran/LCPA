@@ -9,6 +9,8 @@
 #'   \itemize{
 #'     \item Model objects: \code{\link[LCPA]{LCA}}, \code{\link[LCPA]{LPA}}.
 #'   }
+#' @param y Reserved for compatibility with the base \code{\link[graphics]{plot}}
+#'   generic. It must be \code{NULL}; specify \code{ncol} by name.
 #' @param ncol Number of columns in the multi-panel layout (default: 2).
 #'   Controls arrangement of latent class/profile panels.
 #' @param ... Additional arguments passed to methods.
@@ -17,20 +19,22 @@
 #'
 #' @details
 #' Each method produces a structured, visually intuitive plot optimized for its object type.
-#' See specific method documentation (\code{plot.LCA}, \code{plot.LPA}) for detailed parameter options.
+#' See \code{\link[LCPA]{plot.LCA}} and \code{\link[LCPA]{plot.LPA}} for
+#' detailed parameter options.
 #'
 #' @name plot
 NULL
 
 #' @describeIn plot Plot method for \code{LCA} objects
-#' @export
+#' @exportS3Method plot LCA
 #' @importFrom ggplot2 ggplot aes geom_col scale_y_continuous labs theme_minimal theme element_text element_blank guide_legend guides unit
 #' @importFrom dplyr %>%
 #' @importFrom tidyr pivot_longer
 #' @importFrom patchwork wrap_plots plot_layout plot_spacer
 #' @importFrom scales percent_format
 #'
-plot.LCA <- function(x, ncol = 2, ...) {
+plot.LCA <- function(x, y = NULL, ncol = 2, ...) {
+  if(!is.null(y)) stop("y is not used; specify ncol by name", call. = FALSE)
   L <- dim(x$params$par)[1]
   I <- dim(x$params$par)[2]
   P.Z <- x$P.Z
@@ -57,7 +61,10 @@ plot.LCA <- function(x, ncol = 2, ...) {
       scale_x_continuous(breaks = scales::breaks_width(1)) +
       scale_y_continuous(labels = percent_format(accuracy = 1)) +
       labs(
-        title = paste0("Class ", l, " (", sprintf("%.2f", P.Z[l] * 100), "%)"),
+        title = paste0(
+          .latent.group.names(L, "LCA")[l],
+          " (", sprintf("%.2f", P.Z[l] * 100), "%)"
+        ),
         x = "Indicator",
         y = "Probability (Cumulative)",
         fill = "Response\nCategories"
@@ -123,7 +130,7 @@ plot.LCA <- function(x, ncol = 2, ...) {
 }
 
 #' @describeIn plot Plot method for \code{LPA} objects (with covariance heatmap)
-#' @export
+#' @exportS3Method plot LPA
 #'
 #' @importFrom ggplot2 ggplot aes geom_ribbon geom_line geom_point scale_x_continuous labs theme_minimal theme element_text element_blank geom_tile scale_fill_gradient2
 #' @importFrom dplyr %>%
@@ -131,7 +138,8 @@ plot.LCA <- function(x, ncol = 2, ...) {
 #' @importFrom patchwork wrap_plots
 #' @importFrom reshape2 melt
 #' @importFrom scales squish
-plot.LPA <- function(x, ncol = 2, ...) {
+plot.LPA <- function(x, y = NULL, ncol = 2, ...) {
+  if(!is.null(y)) stop("y is not used; specify ncol by name", call. = FALSE)
 
   means <- x$params$means
   covs  <- x$params$covs
@@ -140,7 +148,24 @@ plot.LPA <- function(x, ncol = 2, ...) {
   L <- nrow(means)
   I <- ncol(means)
 
-  indicator_names <- colnames(means)
+  response_names <- colnames(x$arguments$response)
+  parameter_names <- colnames(means)
+  if(!is.null(response_names) && length(response_names) == I){
+    if(!is.null(parameter_names) &&
+       !anyDuplicated(response_names) && !anyDuplicated(parameter_names)){
+      parameter_order <- match(response_names, parameter_names)
+      if(!anyNA(parameter_order)){
+        means <- means[, parameter_order, drop = FALSE]
+        covs <- covs[parameter_order, parameter_order, , drop = FALSE]
+      }
+    }
+    indicator_names <- response_names
+  }else{
+    indicator_names <- parameter_names
+  }
+  if(is.null(indicator_names)){
+    indicator_names <- paste0("V", seq_len(I))
+  }
   x_index <- 1:I
 
   plots <- list()
@@ -199,7 +224,7 @@ plot.LPA <- function(x, ncol = 2, ...) {
 
       labs(
         title = paste0(
-          "Profile ", l,
+          .latent.group.names(L, "LPA")[l],
           " (", sprintf("%.1f%%", P.Z[l] * 100), ")"
         ),
         x = "Indicators",
@@ -242,7 +267,7 @@ plot.LPA <- function(x, ncol = 2, ...) {
   value <- df_cov$value
 
   df_cov$Var1 <- factor(indicator_names[df_cov$Var1], levels = indicator_names)
-  df_cov$Var2 <- factor(indicator_names[df_cov$Var2], levels = indicator_names)
+  df_cov$Var2 <- factor(indicator_names[df_cov$Var2], levels = rev(indicator_names))
 
   p <- ggplot(df_cov, aes(x = Var1, y = Var2, fill = value)) +
     geom_tile() +

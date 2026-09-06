@@ -73,22 +73,28 @@
 \code{\link[LCPA]{sim.LTA}}
 \item Fit/comparison objects: \code{\link[LCPA]{get.fit.index}}, \code{\link[LCPA]{compare.model}}
 \item Standard error objects: \code{\link[LCPA]{get.SE}}
-\item Summary objects: \code{summary.LCA}, \code{summary.LPA}, \code{summary.LCPA},
-\code{summary.LTA}, \code{summary.sim.LCA}, \code{summary.sim.LPA}, \code{summary.sim.LTA},
-\code{summary.fit.index}, \code{summary.compare.model}, \code{summary.SE}
+\item Summary objects: \code{\link[LCPA]{summary.LCA}},
+\code{\link[LCPA]{summary.LPA}}, \code{\link[LCPA]{summary.LCPA}},
+\code{\link[LCPA]{summary.LTA}}, \code{\link[LCPA]{summary.sim.LCA}},
+\code{\link[LCPA]{summary.sim.LPA}}, \code{\link[LCPA]{summary.sim.LTA}},
+\code{\link[LCPA]{summary.fit.index}},
+\code{\link[LCPA]{summary.compare.model}}, and
+\code{\link[LCPA]{summary.SE}}
 }}
 
-\item{...}{Additional arguments passed to methods (currently ignored in most cases).}
+\item{...}{Reserved for S3 method compatibility; no additional arguments are used.}
 
 \item{digits}{Number of decimal places for numeric output (default: varies by method, often 4).
-Used by: \code{print.SE}, \code{print.summary.fit.index}, \code{print.summary.sim.LCA/LPA/LTA},
-\code{print.summary.SE}.}
+Used by \code{\link[LCPA]{print.SE}}, \code{\link[LCPA]{print.summary.fit.index}},
+\code{\link[LCPA]{print.summary.sim.LCA}}, \code{\link[LCPA]{print.summary.sim.LPA}},
+\code{\link[LCPA]{print.summary.sim.LTA}}, and \code{\link[LCPA]{print.summary.SE}}.}
 
 \item{I.max}{Maximum number of variables/items to display before truncation (default: varies, e.g., 5).
-Used by: \code{print.SE}, \code{print.summary.sim.LCA/LPA/LTA}.}
+Used by \code{\link[LCPA]{print.SE}}, \code{\link[LCPA]{print.summary.sim.LCA}},
+\code{\link[LCPA]{print.summary.sim.LPA}}, and \code{\link[LCPA]{print.summary.sim.LTA}}.}
 
 \item{L.max}{Maximum number of latent classes/profiles to display before truncation (default: varies, e.g., 3).
-Used by: \code{print.SE}, \code{print.summary.sim.LTA}.}
+Used by \code{\link[LCPA]{print.SE}} and \code{\link[LCPA]{print.summary.sim.LTA}}.}
 }
 \value{
 Invisibly returns the input object \code{x}. No data is modified.
@@ -103,21 +109,25 @@ and quick diagnostic inspection.
 Each method produces a structured, human-readable summary optimized for its object type:
 
 \describe{
-\item{\strong{Model Objects (\code{LCA}/\code{LPA}/\code{LCPA}/\code{LTA})}}{
-Invokes \code{summary()} internally and prints comprehensive output including:
+\item{Model objects (\code{LCA}/\code{LPA}/\code{LCPA}/\code{LTA})}{
+Invokes \code{\link[base]{summary}()} internally and prints comprehensive output including:
 \itemize{
 \item Model call and configuration (method, constraints, reference class)
 \item Data characteristics (N, I, time points, distribution)
-\item Fit statistics (LogLik, AIC, BIC, entropy, npar)
+\item Likelihood fit statistics for models for which they are defined
 \item Class/profile prior probabilities and frequencies
 \item Item-response probabilities (\code{LCA}) or profile means (\code{LPA})
-\item For \code{LCPA}/\code{LTA}: regression coefficients with significance markers and 95\% CIs
+\item For XZ: regression coefficients with significance markers and 95\% CIs
+\item For Gaussian ZY: conditional means and variances with standard
+errors, 95\% CIs, and omnibus equality tests
+\item For categorical ZY: conditional category probabilities with
+standard errors, 95\% CIs, and an omnibus distributional test
 \item Convergence diagnostics (iterations, tolerance, hardware)
 \item Replication details (if \code{nrep > 1})
 }
 }
 
-\item{\strong{Simulation Objects (\code{sim.LCA}/\code{sim.LPA}/\code{sim.LTA})}}{
+\item{Simulation objects (\code{sim.LCA}/\code{sim.LPA}/\code{sim.LTA})}{
 Displays simulation design and true parameter structure:
 \itemize{
 \item Configuration (N, I, L, times, constraint, distribution)
@@ -129,17 +139,17 @@ Displays simulation design and true parameter structure:
 Output is truncated for high-dimensional structures using \code{I.max} and \code{L.max}.
 }
 
-\item{\strong{Fit Index Objects (\code{fit.index})}}{
+\item{Fit index objects (\code{\link[LCPA:get.fit.index]{fit.index}})}{
 Presents a clean table of model fit criteria:
 \itemize{
 \item Header with dimensions (N, I, L, npar)
 \item Formatted table: AIC, BIC, SABIC, CAIC, AWE, -2LL, SIC
-\item Interpretation note: “Lower values preferred for ICs”
+\item Interpretation note: lower values are preferred for information criteria
 \item Values rounded to \code{digits} decimal places
 }
 }
 
-\item{\strong{Model Comparison Objects (\code{compare.model})}}{
+\item{Model comparison objects (\code{compare.model})}{
 Compares two nested models with statistical tests:
 \itemize{
 \item Comparative fit table (npar, LogLik, AIC, BIC, entropy)
@@ -150,18 +160,19 @@ Compares two nested models with statistical tests:
 }
 }
 
-\item{\strong{Standard Error Objects (\code{SE})}}{
+\item{Standard error objects (\code{\link[LCPA:get.SE]{SE}})}{
 Displays uncertainty estimates for model parameters:
 \itemize{
 \item Class probability SEs (always fully shown)
 \item Profile means SEs (\code{LPA}) or item-response SEs (\code{LCA}), truncated by \code{L.max}/\code{I.max}
-\item Covariance SE summary (non-zero count only; full access via \code{extract()})
-\item Diagnostics: Bootstrap completion \% or Hessian condition number with stability warnings
+\item Covariance SE summary (non-zero count only; full access via \code{\link[LCPA]{extract}()})
+\item Method-specific diagnostics
 }
 }
 
-\item{\strong{Summary Objects}}{
-All \code{summary.*} methods are called internally by their corresponding \code{print.*} methods.
+\item{Summary objects}{
+All summary methods are called internally by their corresponding
+\code{\link[LCPA]{print}} methods.
 They pre-compute and structure output for consistent formatting. Direct calls are also supported.
 }
 }
@@ -170,41 +181,41 @@ They pre-compute and structure output for consistent formatting. Direct calls ar
 \itemize{
 \item \code{print(LCA)}: Print method for \code{LCA} objects
 
-\item \code{print(summary.LCA)}: Print method for \code{summary.LCA} objects
+\item \code{print(summary.LCA)}: Print method for \code{\link[LCPA]{summary.LCA}} objects
 
 \item \code{print(LPA)}: Print method for \code{LPA} objects
 
-\item \code{print(summary.LPA)}: Print method for \code{summary.LPA} objects
+\item \code{print(summary.LPA)}: Print method for \code{\link[LCPA]{summary.LPA}} objects
 
 \item \code{print(LTA)}: Print method for \code{LTA} objects
 
-\item \code{print(summary.LTA)}: Print method for \code{summary.LTA} objects
+\item \code{print(summary.LTA)}: Print method for \code{\link[LCPA]{summary.LTA}} objects
 
 \item \code{print(LCPA)}: Print method for \code{LCPA} objects
 
-\item \code{print(summary.LCPA)}: Print method for \code{summary.LCPA} objects
+\item \code{print(summary.LCPA)}: Print method for \code{\link[LCPA]{summary.LCPA}} objects
 
 \item \code{print(sim.LCA)}: Print method for \code{sim.LCA} objects
 
-\item \code{print(summary.sim.LCA)}: Print method for \code{summary.sim.LCA} objects
+\item \code{print(summary.sim.LCA)}: Print method for \code{\link[LCPA]{summary.sim.LCA}} objects
 
 \item \code{print(sim.LPA)}: Print method for \code{sim.LPA} objects
 
-\item \code{print(summary.sim.LPA)}: Print method for \code{summary.sim.LPA} objects
+\item \code{print(summary.sim.LPA)}: Print method for \code{\link[LCPA]{summary.sim.LPA}} objects
 
 \item \code{print(sim.LTA)}: Print method for \code{sim.LTA} objects
 
-\item \code{print(summary.sim.LTA)}: Print method for \code{summary.sim.LTA} objects
+\item \code{print(summary.sim.LTA)}: Print method for \code{\link[LCPA]{summary.sim.LTA}} objects
 
-\item \code{print(fit.index)}: Print method for \code{fit.index} objects
+\item \code{print(fit.index)}: Print method for \code{\link[LCPA:get.fit.index]{fit.index}} objects
 
-\item \code{print(summary.fit.index)}: Print method for \code{summary.fit.index} objects
+\item \code{print(summary.fit.index)}: Print method for \code{\link[LCPA]{summary.fit.index}} objects
 
 \item \code{print(compare.model)}: Print method for \code{compare.model} objects
 
-\item \code{print(summary.compare.model)}: Print method for \code{summary.compare.model} objects
+\item \code{print(summary.compare.model)}: Print method for \code{\link[LCPA]{summary.compare.model}} objects
 
-\item \code{print(SE)}: Print method for \code{SE} objects
+\item \code{print(SE)}: Print method for \code{\link[LCPA:get.SE]{SE}} objects
 
 \item \code{print(summary.SE)}: Print method for summary.SE objects
 
@@ -215,9 +226,8 @@ They pre-compute and structure output for consistent formatting. Direct calls ar
 \item Numeric values are typically rounded to 4 decimal places unless overridden by \code{digits}.
 \item Large matrices (e.g., item parameters, transition coefficients) are truncated with clear messages.
 \item Significance markers: \code{***} (<0.001), \code{**} (<0.01), \code{*} (<0.05), \code{.} (<0.1).
-\item 95\% confidence intervals computed as: Estimate ± 1.96 × Std_Error.
+\item 95\% confidence intervals computed as: Estimate ± 1.96 × Std.Error.
 \item Reference classes (for multinomial models) are explicitly stated.
-\item Warnings appear for unstable SEs (high condition number) or incomplete Bootstrap runs.
 }
 }
 

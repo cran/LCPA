@@ -8,87 +8,99 @@
 #'
 #' @param params A named \code{list} containing model parameters:
 #'   \itemize{
-#'     \item \code{beta}: Matrix of size \eqn{p_1 \times L} with coefficients for the initial class
-#'            membership multinomial logit model (time 1). The coefficient vector for reference class \eqn{L}
-#'            is constrained to \eqn{\boldsymbol{\beta}_L = \mathbf{0}}.
-#'     \item \code{gama}: Nested \code{list} of transition coefficients. For transition to time \eqn{t}
+#'     \item \code{beta}: Matrix of size \eqn{(U_1+1)\times L} with coefficients for the initial class
+#'            membership multinomial logit model (time 1). The coefficient vector for the selected reference class
+#'            is constrained to the zero vector.
+#'     \item \code{gamma}: Nested \code{list} of transition coefficients. For transition to time \eqn{t}
 #'            (from time \eqn{t-1} to \eqn{t}, where \eqn{t = 2, \dots, T}):
 #'            \describe{
-#'              \item{\code{gama[[t-1]][[from_class]][[to_class]]}}{Coefficient vector of length \eqn{p_t}
+#'              \item{\code{gamma[[t-1]][[from_class]][[to_class]]}}{Coefficient vector of length \eqn{U_t+1}
 #'                     for transition from class \code{from_class} at time \eqn{t-1} to class \code{to_class} at time \eqn{t}.}
 #'            }
-#'            Coefficients for transitions to reference class \eqn{L} are constrained to zero vectors
-#'            (\eqn{\boldsymbol{\gamma}_{kl t} = \mathbf{0}} when \eqn{k = L}).
+#'            Coefficients for transitions to the selected reference class are constrained to zero vectors
+#'            for every origin class.
 #'   }
 #' @param CEP A \code{list} of \eqn{L \times L} matrices (length = number of time points \eqn{T}).
-#'            Element \eqn{(k,l)} in \code{CEP[[t]]} estimates:
-#'            \deqn{P(\hat{Z}_{nt} = l \mid Z_{nt} = k)}
-#'            where \eqn{\hat{Z}_{nt}} is the modal class assignment and \eqn{Z_{nt}} is the true latent class.
+#'            Element \eqn{(l,k)} in \code{CEP[[t]]} estimates:
+#'            \deqn{\mathrm{CEP}_t(l,k)=
+#'            P(\widehat{Z}_{nt}=k\mid Z_{nt}=l)}
+#'            where \eqn{\widehat{Z}_{nt}} is the modal class assignment and
+#'            \eqn{Z_{nt}} is the latent class.
 #'            Computed via non-parametric approximation in Step 2 of three-step LTA.
 #' @param P.Z.Xns A \code{list} of matrices (length = \eqn{T}).
 #'                Each matrix has dimensions \eqn{N \times L}, where element \eqn{(n,l)} is:
 #'                \deqn{P(Z_{nt} = l \mid \mathbf{X}_{nt})}
-#'                the posterior probability of individual \eqn{n} belonging to class \eqn{l} at time \eqn{t}
+#'                the posterior probability of participant \eqn{n} belonging to class \eqn{l} at time \eqn{t}
 #'                from Step 1 latent class/profile analysis.
 #' @param Zs A \code{list} of integer vectors (length = \eqn{T}).
 #'           Each vector has length \eqn{N}, where \code{Zs[[t]][n]} is the modal (most likely) class
-#'           assignment \eqn{\hat{Z}_{nt}} for individual \eqn{n} at time \eqn{t}.
+#'           assignment \eqn{\widehat{Z}_{nt}} for participant \eqn{n} at time \eqn{t}.
 #' @param covariates A \code{list} of design matrices (length = \eqn{T}).
-#'                   For time \eqn{t}, matrix dimension is \eqn{N \times p_t}.
+#'                   For time \eqn{t}, matrix dimension is \eqn{N\times(U_t+1)}.
 #'                   Must include an intercept column (all 1s) as the first column, i.e.,
-#'                   \eqn{\mathbf{X}_{nt} = (X_{nt0}, X_{nt1}, \dots, X_{ntM})^\top} with \eqn{X_{nt0} = 1}.
+#'                   \eqn{\boldsymbol{\zeta}_{nt}=
+#'                   (1,\zeta_{nt1},\ldots,\zeta_{ntU_t})^\top}.
 #'                   Covariates may differ across time points and between initial status (\eqn{t=1}) and transitions (\eqn{t \geq 2}).
-#' @param covariates.timeCross Logical. If \code{TRUE}, forces identical transition coefficients across
-#'                             all time points (\code{gama[[t]]} is copied from \code{gama[[1]]} for \eqn{t>1}).
+#' @param ref.class Integer between 1 and \code{L}; zero-coded reference class in
+#'   \code{params$beta} and the destination-specific \code{params$gamma} coefficients.
+#' @param covariates.time.cross Logical. If \code{TRUE}, forces identical transition coefficients across
+#'                             all time points (\code{gamma[[t]]} is copied from \code{gamma[[1]]} for \eqn{t>1}).
 #'                             Default is \code{FALSE}.
 #'
 #' @return A single numeric value representing the total observed-data log-likelihood:
 #' \deqn{
 #' \begin{aligned}
-#' \log \mathcal{L}(\boldsymbol{\theta}) &=
+#' \log \mathcal{L}(\boldsymbol{\beta},\boldsymbol{\gamma}) &=
 #' \sum_{n=1}^N \log \Biggl[
-#'   \sum_{\mathbf{z}_n \in \{1,\dots,L\}^T}
-#'   \Bigl( \prod_{t=1}^T \text{CEP}_t(z_{nt}, \hat{z}_{nt}) \Bigr) \cdot \\
-#'   &\quad P(Z_{n1}=z_{n1} \mid \mathbf{X}_{n1}) \cdot
-#'   \prod_{t=2}^T P(Z_{nt}=z_{nt} \mid Z_{n,t-1}=z_{n,t-1}, \mathbf{X}_{nt})
+#'   \sum_{z_{n1}=1}^L\cdots\sum_{z_{nT}=1}^L
+#'   \Bigl(\prod_{t=1}^T
+#'   \mathrm{CEP}_t(z_{nt},\widehat{Z}_{nt})\Bigr) \cdot \\
+#'   &\quad P(Z_{n1}=z_{n1}\mid\boldsymbol{\zeta}_{n1}) \cdot
+#'   \prod_{t=2}^T P(Z_{nt}=z_{nt}\mid Z_{n,t-1}=z_{n,t-1},
+#'   \boldsymbol{\zeta}_{nt})
 #' \Biggr]
 #' \end{aligned}
 #' }
-#'   where \eqn{\mathbf{z}_n = (z_{n1},\dots,z_{nT})} is a latent class path, \eqn{\hat{z}_{nt} = \texttt{Zs[[t]][n]}} is the modal assignment,
-#'   and \eqn{\boldsymbol{\theta}} denotes all model parameters (\code{beta}, \code{gama}).
+#'   where \eqn{z_{n1},\ldots,z_{nT}} is a latent class path and
+#'   \code{Zs[[t]][n]} stores the modal assignment \eqn{\widehat{Z}_{nt}}.
 #'
 #' @details The log-likelihood calculation follows these steps:
 #'
 #' \enumerate{
-#'   \item Latent Path Enumeration:
-#'   All \eqn{L^T} possible latent class trajectories \eqn{\mathbf{z}_n} are generated and cached.
-#'
-#'   \item \strong{Initial Class Probabilities (time 1):}
-#'   For individual \eqn{n}, compute using multinomial logit with covariates \eqn{\mathbf{X}_{n1}}:
-#'   \deqn{P(Z_{n1} = l \mid \mathbf{X}_{n1}) =
-#'     \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_{n1})}
-#'          {\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_{n1})}}
-#'   where \eqn{\boldsymbol{\beta}_L = \mathbf{0}} (reference class constraint). Numerical stabilization
-#'   is applied via subtraction of the maximum linear predictor.
+#'   \item Initial class probabilities (time 1):
+#'   For participant \eqn{n}, compute using multinomial logit with covariates
+#'   \eqn{\boldsymbol{\zeta}_{n1}}:
+#'   \deqn{P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1}) =
+#'     \frac{\exp(\boldsymbol{\beta}_l^\top\boldsymbol{\zeta}_{n1})}
+#'          {\sum_{h=1}^L\exp(\boldsymbol{\beta}_h^\top
+#'          \boldsymbol{\zeta}_{n1})}}
+#'   where \eqn{\boldsymbol{\beta}_{l_0}=\mathbf{0}} for reference class
+#'   \eqn{l_0}
+#'   represented in \code{params}.
 #'
 #'   \item Transition Probabilities (times \eqn{t \geq 2}):
 #'   For transition from class \eqn{k} at time \eqn{t-1} to class \eqn{l} at time \eqn{t}:
-#'   \deqn{P(Z_{nt} = l \mid Z_{n,t-1} = k, \mathbf{X}_{nt}) =
-#'     \frac{\exp(\boldsymbol{\gamma}_{kl t}^\top \mathbf{X}_{nt})}
-#'          {\sum_{j=1}^L \exp(\boldsymbol{\gamma}_{kj t}^\top \mathbf{X}_{nt})}}
-#'   where \eqn{\boldsymbol{\gamma}_{kL t} = \mathbf{0}} for all \eqn{k} (reference class constraint).
+#'   \deqn{P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt}) =
+#'     \frac{\exp(\boldsymbol{\gamma}_{klt}^\top\boldsymbol{\zeta}_{nt})}
+#'          {\sum_{h=1}^L\exp(\boldsymbol{\gamma}_{kht}^\top
+#'          \boldsymbol{\zeta}_{nt})}}
+#'   where \eqn{\boldsymbol{\gamma}_{k,l_0,t}=\mathbf{0}} for every origin
+#'   class \eqn{k} and reference destination \eqn{l_0}.
 #'
-#'   \item Path-Specific Likelihood:
-#'   For each path \eqn{\mathbf{z}_n} and individual \eqn{n}:
-#'   \enumerate{
-#'     \item Compute path probability: \eqn{P(Z_{n1}=z_{n1} \mid \mathbf{X}_{n1}) \times \prod_{t=2}^T P(Z_{nt}=z_{nt} \mid Z_{n,t-1}=z_{n,t-1}, \mathbf{X}_{nt})}
-#'     \item Apply CEP weights: \eqn{\prod_{t=1}^T P(\hat{Z}_{nt} = \hat{z}_{nt} \mid Z_{nt} = z_{nt}) = \prod_{t=1}^T \text{CEP}_t(z_{nt}, \hat{z}_{nt})}
-#'     \item Multiply path probability by CEP weights
-#'   }
+#'   \item Scaled forward recursion:
+#'   Initialize
+#'   \deqn{\alpha_{n1}(l)=P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1})
+#'     \mathrm{CEP}_1(l,\widehat{Z}_{n1})}
+#'   and recursively compute
+#'   \deqn{\alpha_{nt}(l)=\mathrm{CEP}_t(l,\widehat{Z}_{nt})
+#'     \sum_{k=1}^L\alpha_{n,t-1}(k)
+#'     P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt}).}
+#'   This forward recursion marginalizes exactly over all latent paths without
+#'   explicitly constructing the \eqn{L^T} paths.
 #'
-#'   \item \strong{Marginalization:}
-#'   Sum path-specific likelihoods over all \eqn{L^T} paths for each individual \eqn{n},
-#'   then sum log-transformed marginal likelihoods across all individuals.
+#'   \item Analytic score:
+#'   Optimization uses the corresponding scaled backward recursion to obtain state and
+#'   transition posterior probabilities for the exact multinomial-logit score.
 #' }
 #'
 #' @note When no covariates are included:
@@ -103,67 +115,35 @@
 #'
 #' @export
 #'
-get.Log.Lik.LTA <- function(params, CEP, P.Z.Xns, Zs, covariates, covariates.timeCross=FALSE){
-
+get.Log.Lik.LTA <- function(params, CEP, P.Z.Xns, Zs, covariates, ref.class,
+                            covariates.time.cross = FALSE){
   L <- ncol(P.Z.Xns[[1]])
-  N <- nrow(P.Z.Xns[[1]])
   times <- length(covariates)
-
-  beta <- params$beta
-  gama <- params$gama
-
-  latent.paths <- .make.latent.paths(L, times)
-  n.paths <- nrow(latent.paths)
-
-  Log.lik <- 0
-
-  if(covariates.timeCross && times > 2){
-    for(t in 3:times){
-      gama[[t-1]] <- gama[[t-2]]
-    }
+  if(length(ref.class) != 1L || ref.class < 1L || ref.class > L){
+    stop("ref.class must be between 1 and L")
   }
+  if(length(params$beta) != ncol(covariates[[1]]) * L){
+    stop("params$beta has incompatible dimensions")
+  }
+  if(any(params$beta[, ref.class] != 0)){
+    stop("The ref.class column of params$beta must be zero")
+  }
+  free.classes <- setdiff(seq_len(L), ref.class)
+  parameter <- as.vector(params$beta[, free.classes, drop = FALSE])
 
-  covariates.ncol <- lapply(covariates, ncol)
-
-  zeta <- matrix(0, L, L)
-  P.t <- vector("list", times)
-  for(n in 1:N){
-    eta1 <- as.vector(covariates[[1]][n, , drop=FALSE] %*% beta)
-    eta1 <- eta1 - max(eta1)
-    P1 <- exp(eta1) / sum(exp(eta1))
-    P.t[[1]] <- P1
-
-    for(t in 2:times){
-      Xt <- covariates[[t]][n, ]
-
-      for(l in 1:L){
-        for(ll in 1:L){
-          zeta[l, ll] <- sum(Xt * gama[[t-1]][[l]][[ll]])
+  if(times > 1L){
+    transition.times <- if(covariates.time.cross) 1L else seq_len(times - 1L)
+    for(t in transition.times){
+      for(from.class in seq_len(L)){
+        for(to.class in free.classes){
+          parameter <- c(parameter, params$gamma[[t]][[from.class]][[to.class]])
         }
       }
-      zeta_shift <- zeta - max(zeta)
-      zeta.exp <- exp(zeta_shift)
-      P.t[[t]] <- zeta.exp / rowSums(zeta.exp)
     }
-
-    P.cur <- numeric(n.paths)
-    for(k in 1:n.paths){
-      idx <- latent.paths[k, ] + 1
-
-      p <- P.t[[1]][idx[1]]
-      w <- CEP[[1]][Zs[[1]][n], idx[1]]
-
-      for(t in 2:times){
-        p <- p * P.t[[t]][idx[t-1], idx[t]]
-        w <- w * CEP[[t]][Zs[[t]][n], idx[t]]
-      }
-
-      P.cur[k] <- p * w
-    }
-
-    lik.n <- sum(P.cur)
-    Log.lik <- Log.lik + log(max(lik.n, 1e-200))
   }
 
-  return(Log.lik)
+  -get.Log.Lik.LTA.optim(
+    parameter, CEP, P.Z.Xns, Zs, covariates,
+    covariates.time.cross, ref.class
+  )
 }

@@ -7,14 +7,17 @@
 LRT.test(object1, object2)
 }
 \arguments{
-\item{object1}{Fitted model object with fewer parameters (i.e., fewer \code{npar}, small model).}
+\item{object1}{Fitted LCA or LPA model. When both models have the same
+number of free parameters, this is treated as the null model.}
 
-\item{object2}{Fitted model object with more parameters (i.e., more \code{npar}, large model).}
+\item{object2}{Fitted LCA or LPA model of the same type. When both models
+have the same number of free parameters, this is treated as the
+alternative model.}
 }
 \value{
 An object of class \code{"htest"} containing:
 \itemize{
-\item \code{statistic}: VLMR adjusted test statistic
+\item \code{statistic}: Standard likelihood ratio test statistic
 \item \code{parameter}: Degrees of freedom (\eqn{df = npar_2 - npar_1})
 \item \code{p.value}: P-value from \eqn{\chi^2_df} distribution
 \item \code{method}: Name of the test
@@ -22,9 +25,10 @@ An object of class \code{"htest"} containing:
 }
 }
 \description{
-Conducts a likelihood ratio test to compare the fit of two
-models. The test evaluates whether a model with more parameters
-provides a significantly better fit than a model with fewer parameters.
+Conducts a likelihood ratio test to compare the fit of two LCA or LPA
+models with any numbers of latent classes/profiles, including equal class
+counts. The test evaluates whether a model with more parameters provides a
+significantly better fit than a model with fewer parameters.
 }
 \details{
 Note that since the small model may be nested within the large model, the result
@@ -50,4 +54,8 @@ where:
 }
 Under the null hypothesis (\code{H_0}: small model is true), LRT asymptotically follows
 a chi-square distribution with \eqn{df} degrees of freedom.
+Models may have any class counts; they do not need to differ by exactly one
+class. If both models have the same number of free parameters, the
+likelihood-ratio statistic is returned but the chi-square p-value is
+\code{NA} because its reference distribution has zero degrees of freedom.
 }

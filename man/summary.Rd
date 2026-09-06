@@ -47,18 +47,21 @@
 
 \item{digits}{Number of decimal places for numeric output (default: 4). Applied universally across all methods.}
 
-\item{I.max}{Maximum number of variables/items to display (\code{LCA}, \code{LPA}, \code{sim.LCA}, \code{sim.LPA}, \code{sim.LTA},
-\code{LCPA}, \code{LTA}, and \code{compare.model} only; default: 5). Controls verbosity for high-dimensional outputs.}
+\item{I.max}{Maximum number of variables/items to display for \code{LCA},
+\code{LPA}, \code{sim.LCA}, \code{sim.LPA}, and \code{sim.LTA} summaries
+(default: 5).}
 
-\item{...}{Additional arguments passed to or from other methods (currently ignored).}
+\item{...}{Reserved for S3 method compatibility; no additional arguments are used.}
 
 \item{L.max}{Maximum number of latent classes/profiles to display before truncation (\code{sim.LTA} only; default: 5).
 Useful when models have many latent groups. Ignored for other classes.}
 }
 \value{
-Invisibly returns a structured list containing summary components.
-The exact structure depends on the class of \code{object}. All returned objects carry an appropriate
-S3 class (e.g., \code{summary.LCA}, \code{summary.LPA}) for use with corresponding \code{print} methods.
+A structured list whose S3 class identifies the corresponding
+summary method, such as \code{\link[LCPA]{summary.LCA}} or
+\code{\link[LCPA]{summary.LPA}}. Every summary method returns its object
+visibly, so an interactive call to \code{\link[base]{summary}()} dispatches
+automatically to the corresponding \code{\link[LCPA]{print}} method.
 }
 \description{
 Generates structured, comprehensive summaries of objects produced by the \code{LCPA} package.
@@ -67,126 +70,135 @@ including model configurations, fit statistics, parameter estimates, simulation 
 Designed for programmatic access and downstream reporting.
 }
 \details{
-Each method returns a named list with class-specific components optimized for structured access:
-
+Each method returns a class-specific list designed both for its corresponding
+print method and for programmatic access:
 \describe{
-\item{\strong{\code{LCA}}}{Returns a \code{summary.LCA} object with components:
+\item{\code{LCA}}{A \code{summary.LCA} object with:
 \describe{
-\item{\code{call}}{Original function call.}
-\item{\code{model.config}}{List: \code{latent_classes}, \code{method}.}
-\item{\code{data.info}}{List: \code{N}, \code{I}, \code{poly.value}, \code{uniform_categories}.}
-\item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{entropy}, \code{npar}.}
-\item{\code{class.probs}}{Data frame: \code{Class}, \code{Count}, \code{Proportion}.}
-\item{\code{item.probs}}{List of matrices (first \code{I.max} items) with conditional probabilities per class/category.}
-\item{\code{convergence}}{List: algorithm, iterations, tolerance, loglik change, hardware (if applicable).}
-\item{\code{replication}}{List: \code{nrep}, \code{best_BIC} (if multiple replications performed).}
-\item{\code{digits}, \code{I.max.shown}, \code{total.items}}{Metadata for printing/formatting.}
+\item{\code{call}}{Original fitting call.}
+\item{\code{model.config}}{Number of latent classes and estimation method.}
+\item{\code{data.info}}{Sample size, item count, number of categories per item, and whether category counts are uniform.}
+\item{\code{fit.stats}}{Log-likelihood, AIC, BIC, entropy, and number of free parameters.}
+\item{\code{class.probs}}{Data frame containing class labels, modal-assignment counts, and estimated class proportions.}
+\item{\code{item.probs}}{Conditional response-probability matrices for the first \code{I.max} items.}
+\item{\code{convergence}}{Backend-specific algorithm, iteration, tolerance, initialization, and diagnostic information.}
+\item{\code{replication}}{Replication count and best BIC when replication selection applies; otherwise \code{NULL}.}
+\item{\code{digits}, \code{I.max.shown}, \code{total.items}}{Formatting and truncation metadata.}
 }}
 
-\item{\strong{\code{LPA}}}{Returns a \code{summary.LPA} object with components:
+\item{\code{LPA}}{A \code{summary.LPA} object with:
 \describe{
-\item{\code{call}}{Original function call.}
-\item{\code{model.config}}{List: \code{latent_profiles}, \code{constraint}, \code{cov_structure}, \code{method}.}
-\item{\code{data.info}}{List: \code{N}, \code{I}, \code{distribution}.}
-\item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{entropy}, \code{npar}.}
-\item{\code{class.probs}}{Data frame: \code{Profile}, \code{Count}, \code{Proportion}.}
-\item{\code{class.means}}{Matrix (first \code{I.max} variables) of profile-specific means.}
-\item{\code{convergence}}{List: algorithm, iterations, tolerance, loglik change, hardware (if applicable).}
-\item{\code{replication}}{List: \code{nrep}, \code{best_BIC} (if multiple replications performed).}
-\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+\item{\code{call}}{Original fitting call.}
+\item{\code{model.config}}{Number of profiles, requested covariance constraint, its expanded description, and estimation method.}
+\item{\code{data.info}}{Sample size, variable count, and multivariate-normal distribution label.}
+\item{\code{fit.stats}}{Log-likelihood, AIC, BIC, entropy, and number of free parameters.}
+\item{\code{class.probs}}{Data frame containing profile labels, modal-assignment counts, and estimated profile proportions.}
+\item{\code{class.means}}{Profile-specific means for the first \code{I.max} variables.}
+\item{\code{convergence}}{Backend-specific algorithm, iteration, tolerance, initialization, and diagnostic information.}
+\item{\code{replication}}{Replication count and best BIC when replication selection applies; otherwise \code{NULL}.}
+\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 }}
 
-\item{\strong{\code{LCPA}}}{Returns a \code{summary.LCPA} object with components:
+\item{\code{LCPA}}{A \code{summary.LCPA} object with:
 \describe{
-\item{\code{call}}{Original function call.}
-\item{\code{model.config}}{List: \code{latent_classes}, \code{model_type}, \code{reference_class},
-\code{covariates_mode}, \code{CEP_handling}.}
-\item{\code{data.info}}{List: \code{sample_size}, \code{variables}.}
-\item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{npar}.}
-\item{\code{class.probs}}{Data frame: \code{Class}, \code{Probability}, \code{Proportion}, \code{Frequency}.}
-\item{\code{coefficients}}{Data frame: regression coefficients for non-reference classes (Estimate, Std_Error, z_value, p_value, 95\% CI).}
-\item{\code{reference_class}}{Integer: reference class for multinomial logit.}
-\item{\code{convergence}}{List: \code{iterations}, \code{coveraged}, \code{converg_note}.}
-\item{\code{digits}, \code{I.max.shown}, \code{total.vars}, \code{has.covariates}}{Metadata for printing/formatting.}
+\item{\code{call}}{Original fitting call.}
+\item{\code{model.config}}{Analysis path, number of classes/profiles,
+model and three-step methods, Step 1 source, dependent-variable
+structure where applicable, and classification-error handling.}
+\item{\code{data.info}}{Sample size and number of response variables.}
+\item{\code{fit.stats}}{For XZ, log-likelihood, AIC, BIC, and number of free parameters.}
+\item{\code{class.probs}}{Data frame containing class probabilities, proportions, and modal-assignment frequencies.}
+\item{\code{coefficients}}{For XZ, the non-reference-class coefficient table with estimates, standard errors, 95 percent confidence limits, z statistics, and two-sided p-values.}
+\item{\code{dependent.variables}}{For ZY, fitted conditional
+distributions nested by model and dependent variable. Gaussian
+entries contain class/profile-specific means and variances, their
+standard errors and covariance matrices, and separate omnibus Wald
+tests. Categorical entries contain class/profile-specific category
+probabilities, standard errors, covariance matrices, and an omnibus
+test of equality of the conditional distributions.}
+\item{\code{covariates.names}, \code{ref.class}}{Displayed covariate names and the multinomial-logit reference class.}
+\item{\code{convergence}}{Overall and model-specific Step 3 convergence and iteration information.}
+\item{\code{digits}, \code{vars.to.show}, \code{total.vars}, \code{has.covariates}}{Formatting and covariate metadata.}
 }}
 
-\item{\strong{\code{LTA}}}{Returns a \code{summary.LTA} object with components:
+\item{\code{LTA}}{A \code{summary.LTA} object with:
 \describe{
-\item{\code{call}}{Original function call.}
-\item{\code{model.config}}{List: \code{time_points}, \code{latent_classes}, \code{model_type},
-\code{reference_class}, \code{covariates_mode}, \code{CEP_handling}, \code{transition_mode}.}
-\item{\code{data.info}}{List: \code{sample_size}, \code{variables}, \code{time_points}.}
-\item{\code{fit.stats}}{List: \code{LogLik}, \code{AIC}, \code{BIC}, \code{npar}.}
-\item{\code{class.probs}}{List of data frames (per time point): \code{Class}, \code{Probability}, \code{Proportion}, \code{Frequency}.}
-\item{\code{initial_model}}{List: \code{coefficients} (data frame), \code{covariate_names}, \code{reference_class}.}
-\item{\code{transition_models}}{Named list of data frames: transition coefficients per time interval (From_Class, To_Class, Estimate, Std_Error, etc.).}
-\item{\code{reference_class}}{Integer: reference destination class for transitions.}
-\item{\code{convergence}}{List: \code{iterations}, \code{coveraged}, \code{converg_note}.}
-\item{\code{digits}, \code{I.max.shown}, \code{total.vars}, \code{covariates.timeCross}}{Metadata for printing/formatting.}
+\item{\code{call}}{Original fitting call.}
+\item{\code{model.config}}{Number of time points and classes, model type, Step 1 source, reference class, covariate mode, classification-error handling, and transition mode.}
+\item{\code{data.info}}{Sample size, response-variable count, and number of time points.}
+\item{\code{fit.stats}}{For XZ, log-likelihood, AIC, BIC, and number of free parameters.}
+\item{\code{class.probs}}{Time-indexed data frames containing class probabilities, proportions, and modal-assignment frequencies.}
+\item{\code{initial.model}}{For XZ, the initial-status coefficient table, covariate names, and reference class.}
+\item{\code{transition.models}}{For XZ, time-invariant or time-indexed transition coefficient tables with origin class, destination class, covariate, estimate, standard error, confidence limits, z statistic, and p-value.}
+\item{\code{dependent.variables}}{For ZY, state- or path-specific
+Gaussian means and variances or categorical probabilities, together
+with their standard errors, covariance matrices, confidence-interval
+inputs, group masses, and omnibus Wald tests.}
+\item{\code{convergence}}{Overall and model-specific Step 3 convergence and iteration information.}
+\item{\code{digits}, \code{total.vars}, \code{covariates.time.cross}, \code{ref.class}}{Formatting, covariate, and reference-class metadata.}
 }}
 
-\item{\strong{\code{sim.LCA}}}{Returns a \code{summary.sim.LCA} object with components:
+\item{\code{sim.LCA}}{A \code{summary.sim.LCA} object with:
 \describe{
 \item{\code{call}}{Original simulation call.}
-\item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{poly.value}, \code{uniform_categories}, \code{IQ}, \code{distribution}.}
-\item{\code{class.probs}}{Data frame: \code{Class}, \code{Probability}, \code{Frequency}.}
-\item{\code{item.probs}}{List of matrices (first \code{I.max} items) with true conditional probabilities per class/category.}
-\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+\item{\code{config}}{Sample size, item count, class count, category counts, category-count uniformity, item quality, and generating distribution.}
+\item{\code{class.probs}}{True class probabilities and realized frequencies.}
+\item{\code{item.probs}}{True conditional response probabilities for the first \code{I.max} items.}
+\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 }}
 
-\item{\strong{\code{sim.LPA}}}{Returns a \code{summary.sim.LPA} object with components:
+\item{\code{sim.LPA}}{A \code{summary.sim.LPA} object with:
 \describe{
 \item{\code{call}}{Original simulation call.}
-\item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{constraint}, \code{constraint_desc}, \code{distribution}.}
-\item{\code{class.probs}}{Data frame: \code{Profile}, \code{Probability}, \code{Frequency}.}
-\item{\code{class.means}}{Matrix (first \code{I.max} variables) of true profile-specific means.}
-\item{\code{cov_structure}}{Character: detailed description of covariance constraints.}
-\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Metadata for printing/formatting.}
+\item{\code{config}}{Sample size, variable count, profile count, constraint specification and description, and generating distribution.}
+\item{\code{class.probs}}{True profile probabilities and realized frequencies.}
+\item{\code{class.means}}{True profile means for the first \code{I.max} variables.}
+\item{\code{constraint}}{Expanded description of the covariance constraint.}
+\item{\code{digits}, \code{I.max.shown}, \code{total.vars}}{Formatting and truncation metadata.}
 }}
 
-\item{\strong{\code{sim.LTA}}}{Returns a \code{summary.sim.LTA} object with components:
+\item{\code{sim.LTA}}{A \code{summary.sim.LTA} object with:
 \describe{
 \item{\code{call}}{Original simulation call.}
-\item{\code{config}}{List: \code{N}, \code{I}, \code{L}, \code{times}, \code{type}, \code{distribution}, \code{constraint} (if LPA).}
-\item{\code{class.probs}}{List of data frames (per time point): \code{Class}, \code{Probability}, \code{Frequency}.}
-\item{\code{item.probs}}{Nested list (by time/item) of true conditional probabilities (if \code{type="LCA"}).}
-\item{\code{class.means}}{List of matrices (by time) of true profile means (if \code{type="LPA"}).}
-\item{\code{transition}}{List: \code{mode} ("fixed" or "covariate"), \code{rate} or \code{beta}/\code{gamma} coefficients, \code{time_points}.}
-\item{\code{covariates}}{List of data frames (per time point) with covariate summaries (Min, Max, Mean), if present.}
-\item{\code{digits}, \code{I.max.shown}, \code{L.max.shown}, \code{total.vars}, \code{total.classes}}{Metadata for printing/formatting.}
+\item{\code{config}}{Sample size, variable count, class count, time points, model type, generating distribution, coefficient reference class, and LPA constraint when applicable.}
+\item{\code{class.probs}}{Time-indexed true class probabilities and realized frequencies.}
+\item{\code{item.probs}, \code{class.means}}{Truncated true measurement parameters for LCA or LPA simulations, respectively.}
+\item{\code{transition}}{Fixed-rate or covariate-dependent transition specification, including beta/gamma parameters and time indices when present.}
+\item{\code{covariates}}{Time-indexed covariate summaries containing minima, maxima, and means, or \code{NULL}.}
+\item{\code{digits}, \code{I.max.shown}, \code{L.max.shown}, \code{total.vars}, \code{total.classes}}{Formatting and truncation metadata.}
 }}
 
-\item{\strong{\code{fit.index}}}{Returns a \code{summary.fit.index} object with components:
+\item{\code{\link[LCPA:get.fit.index]{fit.index}}}{A
+\code{\link[LCPA]{summary.fit.index}} object with:
 \describe{
-\item{\code{call}}{Function call that generated the fit indices.}
-\item{\code{data.info}}{List: \code{N}.}
-\item{\code{fit.table}}{Data frame: \code{Statistic}, \code{Value}, \code{Description} for -2LL, AIC, BIC, SIC, CAIC, AWE, SABIC.}
-\item{\code{digits}}{Numeric: precision used for formatting.}
+\item{\code{call}}{Call that produced the fit-index object.}
+\item{\code{data.info}}{List containing the sample size \code{N}.}
+\item{\code{fit.table}}{Data frame with \code{Statistic}, \code{Value}, and \code{Description} columns for
+\code{npar}, \code{Log.Lik}, \code{-2LL}, AIC, BIC, SIC, CAIC, AWE, and SABIC.}
+\item{\code{digits}}{Requested numeric precision.}
 }}
 
-\item{\strong{\code{compare.model}}}{Returns a \code{summary.compare.model} object with components:
+\item{\code{compare.model}}{A \code{summary.compare.model} object with:
 \describe{
-\item{\code{call}}{Function call that generated the comparison.}
-\item{\code{data.info}}{List: \code{N}, \code{I}, \code{L} (named vector for two models).}
-\item{\code{fit.table}}{Data frame comparing fit indices for both models.}
-\item{\code{model_comparison}}{Data frame: \code{Classes}, \code{npar}, \code{AvePP}, \code{Entropy}.}
-\item{\code{BF}}{Numeric: Bayes Factor value (if computed).}
-\item{\code{BF_interpretation}}{Character: interpretive guidance for Bayes Factor.}
-\item{\code{lrt_table}}{Data frame: \code{Test}, \code{Statistic}, \code{DF}, \code{p-value}, \code{Sig} (significance markers).}
-\item{\code{lrt_objects}}{List: raw hypothesis test objects for further inspection.}
-\item{\code{digits}}{Numeric: precision used for formatting.}
+\item{\code{call}}{Call that produced the model comparison.}
+\item{\code{data.info}}{Lists the named model-specific sample sizes and indicator counts and the two class counts.}
+\item{\code{fit.table}}{Side-by-side table of class count, parameter count, log-likelihood, -2LL, AIC, BIC, SIC, CAIC, AWE, and SABIC.}
+\item{\code{model.comparison}}{Data frame comparing class counts, parameter counts, diagonal average posterior probabilities, and entropy.}
+\item{\code{BF}, \code{BF.interpretation}}{Bayes factor computed from SIC and its evidence label.}
+\item{\code{LRT.table}}{Separate rows for the standard LRT, VLMR, adjusted LMR, and BLRT when available, with statistics, degrees of freedom, p-values, and significance symbols.}
+\item{\code{LRT.objects}}{Named list containing the unmodified hypothesis-test objects used to build \code{LRT.table}.}
+\item{\code{digits}}{Requested numeric precision.}
 }}
 
-\item{\strong{\code{SE}}}{Returns a \code{summary.SE} object with components:
+\item{\code{\link[LCPA:get.SE]{SE}}}{A \code{\link[LCPA]{summary.SE}} object with:
 \describe{
-\item{\code{call}}{Original function call.}
-\item{\code{method}}{Character: "Obs" or "Bootstrap".}
-\item{\code{diagnostics}}{List: method-specific diagnostic info (e.g., n.Bootstrap, hessian_cond_number).}
-\item{\code{model_type}}{Character: "LCA" or "LPA".}
-\item{\code{L}}{Integer: number of latent classes/profiles.}
-\item{\code{I}}{Integer: number of variables/items (NA if unknown).}
-\item{\code{nonzero_counts}}{List: counts of non-zero SEs by parameter type (P.Z, means/par, covs).}
-\item{\code{total_PZ}}{Integer: total number of class probability parameters.}
+\item{\code{call}}{Call that produced the standard-error object.}
+\item{\code{method}}{Selected \code{"Bootstrap"}, \code{"Obs"}, or \code{"Louis"} method.}
+\item{\code{diagnostics}}{Complete method-specific diagnostic list from \code{\link[LCPA]{get.SE}()}.}
+\item{\code{type}}{\code{"LCA"}, \code{"LPA"}, or \code{"Unknown"}, inferred from the standard-error components.}
+\item{\code{L}, \code{I}}{Number of classes/profiles and variables/items.}
+\item{\code{nonzero.counts}}{Counts of nonzero standard errors for \code{P.Z} and, as applicable, \code{par}, \code{means}, and \code{covs}.}
+\item{\code{total.P.Z}}{Total number of class-proportion standard errors.}
 }}
 }
 }
@@ -206,10 +218,10 @@ Each method returns a named list with class-specific components optimized for st
 
 \item \code{summary(sim.LTA)}: Summary method for \code{sim.LTA} objects
 
-\item \code{summary(fit.index)}: Summary method for \code{fit.index} objects
+\item \code{summary(fit.index)}: Summary method for \code{\link[LCPA:get.fit.index]{fit.index}} objects
 
 \item \code{summary(compare.model)}: Summary method for \code{compare.model} objects
 
-\item \code{summary(SE)}: Summary method for \code{summary.SE} objects
+\item \code{summary(SE)}: Summary method for \code{\link[LCPA]{summary.SE}} objects
 
 }}

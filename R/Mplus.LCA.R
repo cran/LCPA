@@ -3,7 +3,7 @@
 #' @importFrom stats na.omit
 
 Mplus.LCA <- function(response, L = 2,
-                      nrep = 10, starts = 200, maxiter.wa=20,
+                      nrep = 10, starts = 200, maxiter.warmup=20,
                       vis = TRUE,
                       maxiter = 2000, tol = 1e-4,
                       files.path = NULL,
@@ -48,7 +48,7 @@ Mplus.LCA <- function(response, L = 2,
     }
   }
   if(vis){
-    cat("Temporary working: ", paste0(getwd(), "/", temp_dir), "\n")
+    cat(.estimation.output.prefix(), "Temporary working: ", paste0(getwd(), "/", temp_dir), "\n", sep = "")
   }
   if (isTRUE(files.clean)) {
     on.exit({
@@ -66,16 +66,16 @@ Mplus.LCA <- function(response, L = 2,
           )
         }else{
           if(vis){
-            cat("Successed to clean up: ", paste0(getwd(), "/", temp_dir), "\n")
+            cat(.estimation.output.prefix(), "Successed to clean up: ", paste0(getwd(), "/", temp_dir), "\n", sep = "")
           }
         }
       }
     }, add = TRUE)
   }
 
-  var_names <- colnames(response)
-  if (is.null(var_names)) {
-    var_names <- paste0("V", seq_len(ncol(response)))
+  variable.names <- colnames(response)
+  if (is.null(variable.names)) {
+    variable.names <- paste0("V", seq_len(ncol(response)))
   }
 
   standardize_varnames <- function(names) {
@@ -85,23 +85,25 @@ Mplus.LCA <- function(response, L = 2,
     return(names)
   }
 
-  var_names_std <- standardize_varnames(var_names)
-  colnames(response) <- var_names_std
-  var_names <- var_names_std
+  variable.names.standardized <- standardize_varnames(variable.names)
+  colnames(response) <- variable.names.standardized
+  variable.names <- variable.names.standardized
 
   df <- as.data.frame(response)
 
   poly.value <- sapply(df, function(x) length(unique(na.omit(x))))
   if (any(poly.value == 1)) stop("Some variables have only 1 level; invalid for LCA.")
 
-  var_names_formatted <- format_mplus_vars_auto(var_names)
+  variable.names.formatted <- format_mplus_vars_auto(variable.names)
+  seed <- sample.int(.Machine$integer.max, 1L)
 
   variable_str <- paste0("CLASSES = c1(", L, ");\n",
-                         "CATEGORICAL = ", var_names_formatted, ";\n",
+                         "CATEGORICAL = ", variable.names.formatted, ";\n",
                          "ANALYSIS:\n",
                          "  TYPE = mixture;\n",
                          "  STARTS = ", starts, " ", nrep, ";\n",
-                         "  STITERATIONS = ", maxiter.wa, ";\n",
+                         "  STSEED = ", seed, ";\n",
+                         "  STITERATIONS = ", maxiter.warmup, ";\n",
                          "  MITERATIONS = ", maxiter, ";\n",
                          "  CONVERGENCE = ", tol, ";")
 
@@ -128,7 +130,7 @@ Mplus.LCA <- function(response, L = 2,
   dataout_path <- file.path(temp_dir, "lca_data.dat")
 
   if (vis) {
-    cat("Running Mplus ...\n")
+    cat(.estimation.output.prefix(), "Running Mplus ...\n", sep = "")
   }
 
   Mplus.obj <- suppressMessages(suppressWarnings(
@@ -158,7 +160,7 @@ Mplus.LCA <- function(response, L = 2,
 
   prob_data <- dplyr::filter(
     params_df,
-    .data[["param"]] %in% var_names,
+    .data[["param"]] %in% variable.names,
     .data[["LatentClass"]] %in% 1:L
   )
 
@@ -166,8 +168,8 @@ Mplus.LCA <- function(response, L = 2,
     NA_real_,
     dim = c(L, I, poly.max),
     dimnames = list(
-      paste0("Class.", 1:L),
-      var_names,
+      .latent.group.names(L, "LCA"),
+      variable.names,
       paste0("Cat.", 1:poly.max)
     )
   )
@@ -175,43 +177,37 @@ Mplus.LCA <- function(response, L = 2,
   for (i in 1:nrow(prob_data)) {
     row <- prob_data[i, ]
     cls_idx <- as.integer(row$LatentClass)
-    var_idx <- match(row$param, var_names)
+    variable.index <- match(row$param, variable.names)
     cat_idx <- as.integer(row$category)
 
-    if (is.na(var_idx)) next
+    if (is.na(variable.index)) next
 
     if (cls_idx < 1 || cls_idx > L) next
-    if (var_idx < 1 || var_idx > I) next
+    if (variable.index < 1 || variable.index > I) next
     if (cat_idx < 1 || cat_idx > poly.max) next
 
     est_val <- suppressWarnings(as.numeric(row$est))
     if (is.na(est_val) || est_val < 0 || est_val > 1) {
       warning(paste("Invalid probability at row", i,
-                    ": Class", cls_idx, "Var", var_idx, "Cat", cat_idx,
+                    ": Class", cls_idx, "Var", variable.index, "Cat", cat_idx,
                     "Value =", row$est))
       next
     }
-    par[cls_idx, var_idx, cat_idx] <- est_val
+    par[cls_idx, variable.index, cat_idx] <- est_val
   }
 
-  P.Z.Xn <- matrix(1/L, N, L)
-  L.Xi.Z <- matrix(1, L, N)
-  for(p in 1:N){
-    for(i in 1:I){
-      L.Xi.Z[ , p] <- L.Xi.Z[ , p] * par[ , i, response[p, i]+1]
-    }
-    L.Xi <- sum(L.Xi.Z[, p] * P.Z)
-    P.Z.Xn[p, ] <- (L.Xi.Z[, p] * P.Z) / (L.Xi + 1e-300)
-  }
+  category.levels <- lapply(seq_len(I), function(i) seq_len(poly.value[i]) - 1L)
+  P.Z.Xn <- get.P.Z.Xn.LCA(response, par, P.Z, category.levels)
 
-  Log.Lik <- get.Log.Lik.LCA(response, P.Z, par)
+  Log.Lik <- get.Log.Lik.LCA(response, par, P.Z)
   npar <- get.npar.LCA(poly.value, L)
   AIC <- -2 * Log.Lik + 2 * npar
   BIC <- -2 * Log.Lik + npar * log(N)
 
   if (vis) {
-    cat(sprintf("Mplus Model: %s\nLog-likelihood = %.5f | BIC = %.2f\n",
-                title_str, Log.Lik, BIC))
+    cat(sprintf("%sMplus Model: %s\n%sLog-likelihood = %.5f | BIC = %.2f\n",
+                .estimation.output.prefix(), title_str,
+                .estimation.output.prefix(), Log.Lik, BIC))
   }
 
   res = list(
@@ -222,22 +218,22 @@ Mplus.LCA <- function(response, L = 2,
     BIC=BIC,
     P.Z.Xn = P.Z.Xn,
     P.Z = P.Z,
-    Z = apply(P.Z.Xn, 1, which.max),
+    Z = max.col(P.Z.Xn, ties.method = "first"),
     probability = NULL
   )
 
   return(res)
 }
 
-format_mplus_vars_auto <- function(var_names, indent = "  ", max_line_length = 70) {
+format_mplus_vars_auto <- function(variable.names, indent = "  ", max.line.length = 70) {
   result_lines <- c()
   current_line <- indent
 
-  for (var in var_names) {
+  for (var in variable.names) {
     sep <- if (nchar(current_line) == nchar(indent)) "" else " "
     candidate <- paste0(current_line, sep, var)
 
-    if (nchar(candidate) > max_line_length) {
+    if (nchar(candidate) > max.line.length) {
       result_lines <- c(result_lines, current_line)
       current_line <- paste0(indent, var)
     } else {

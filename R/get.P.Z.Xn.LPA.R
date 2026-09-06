@@ -20,17 +20,20 @@
 #'   These values are used directly without re-estimation.
 #'
 #' @return Numeric matrix (\eqn{N \times L}) of posterior probabilities.
-#'   Rows sum to 1. Columns are named "Class.1", "Class.2", etc.
+#'   Rows sum to 1. Columns are named `"Profile 1"`, `"Profile 2"`, and so on.
 #'
 #' @details
 #' Unlike an EM algorithm, this function does NOT iteratively update profile prevalences.
 #' It performs a single E-step calculation:
 #' \deqn{
-#'   P(Z_n = l \mid \mathbf{x}_n) =
-#'   \frac{\pi_l \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_l, \boldsymbol{\Sigma}_l)}
-#'        {\sum_{k=1}^L \pi_k \cdot \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k)}
+#'   \tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+#'   \frac{\pi_l\mathcal{N}(\mathbf{X}_n\mid
+#'   \boldsymbol{\mu}_l,\boldsymbol{\Sigma}_l)}
+#'   {\sum_{h=1}^L\pi_h\mathcal{N}(\mathbf{X}_n\mid
+#'   \boldsymbol{\mu}_h,\boldsymbol{\Sigma}_h)}
 #' }
-#' where \eqn{\pi_l} are the fixed priors provided in the \code{P.Z} argument.
+#' where the profile probabilities, means, and covariance matrices are fixed by
+#' the \code{P.Z}, \code{means}, and \code{covs} arguments.
 #'
 #'
 #' @examples
@@ -54,53 +57,28 @@
 get.P.Z.Xn.LPA <- function (response, means, covs, P.Z){
   if (!is.matrix(response))
     stop("response must be a matrix")
-
   I <- ncol(response)
   L <- nrow(means)
-  N <- nrow(response)
-
-  tresponse <- t(response)
-  logres <- matrix(NA_real_, nrow = N, ncol = L)
-
-  # Compute log-likelihood contributions for each class
-  # Formula: log(P(Z=l)) + log(N(x | mu_l, Sigma_l))
-  for (l in 1:L) {
-    covs.l <- covs[, , l]
-    mean.l <- means[l, ]
-    # Assumes logpdf_component handles the multivariate normal log-density calculation
-    lp <- logpdf_component(mean.l, covs.l, tresponse)
-    logres[, l] <- lp + log(P.Z[l] + 1e-12)
+  if(!is.numeric(response) || any(!is.finite(response)) ||
+     !is.matrix(means) || ncol(means) != I || any(!is.finite(means)) ||
+     length(dim(covs)) != 3L || !identical(dim(covs), c(I, I, L)) ||
+     any(!is.finite(covs))){
+    stop("response, means, and covs must contain compatible finite numeric values")
   }
-
-  # Log-Sum-Exp trick for numerical stability
-  rowmax <- apply(logres, 1, max)
-
-  # Handle cases where max is non-finite (e.g., all -Inf)
-  nonfinite_rows <- !is.finite(rowmax)
-  if (any(nonfinite_rows)) {
-    finite_vals <- logres[is.finite(logres)]
-    if (length(finite_vals) > 0) {
-      rowmax[nonfinite_rows] <- max(finite_vals)
-    }
-    else {
-      rowmax[nonfinite_rows] <- 0
-    }
+  if(length(P.Z) != L || any(!is.finite(P.Z)) || any(P.Z <= 0) || sum(P.Z) <= 0){
+    stop("P.Z must contain L finite positive values")
   }
-
-  # Convert to probabilities: exp(log_val - max_log_val) / sum(...)
-  exp_rel <- exp(logres - matrix(rowmax, N, L))
-  row_sums <- rowSums(exp_rel)
-
-  # Handle numerical errors where sum is 0 or NaN
-  bad <- !is.finite(row_sums) | row_sums < 1e-20
-  if (any(bad)) {
-    exp_rel[bad, ] <- 1/L
-    row_sums[bad] <- 1
+  stabilized <- .stabilize.LPA.covariances(
+    covs, "VV", fallback = stats::cov(response)
+  )
+  if(stabilized$repaired) covs <- stabilized$covs
+  expectation <- .lpa.expectation.reference(
+    response, means, covs, as.numeric(P.Z) / sum(P.Z)
+  )
+  if(!isTRUE(expectation$valid)){
+    stop("Unable to obtain positive-definite profile covariance matrices")
   }
-
-  P.Z.Xn <- exp_rel / row_sums
-
-  colnames(P.Z.Xn) <- paste0("Class.", 1:L)
-
-  return(P.Z.Xn)
+  P.Z.Xn <- expectation$posterior
+  colnames(P.Z.Xn) <- .latent.group.names(L, "LPA")
+  P.Z.Xn
 }

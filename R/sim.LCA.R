@@ -18,15 +18,16 @@
 #' @param distribution Character; distribution of class sizes. Options: \code{"random"} (default) or \code{"uniform"}.
 #' @param params List with fixed parameters for simulation:
 #'   \describe{
-#'     \item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities per latent class.}
-#'     \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
-#'     \item{\code{Z}}{Vector of length \eqn{N} containing the latent classes of observations. A fixed
-#'                     observation classes \code{Z} is applied directly to simulate data only when \code{P.Z}
-#'                     is \code{NULL} and \code{Z} is a \code{N} length vector.}
+#'     \item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities in the final class order.}
+#'     \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities in the final class order.}
+#'     \item{\code{Z}}{Vector of length \eqn{N} containing fixed class
+#'       assignments in the final class order. When supplied, \code{Z} takes precedence over
+#'       \code{P.Z}.}
 #'   }
-#' @param is.sort A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-#'                order according to \code{P.Z}. All other parameters will be adjusted accordingly
-#'                based on the reordered latent classes.
+#' @param is.sort A logical value. If \code{TRUE} (default), internally generated class probabilities
+#'   are ordered decreasingly before class-specific parameters and observations are generated.
+#'   Supplied parameters are already defined in this final order and are never reordered; supplied
+#'   \code{P.Z} or \code{Z} must therefore follow decreasing class proportions.
 #'
 #' @return A list containing:
 #'   \describe{
@@ -36,15 +37,18 @@
 #'       where \eqn{K = \text{max}(poly.value)} (i.e., the maximum number of categories across variables).
 #'       Dimensions: classes x variables x categories.
 #'       Note: For variables with \code{poly.value[i] < K}, unused category dimensions contain \code{NA}.
-#'       Dimension names: \code{"L1"}, \code{"L2"}, ... (classes); \code{"I1"}, \code{"I2"}, ... (variables);
+#'       Dimension names: `"Class 1"`, `"Class 2"`, and so on for classes;
+#'       `"I1"`, `"I2"`, and so on for indicators;
 #'       \code{"poly0"}, \code{"poly1"}, ... (categories).}
 #'     \item{Z}{Integer vector (length \eqn{N}) of true class assignments (1 to L). Named with observation IDs (e.g., \code{"O1"}).}
-#'     \item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions. Named with class labels (e.g., \code{"L1"}).}
+#'     \item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions,
+#'       named `"Class 1"`, `"Class 2"`, and so on.}
 #'     \item{poly.value}{Integer vector (length \eqn{I}) specifying number of categories per variable.}
 #'     \item{P.Z.Xn}{Binary matrix (\eqn{N \times L}) of true class membership indicators (one-hot encoded).
 #'       Row \code{i}, column \code{l} = 1 if observation \code{i} belongs to class \code{l}, else 0.
 #'       Row/column names match \code{Z} and class labels.}
 #'     \item{arguments}{A list containing all input arguments.}
+#'     \item{call}{The matched simulation call.}
 #'   }
 #'
 #' @section Indicator Quality (IQ) Parameter:
@@ -57,11 +61,13 @@
 #'   \item{\code{IQ = numeric}}{ (0.5 < IQ < 1)
 #'     Forces high discriminative power for each variable:
 #'     \enumerate{
-#'       \item For each variable, two categories per class are assigned extreme probabilities:
-#'         one category gets probability \eqn{IQ}, another gets \eqn{1-IQ}.
-#'       \item Remaining categories share the residual probability \eqn{1 - IQ - (1-IQ) = 0}.
-#'         \emph{Note: This requires \code{poly.value} >= 2 for all variables.}
-#'       \item Category assignments are randomized within classes to avoid structural patterns.
+#'       \item Across the \eqn{L} classes, construct \eqn{L} focal
+#'         probabilities containing \eqn{IQ}, \eqn{1-IQ}, and, when
+#'         \eqn{L>2}, values sampled from \eqn{[1-IQ,IQ]}.
+#'       \item For each class, assign its focal probability to one category
+#'         and distribute the remaining mass over the other categories using
+#'         a symmetric Dirichlet draw.
+#'       \item Randomize category positions within each class.
 #'     }
 #'     Higher \code{IQ} values (closer to 1) yield stronger class separation but increase simulation failure risk.
 #'   }
@@ -81,7 +87,7 @@
 #' parameters and responses are regenerated until satisfied. This ensures compatibility with standard LCA estimation.
 #'
 #' @details
-#' \strong{Probability Generation:}
+#' Probability generation:
 #' \itemize{
 #'   \item Dirichlet Sampling (\code{IQ="random"}):
 #'     For each variable-class combination, probabilities are drawn from
@@ -97,7 +103,7 @@
 #'     }
 #' }
 #'
-#' \strong{Data Generation:}
+#' Data generation:
 #' \itemize{
 #'   \item Class assignments \code{Z} are generated first according to \code{distribution}.
 #'   \item For each observation \code{p} and variable \code{i}:
@@ -109,7 +115,7 @@
 #'   \item Entire dataset is regenerated if any category of any variable has zero observations.
 #' }
 #'
-#' \strong{Critical Constraints:}
+#' Critical constraints:
 #' \itemize{
 #'   \item When \code{IQ} is numeric: \eqn{0.5 < IQ < 1} and \code{min(poly.value) >= 2}
 #'   \item \code{N} must be sufficiently large to observe all categories, especially when \code{IQ} is high
@@ -150,30 +156,26 @@ sim.LCA <- function(N=1000, I=10, L=3, poly.value=5, IQ="random", distribution="
 
   while(!is.availiable){
     if(!is.null(params$Z)){
-      Z <- params$Z
-      P.Z <- table(params$Z) / sum(Z)
+      Z <- as.integer(params$Z)
+      if(length(Z) != N || any(!Z %in% seq_len(L))){
+        stop("params$Z must contain N class labels between 1 and L")
+      }
+      P.Z <- .class.proportions(Z, L)
+      .simulation.require.sorted(P.Z, is.sort, "params$Z")
     }else if(!is.null(params$P.Z)) {
-      P.Z <- params$P.Z
-      Z.frequency <- ceiling(P.Z*N)
-      l.max <- which.max(Z.frequency)
-      Z.frequency[l.max] <- N - sum(Z.frequency[c(1:L)[-l.max]])
-      Z <- NULL
-      for(l in 1:L){ Z <- c(Z, rep(l, Z.frequency[l])) }
-      Z <- sample(Z, N, replace = FALSE)
+      P.Z <- .simulation.probability(params$P.Z, L, "params$P.Z")
+      .simulation.require.sorted(P.Z, is.sort, "params$P.Z")
+      Z <- .simulation.sample.classes.from.pool(P.Z, N)
     }else{
       if(distribution == "random"){
-        Z.frequency <- ceiling(rdirichlet(n = 1, alpha = rep(3, L))*N)
-
-        l.max <- which.max(Z.frequency)
-        Z.frequency[l.max] <- N - sum(Z.frequency[c(1:L)[-l.max]])
-        Z <- NULL
-        for(l in 1:L){ Z <- c(Z, rep(l, Z.frequency[l])) }
-        Z <- sample(Z, N, replace = FALSE)
+        P.Z <- as.numeric(rdirichlet(n = 1, alpha = rep(3, L)))
       }else if(distribution == "uniform"){
-        Z <- sample(1:L, N, replace = TRUE)
+        P.Z <- rep(1 / L, L)
+      }else{
+        stop("distribution must be 'random' or 'uniform'")
       }
-      P.Z <- rep(0, L)
-      P.Z[as.numeric(names(table(Z)))] <- table(Z) / N
+      if(is.sort) P.Z <- sort(P.Z, decreasing = TRUE)
+      Z <- .simulation.sample.classes.from.pool(P.Z, N)
     }
 
     if(is.null(params$par)){
@@ -200,53 +202,19 @@ sim.LCA <- function(N=1000, I=10, L=3, poly.value=5, IQ="random", distribution="
       par <- params$par
     }
 
-    LCA.R <- function(Z, par){
-      P.LCA <- par[Z, , ]
-      return(P.LCA)
-    }
-
-    P.LCA <- LCA.R(Z, par)
-    P.random <- P.LCA.cumulative <- array(0, dim=c(N, I, poly.max))
-    for(p in 1:N){
-      for(i in 1:I){
-        for(po in 1:poly.value[i]){
-          P.LCA.cumulative[p , i, po] <- sum(P.LCA[p , i, 1:po])
-        }
-      }
-    }
-
-    P.random[, , 1] <- matrix(runif(N*I, 0, 1), N, I)
-    for(po in 2:poly.max){
-      P.random[ , , po] <- P.random[ , , 1]
-    }
-    response <- matrix(0, N, I)
-    for(i in 1:I){
-      temp <- P.random[ , i, 1:poly.value[i]] >= P.LCA.cumulative[ , i, 1:poly.value[i]]
-      response[ , i] <- apply(temp, 1, sum)
-    }
+    response <- sample_lca_response_cpp(Z, par, as.integer(poly.value))
 
     is.availiable <- check.response(response, poly.value)
   }
 
-  P.Z.Xn <- t(sapply(1:N, function(i){
-    temp <- rep(0, L)
-    temp[Z[i]] <-  1
-    temp
-  }))
+  P.Z.Xn <- .class.indicator(Z, L)
+  P.Z <- .class.proportions(Z, L)
 
-  if (is.sort) {
-    posi <- order(P.Z, decreasing = TRUE)
-    P.Z     <- P.Z[posi]
-    par     <- par[posi, , , drop = FALSE]
-    P.Z.Xn  <- P.Z.Xn[, posi, drop = FALSE]
-    Z <- match(Z, posi)
-  }
-
-  dimnames(par) <- list(paste0("Class.", 1:L),
+  dimnames(par) <- list(.latent.group.names(L, "LCA"),
                         paste0("I", 1:I),
                         paste0("poly", 0:(poly.max-1)))
-  colnames(P.Z.Xn) <- paste0("Class.", 1:L)
-  names(P.Z) <- paste0("Class.", 1:L)
+  colnames(P.Z.Xn) <- .latent.group.names(L, "LCA")
+  names(P.Z) <- .latent.group.names(L, "LCA")
   names(Z) <- paste0("O", 1:N)
 
   res <- list(response=response, par=par, Z=Z, P.Z=P.Z,

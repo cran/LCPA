@@ -8,18 +8,19 @@ sim.LTA(
   N = 500,
   I = 5,
   L = 3,
-  distribution = "random",
   times = 2,
   type = "LCA",
-  rate = NULL,
+  distribution = "random",
   constraint = "VV",
-  mean.range = c(-2, 2),
-  covs.range = c(0.01, 4),
   poly.value = 5,
   IQ = "random",
+  mean.range = c(-2, 2),
+  covs.range = c(0.01, 4),
   params = NULL,
   is.sort = TRUE,
+  rate = NULL,
   covariates = NULL,
+  ref.class = L,
   beta = NULL,
   gamma = NULL
 )
@@ -31,46 +32,61 @@ sim.LTA(
 
 \item{L}{Integer; number of latent classes/profiles.}
 
-\item{distribution}{Character; distribution of initial class probabilities when not using covariates or \code{params}.
-Options: \code{"uniform"} (equal probabilities) or \code{"random"} (Dirichlet-distributed, default).}
-
 \item{times}{Integer; number of time points (must be \eqn{\geq 1}).}
 
 \item{type}{Character; type of latent model. \code{"LCA"} for categorical indicators (default),
 \code{"LPA"} for continuous indicators.}
 
-\item{rate}{List of matrices or NULL; transition probability matrices for non-covariate mode.
-Each matrix is \eqn{L \times L} with rows summing to 1. If \code{NULL} (default), matrices are
-generated with 0.7 diagonal probability and uniform off-diagonals. \strong{Ignored when \code{times=1}}.}
+\item{distribution}{Character; distribution of initial class probabilities when not using covariates or \code{params}.
+Options: \code{"uniform"} (equal probabilities) or \code{"random"} (Dirichlet-distributed, default).}
 
 \item{constraint}{Character; covariance structure for LPA (\code{type="LPA"} only). Options:
-\code{"VV"} (unstructured, default), \code{"VE"} (diagonal variance), \code{"EE"} (equal variance).}
-
-\item{mean.range}{Numeric vector; range for randomly generated class means in LPA (default: \code{c(-2, 2)}).}
-
-\item{covs.range}{Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).}
+\code{"UE"} and \code{"UV"} for univariate responses; \code{"E0"},
+\code{"V0"}, \code{"EE"}, \code{"EV"}, \code{"VE"}, and \code{"VV"}
+for multivariate responses. See \code{\link[LCPA]{sim.LPA}}. The default
+is \code{"VV"}.}
 
 \item{poly.value}{Integer; number of categories for polytomous LCA indicators (default: 5).}
 
 \item{IQ}{Character; method for generating indicator discrimination in LCA. \code{"random"} (default) or fixed values.}
 
-\item{params}{List or NULL; pre-specified parameters for reproducibility (see Details).}
+\item{mean.range}{Numeric vector; range for randomly generated class means in LPA (default: \code{c(-2, 2)}).}
 
-\item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-order according to \code{P.Z}. All other parameters will be adjusted accordingly
-based on the reordered latent classes.}
+\item{covs.range}{Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).}
+
+\item{params}{List or NULL; pre-specified measurement and initial-class parameters in the final
+first-time-point class order (see Details).}
+
+\item{is.sort}{A logical value. If \code{TRUE} (default), internally generated first-time-point
+classes are established in decreasing model-implied probability order. Supplied parameters
+already use this final order and are never reordered; a supplied \code{beta}, \code{params$P.Z},
+or \code{params$Z} must therefore imply decreasing first-time-point class proportions. If
+\code{FALSE}, the supplied or generated order is retained. No later time point is reordered.}
+
+\item{rate}{List of matrices or NULL; transition probability matrices in the final class order for non-covariate mode.
+Each matrix is \eqn{L \times L} with rows summing to 1. If \code{NULL} (default), matrices are
+generated with 0.7 diagonal probability and uniform off-diagonals. Ignored when \code{times=1}.}
 
 \item{covariates}{List of matrices or NULL; covariate matrices for each time point. Each matrix must have
-dimensions \eqn{N \times p_t} and include an intercept column (first column must be all 1s). If \code{NULL},
+dimensions \eqn{N\times(U_t+1)} and include an intercept column (first
+column must be all 1s). If \code{NULL},
 covariate mode is disabled. See Details for automatic coefficient generation.}
 
-\item{beta}{Matrix or NULL; initial state regression coefficients of dimension \eqn{p_1 \times L}.
-Columns correspond to classes 1 to \eqn{L} (last class \eqn{L} is reference and must be zero).
+\item{ref.class}{Integer between 1 and \code{L}; reference class in the class order established
+at the first time point. When \code{is.sort=TRUE}, this is the position after ordering the
+first-time-point classes by decreasing \code{P.Z}. The same class order is retained at every
+later time point.}
+
+\item{beta}{Matrix or NULL; initial state regression coefficients of dimension
+\eqn{(U_1+1)\times L}
+in the final first-time-point class order. Column \code{ref.class} must be zero. Supplied
+coefficients determine the logits and are returned unchanged.
 If \code{NULL} and covariates are used, coefficients are randomly generated from \eqn{\text{Uniform}(-1, 1)}.}
 
 \item{gamma}{List or NULL; transition regression coefficients. Must be a list of length \code{times-1}.
 Each element \eqn{t} is a list of length \eqn{L} (previous state). Each sub-list contains \eqn{L} vectors
-(next state), where the last vector (reference class) is always \eqn{\mathbf{0}}. \strong{Ignored when \code{times=1}}.
+(next state). The supplied coefficients refer to the class order established at the first time
+point and are returned unchanged. Ignored when \code{times=1}.
 If \code{NULL} and covariates are used with \code{times>=2}, coefficients are randomly generated from
 \eqn{\text{Uniform}(-1, 1)} for non-reference classes.}
 }
@@ -83,10 +99,12 @@ A list of class \code{"sim.LTA"} containing:
 \item{\code{par}}{Indicator parameters for LCA (if \code{type="LCA"}).}
 \item{\code{means}}{Class means for LPA (if \code{type="LPA"}).}
 \item{\code{covs}}{Class covariance matrices for LPA (if \code{type="LPA"}).}
+\item{\code{poly.value}}{Category counts for LCA (if \code{type="LCA"}).}
 \item{\code{rate}}{True transition matrices (non-covariate mode only; \code{NULL} when \code{times=1}).}
 \item{\code{covariates}}{List of covariate matrices used (covariate mode only).}
 \item{\code{beta}}{True initial state coefficients (covariate mode only).}
 \item{\code{gamma}}{True transition coefficients (covariate mode only; \code{NULL} when \code{times=1}).}
+\item{\code{ref.class}}{Reference class of the returned \code{beta} and \code{gamma} coefficients.}
 \item{\code{call}}{Function call.}
 \item{\code{arguments}}{Input arguments.}
 }
@@ -104,8 +122,9 @@ Covariate Requirements:
 and issues a warning.
 \item When \code{covariates} is provided but \code{beta} or \code{gamma} is \code{NULL}, coefficients are
 randomly generated from \eqn{\text{Uniform}(-1, 1)} (non-reference classes only).
-\item The reference class (\eqn{L}) always has zero coefficients (\eqn{\boldsymbol{\beta}_L = \mathbf{0}},
-\eqn{\boldsymbol{\gamma}_{l,L} = \mathbf{0}}).
+\item All supplied simulation parameters use the final first-time-point class order. They are
+never reordered or reparameterized. Internally generated initial coefficients are ordered and
+reparameterized before they are returned. The same order is used for every transition.
 }
 
 Parameter Compatibility:
@@ -119,31 +138,44 @@ Parameter Compatibility:
 
 \describe{
 \item{Initial Class Probabilities (with covariates):}{
-For observation/participant \eqn{n} at time 1, the probability of belonging to latent class \eqn{l} is:
-\deqn{P(Z_{n1} = l \mid \mathbf{X}_{n1}) =
-      \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_{n1})}
-           {\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_{n1})}}
-where \eqn{\mathbf{X}_{n1} = (X_{n10}, X_{n11}, \dots, X_{n1M})^\top} is the covariate vector for observation/participant \eqn{n} at time 1,
-with \eqn{X_{n10} = 1} (intercept term) and \eqn{X_{n1m}} (\eqn{m=1,\dots,M}) representing the value of the \eqn{m}-th covariate.
-The coefficient vector \eqn{\boldsymbol{\beta}_l = (\beta_{l0}, \beta_{l1}, \dots, \beta_{lM})^\top} corresponds element-wise to \eqn{\mathbf{X}_{n1}},
-where \eqn{\beta_{l0}} is the intercept and \eqn{\beta_{lm}} (\eqn{m \geq 1}) are regression coefficients for covariates.
-Class \eqn{L} is the reference class (\eqn{\boldsymbol{\beta}_L = \mathbf{0}}).
+For participant \eqn{n} at time 1, the probability of belonging to
+latent class \eqn{l} is
+\deqn{P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1}) =
+      \frac{\exp(\boldsymbol{\beta}_l^\top\boldsymbol{\zeta}_{n1})}
+           {\sum_{h=1}^L\exp(\boldsymbol{\beta}_h^\top
+           \boldsymbol{\zeta}_{n1})}.}
+Here
+\eqn{\boldsymbol{\zeta}_{n1}=
+    (1,\zeta_{n11},\ldots,\zeta_{n1U_1})^\top}; the leading 1 is the
+intercept, and \eqn{u=1,\ldots,U_1} indexes observed covariates. The
+coefficient vector
+\eqn{\boldsymbol{\beta}_l=(\beta_{l0},\beta_{l1},\ldots,
+    \beta_{lU_1})^\top} has the corresponding intercept and slopes.
+The class selected by \code{ref.class} is the reference class and has a zero coefficient vector.
 }
 \item{Transition Probabilities (with covariates and times>=2):}{
-For observation/participant \eqn{n} transitioning from class \eqn{l} at time \eqn{t-1} to class \eqn{k} at time \eqn{t} (\eqn{t \geq 2}):
-\deqn{P(Z_{nt} = k \mid Z_{n,t-1} = l, \mathbf{X}_{nt}) =
-      \frac{\exp(\boldsymbol{\gamma}_{lkt}^\top \mathbf{X}_{nt})}
-           {\sum_{j=1}^L \exp(\boldsymbol{\gamma}_{ljt}^\top \mathbf{X}_{nt})}}
-where \eqn{\mathbf{X}_{nt} = (X_{nt0}, X_{nt1}, \dots, X_{ntM})^\top} is the covariate vector at time \eqn{t},
-with \eqn{X_{nt0} = 1} (intercept) and \eqn{X_{ntm}} (\eqn{m=1,\dots,M}) as the \eqn{m}-th covariate value.
-The coefficient vector \eqn{\boldsymbol{\gamma}_{lkt} = (\gamma_{lkt0}, \gamma_{lkt1}, \dots, \gamma_{lktM})^\top}
-corresponds element-wise to \eqn{\mathbf{X}_{nt}}, where \eqn{\gamma_{lkt0}} is the intercept and \eqn{\gamma_{lktm}} (\eqn{m \geq 1})
-are regression coefficients. Class \eqn{L} is the reference class (\eqn{\boldsymbol{\gamma}_{lLt} = \mathbf{0}} for all \eqn{l}).
+For participant \eqn{n} transitioning from class \eqn{k} at time
+\eqn{t-1} to class \eqn{l} at time \eqn{t} (\eqn{t\geq2}),
+\deqn{P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt}) =
+      \frac{\exp(\boldsymbol{\gamma}_{klt}^\top\boldsymbol{\zeta}_{nt})}
+           {\sum_{h=1}^L\exp(\boldsymbol{\gamma}_{kht}^\top
+           \boldsymbol{\zeta}_{nt})}.}
+Here
+\eqn{\boldsymbol{\zeta}_{nt}=
+    (1,\zeta_{nt1},\ldots,\zeta_{ntU_t})^\top}, and
+\eqn{\boldsymbol{\gamma}_{klt}=
+    (\gamma_{klt0},\gamma_{klt1},\ldots,\gamma_{kltU_t})^\top} contains the
+corresponding intercept and slopes. The destination class selected by
+\code{ref.class} has a zero
+coefficient vector for every origin class.
 }
 \item{Without Covariates or When times=1:}{
 Initial probabilities follow a multinomial distribution with probabilities \eqn{\boldsymbol{\pi} = (\pi_1, \dots, \pi_L)}.
-When \eqn{times \geq 2}, transitions follow a Markov process with fixed probabilities \eqn{\tau_{lk}^{(t)} = P(Z_t = k \mid Z_{t-1} = l)},
-where \eqn{\sum_{k=1}^L \tau_{lk}^{(t)} = 1} for each \eqn{l} and \eqn{t}.
+When \eqn{times \geq 2}, transitions follow a Markov process with fixed
+probabilities
+\eqn{\tau_{kl}^{(t)}=P(Z_{nt}=l\mid Z_{n,t-1}=k)}, where
+\eqn{\sum_{l=1}^L\tau_{kl}^{(t)}=1} for each origin class \eqn{k} and
+time \eqn{t}.
 }
 }
 }
@@ -184,10 +216,10 @@ covariates <- list(t1=covariates.T1, t2=covariates.T2) # Combine into final cova
 
 ## Simulate beta coefficients
 # 3x3 matrix (last column is zero because the last category is used as reference)
-beta <- matrix(c( 0.8, -0.5, 0.0,
-                 -0.3, -0.4, 0.0,
-                  0.2,  0.8, 0.0,
-                 -0.1,  0.2, 0.0), ncol=3, byrow=TRUE)
+beta <- matrix(c( 1.3,  0.5, 0.0,
+                  0.1,  0.4, 0.0,
+                 -0.6, -0.8, 0.0,
+                 -0.3, -0.2, 0.0), ncol=3, byrow=TRUE)
 
 ## Simulate gamma coefficients (only needed when times>=2)
 gamma <- list(
@@ -200,6 +232,7 @@ gamma <- list(
 ## Simulate the data
 sim_custom <- sim.LTA(
   N=N, I=4, L=3, times=2, type="LPA",
+  ref.class=3,
   covariates=covariates,
   beta=beta,
   gamma=gamma

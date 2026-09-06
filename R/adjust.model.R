@@ -39,7 +39,7 @@
 #'
 #' @examples
 #' \dontrun{
-#' # need Mplus and Pyrthon
+#' # need Mplus and Python
 #'
 #' library(LCPA)
 #' set.seed(123)
@@ -67,19 +67,18 @@
 adjust.model <- function(object1, object2) {
 
   # Validate input classes
-  model.type1 <- class(object1)[1]
-  model.type2 <- class(object2)[1]
+  type1 <- class(object1)[1]
+  type2 <- class(object2)[1]
 
-  if (model.type1 != model.type2) {
+  if (type1 != type2) {
     stop("'object1' and 'object2' must be of the same model type (both 'LCA' or both 'LPA').",
          call. = FALSE)
   }
 
-  model.type <- model.type1
-  if (!(model.type %in% c("LCA", "LPA"))) {
+  type <- type1
+  if (!(type %in% c("LCA", "LPA"))) {
     stop("Only 'LCA' and 'LPA' model types are supported.", call. = FALSE)
   }
-
   # Validate dimensions
   N1 <- nrow(object1$P.Z.Xn)
   N2 <- nrow(object2$P.Z.Xn)
@@ -122,7 +121,7 @@ adjust.model <- function(object1, object2) {
   # Example: if assignment = c(2,3,1), then we want object2[ ,c(2,3,1)] — so just use assignment directly
 
   # Reorder object2 to match object1's class ordering
-  if (model.type == "LPA") {
+  if (type == "LPA") {
     object2$params$means  <- object2$params$means[assignment, , drop = FALSE]
     object2$params$covs   <- object2$params$covs[, , assignment, drop = FALSE]
     object2$params$P.Z    <- object2$params$P.Z[assignment]
@@ -130,7 +129,7 @@ adjust.model <- function(object1, object2) {
     dimnames(object2$params$means) <- dimnames(object1$params$means)
     dimnames(object2$params$covs)  <- dimnames(object1$params$covs)
     names(object2$params$P.Z)      <- names(object1$params$P.Z)
-  } else if (model.type == "LCA") {
+  } else if (type == "LCA") {
     object2$params$par    <- object2$params$par[assignment, , , drop = FALSE]
     object2$params$P.Z    <- object2$params$P.Z[assignment]
 

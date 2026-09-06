@@ -51,7 +51,7 @@ The alignment is performed by:
 }
 \examples{
 \dontrun{
-# need Mplus and Pyrthon
+# need Mplus and Python
 
 library(LCPA)
 set.seed(123)

@@ -1,15 +1,19 @@
 #' Likelihood Ratio Test
 #'
-#' Conducts a likelihood ratio test to compare the fit of two
-#' models. The test evaluates whether a model with more parameters
-#' provides a significantly better fit than a model with fewer parameters.
+#' Conducts a likelihood ratio test to compare the fit of two LCA or LPA
+#' models with any numbers of latent classes/profiles, including equal class
+#' counts. The test evaluates whether a model with more parameters provides a
+#' significantly better fit than a model with fewer parameters.
 #'
-#' @param object1 Fitted model object with fewer parameters (i.e., fewer \code{npar}, small model).
-#' @param object2 Fitted model object with more parameters (i.e., more \code{npar}, large model).
+#' @param object1 Fitted LCA or LPA model. When both models have the same
+#'   number of free parameters, this is treated as the null model.
+#' @param object2 Fitted LCA or LPA model of the same type. When both models
+#'   have the same number of free parameters, this is treated as the
+#'   alternative model.
 #'
 #' @return An object of class \code{"htest"} containing:
 #' \itemize{
-#'   \item \code{statistic}: VLMR adjusted test statistic
+#'   \item \code{statistic}: Standard likelihood ratio test statistic
 #'   \item \code{parameter}: Degrees of freedom (\eqn{df = npar_2 - npar_1})
 #'   \item \code{p.value}: P-value from \eqn{\chi^2_df} distribution
 #'   \item \code{method}: Name of the test
@@ -40,6 +44,10 @@
 #' }
 #' Under the null hypothesis (\code{H_0}: small model is true), LRT asymptotically follows
 #' a chi-square distribution with \eqn{df} degrees of freedom.
+#' Models may have any class counts; they do not need to differ by exactly one
+#' class. If both models have the same number of free parameters, the
+#' likelihood-ratio statistic is returned but the chi-square p-value is
+#' \code{NA} because its reference distribution has zero degrees of freedom.
 #'
 #' @importFrom stats pchisq
 #' @export
@@ -56,29 +64,24 @@ LRT.test <- function(object1, object2) {
 
   N <- nrow(object1$arguments$response)
 
-  npar1 <- object1$npar
-  npar2 <- object2$npar
-
-  if (npar2 < npar1) {
-    model1 <- object2
-    model2 <- object1
-    L1 <- object2$arguments$L
-    L2 <- object1$arguments$L
-    npar1 <- object2$npar
-    npar2 <- object1$npar
-  } else {
-    model1 <- object1
-    model2 <- object2
-    L1 <- object1$arguments$L
-    L2 <- object2$arguments$L
-  }
+  models <- .order.LRT.models(object1, object2)
+  model1 <- models$null
+  model2 <- models$alternative
+  L1 <- model1$arguments$L
+  L2 <- model2$arguments$L
+  npar1 <- model1$npar
+  npar2 <- model2$npar
 
   fit.index1 <- get.fit.index(model1)
   fit.index2 <- get.fit.index(model2)
 
   LRT.statistic <- -2 * (fit.index1$Log.Lik - fit.index2$Log.Lik)
-  df <- abs(npar2 - npar1)
-  p.value <- pchisq(q = LRT.statistic, df = df, lower.tail = FALSE)
+  df <- npar2 - npar1
+  p.value <- if(df > 0){
+    pchisq(q = LRT.statistic, df = df, lower.tail = FALSE)
+  }else{
+    NA_real_
+  }
 
   res <- list(
     statistic = c(`LRT` = LRT.statistic),
@@ -90,4 +93,16 @@ LRT.test <- function(object1, object2) {
   class(res) <- "htest"
 
   return(res)
+}
+
+.order.LRT.models <- function(object1, object2) {
+  npar <- c(object1$npar, object2$npar)
+  if(length(npar) != 2L || any(!is.finite(npar))){
+    stop("Both models must have a finite number of free parameters")
+  }
+  if(npar[1L] <= npar[2L]){
+    list(null = object1, alternative = object2)
+  }else{
+    list(null = object2, alternative = object1)
+  }
 }

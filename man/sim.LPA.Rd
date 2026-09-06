@@ -30,7 +30,7 @@ Default is \code{"VV"} (fully heterogeneous covariances).}
 
 \item{mean.range}{Numeric vector of length 2; range for sampling class-specific means.
 Each variable's means are sampled uniformly from \code{mean.range[1]} to \code{mean.range[2]}.
-Default: \code{c(-4, 4)}.}
+Default: \code{c(-2, 2)}.}
 
 \item{covs.range}{Numeric vector of length 2; range for sampling variance parameters (diagonal elements).
 Must satisfy \code{covs.range[1] > 0} and \code{covs.range[2] > covs.range[1]}. Off-diagonal covariances
@@ -38,35 +38,42 @@ are derived from correlations scaled by these variances. Default: \code{c(0.01, 
 
 \item{params}{List with fixed parameters for simulation:
 \describe{
-\item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities per latent class.}
-\item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
-\item{\code{Z}}{Vector of length \eqn{N} containing the latent classes of observations. A fixed
-observation classes \code{Z} is applied directly to simulate data only when \code{P.Z}
-is \code{NULL} and \code{Z} is a \code{N} length vector.}
+\item{\code{means}}{\eqn{L \times I} matrix of class-specific means in the final class order.}
+\item{\code{covs}}{\eqn{I \times I \times L} array of class-specific
+covariance matrices in the final class order.}
+\item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities in the final class order.}
+\item{\code{Z}}{Vector of length \eqn{N} containing fixed class
+assignments in the final class order. When supplied, \code{Z} takes precedence over
+\code{P.Z}.}
 }}
 
-\item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-order according to \code{P.Z}. All other parameters will be adjusted accordingly
-based on the reordered latent classes.}
+\item{is.sort}{A logical value. If \code{TRUE} (default), internally generated class probabilities
+are ordered decreasingly before class-specific parameters and observations are generated.
+Supplied parameters are already defined in this final order and are never reordered; supplied
+\code{P.Z} or \code{Z} must therefore follow decreasing class proportions.}
 }
 \value{
 A list containing:
 \describe{
 \item{response}{Numeric matrix (\eqn{N \times I}) of simulated observations. Rows are observations,
-columns are variables named \code{"V1"}, \code{"V2"}, ..., or \code{"UV"} for univariate data.}
+columns are variables named \code{"V1"}, \code{"V2"}, ..., or \code{"V"} for univariate data.}
 \item{means}{Numeric matrix (\eqn{L \times I}) of true class-specific means.
-Row names: \code{"Class1"}, \code{"Class2"}, ...; column names match \code{response}.}
+Row names: \code{"Profile 1"}, \code{"Profile 2"}, and so on; column names
+match \code{response}.}
 \item{covs}{Array (\eqn{I \times I \times L}) of true class-specific covariance matrices.
 Dimensions: variables x variables x classes. Constrained parameters have identical values across class slices.
 Dimension names match \code{response} and class labels.}
 \item{P.Z.Xn}{Numeric matrix (\eqn{N \times L}) of true class membership probabilities (one-hot encoded).
 Row \code{i}, column \code{l} = 1 if observation \code{i} belongs to class \code{l}, else 0.
-Row names: \code{"O1"}, \code{"O2"}, ...; column names: \code{"Class1"}, \code{"Class2"}, ...}
+Row names: \code{"O1"}, \code{"O2"}, ...; column names:
+\code{"Profile 1"}, \code{"Profile 2"}, and so on.}
 \item{P.Z}{Numeric vector (length \eqn{L}) of true class proportions.
-Named with class labels (e.g., \code{"Class1"}).}
+Named \code{"Profile 1"}, \code{"Profile 2"}, and so on.}
 \item{Z}{Integer vector (length \eqn{N}) of true class assignments (1 to L).
 Named with observation IDs (e.g., \code{"O1"}).}
 \item{constraint}{Original constraint specification (character string or list) passed to the function.}
+\item{call}{Matched simulation call.}
+\item{arguments}{List of the effective simulation arguments.}
 }
 }
 \description{
@@ -80,12 +87,8 @@ Mean Generation: For each variable, \eqn{3L} candidate means are sampled uniform
 
 Covariance Generation:
 \itemize{
-\item \strong{Positive Definiteness:} All covariance matrices are adjusted using \code{Matrix::nearPD}
-and eigenvalue thresholds (\eqn{> 10^{-8}}) to guarantee validity. Failed attempts trigger explicit errors.
-\item \strong{Univariate Case (\code{I=1}):} Constraints \code{"UE"} and \code{"UV"} are enforced automatically.
+\item Univariate case (\code{I=1}): Constraints \code{"UE"} and \code{"UV"} are enforced automatically.
 Predefined constraints like \code{"E0"} map to \code{"UE"}.
-\item \strong{VE Constraint:} Requires special handling—base off-diagonal elements are fixed, and diagonals
-are sampled above a minimum threshold to maintain positive definiteness. May fail if \code{covs.range} is too narrow.
 }
 
 Class Assignment:
@@ -121,12 +124,8 @@ Each element specifies a pair of variables whose covariance parameters are const
 \item{\code{c(i,j)}}{Constrains covariance between variables \code{i} and \code{j} to be equal across all classes
 (symmetric: automatically includes \code{c(j,i)}).}
 }
-Unconstrained parameters vary freely. The algorithm ensures positive definiteness by:
-\enumerate{
-\item Generating a base positive definite matrix \code{S0}.
-\item Applying constraints via a logical mask.
-\item Adjusting unconstrained variances to maintain positive definiteness.
-}
+Unconstrained parameters vary freely, and the returned covariance matrices
+are positive definite.
 Critical requirements for custom constraints:
 \describe{
 \item{At least one variance must be unconstrained if any off-diagonal covariance is unconstrained.}{}
@@ -151,8 +150,8 @@ ensuring no empty classes. Sizes are rounded to integers with adjustment for exa
 sim_data <- sim.LPA(N = 500, I = 2, L = 3, constraint = "VV")
 
 # Example 2: Univariate data, equal variances
-# 'E0' automatically maps to 'UE' for I=2
-sim_uni <- sim.LPA(N = 200, I = 2, L = 2, constraint = "E0")
+# 'E0' automatically maps to 'UE' for I=1
+sim_uni <- sim.LPA(N = 200, I = 1, L = 2, constraint = "E0")
 
 # Example 3: Custom constraints
 # - Equal covariance between V1 and V2 across classes

@@ -7,29 +7,54 @@
 LCA(
   response,
   L = 2,
-  par.ini = "random",
+  category.levels = NULL,
   method = "EM",
+  par.ini = "random",
   is.sort = TRUE,
-  nrep = 20,
   starts = 100,
-  maxiter.wa = 20,
+  maxiter.warmup = 20,
+  nrep = 20,
   vis = TRUE,
   control.EM = NULL,
   control.Mplus = NULL,
-  control.NNE = NULL
+  control.NNE = NULL,
+  control.flexmix = NULL,
+  control.Rmixmod = NULL,
+  control.RMixtComp = NULL
 )
 }
 \arguments{
-\item{response}{A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of individuals/participants/observations
-and \eqn{I} is the number of observed categorical items/variables/indicators. Each column must contain nominal-scale
+\item{response}{A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of participants
+and \eqn{I} is the number of observed categorical indicators. Each column must contain nominal-scale
 discrete responses (e.g., integers representing categories).}
 
 \item{L}{Integer specifying the number of latent classes (default: 2).}
 
+\item{category.levels}{Optional list fixing the ordered response categories for each
+indicator. If \code{NULL}, the mapping is determined once from the supplied full data.
+LCA estimation requires every mapped category to occur in the supplied data.}
+
+\item{method}{Character string specifying estimation algorithm:
+\itemize{
+\item \code{"EM"}: Expectation-Maximization algorithm (default).
+\item \code{"NNE"}: Neural Network Estimation (experimental), using feed-forward layers,
+optional transformer attention, gradient optimization, and simulated annealing.
+See \code{\link[LCPA]{install_python_dependencies}}.
+\item \code{"Mplus"}: Calls external Mplus software for estimation.
+Uses Mplus defaults for optimization unless overridden by \code{control.Mplus}.
+\item \code{"flexmix"}: Stochastic EM (SEM) through \code{flexmix}, using LCPA's
+warm-up and promoted-replication scheme. Requires \code{flexmix}.
+\item \code{"Rmixmod"}: LCPA warm-up plus SEM, or a native Rmixmod EM, CEM, or SEM strategy.
+Requires the \code{Rmixmod} package.
+\item \code{"RMixtComp"}: Stochastic EM (SEM) estimation through \code{RMixtComp}.
+Requires \code{RMixtComp} and \code{RMixtCompUtilities}.
+No non-SEM RMixtComp algorithm is exposed.
+}}
+
 \item{par.ini}{Specification for parameter initialization. Options include:
 \itemize{
 \item \code{"random"}: Completely random initialization (default).
-\item \code{"kmeans"}: Initializes parameters via K-means clustering on observed data (McLachlan & Peel, 2004).
+\item \code{"kmeans"}: Initializes parameters via K-means clustering on observed data (McLachlan & Peel, 2000).
 \item A \code{list} containing:
 \describe{
 \item{\code{par}}{An \eqn{L \times I \times K_{\max}} array of initial conditional probabilities for
@@ -37,36 +62,43 @@ each latent class, indicator, and response category (where \eqn{K_{\max}} is the
 number of categories across indicators).}
 \item{\code{P.Z}}{A numeric vector of length \eqn{L} specifying initial prior probabilities for latent classes.}
 }
-}}
-
-\item{method}{Character string specifying estimation algorithm:
-\itemize{
-\item \code{"EM"}: Expectation-Maximization algorithm (default).
-\item \code{"NNE"}: Neural Network Estimation with transformer architecture (experimental; uses transformer + simulated
-annealing, more reliable than both \code{"EM"} and \code{"Mplus"}). See \code{\link[LCPA]{install_python_dependencies}}.
-\item \code{"Mplus"}: Calls external Mplus software for estimation.
-Uses Mplus defaults for optimization unless overridden by \code{control.Mplus}.
-}}
+}
+For methods that expose this initialization interface, \code{par.ini} is used only
+to construct the \code{starts} warm-up initializations. It does not initialize the
+\code{nrep} refinement runs, which continue directly from the selected warm-up states.
+With \code{par.ini = "kmeans"}, each outer warm-up start performs exactly one
+K-means run. Thus, \code{starts} is the number of separately initialized K-means
+outputs passed to warm-up training. Backends such as Mplus and Rmixmod may instead use their
+native initialization mechanisms and are not required to implement K-means initialization.
+If \code{"kmeans"} is requested for a method that does not support it, \code{par.ini}
+is automatically changed to \code{"random"}.}
 
 \item{is.sort}{A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
 order according to \code{P.Z}. All other parameters will be adjusted accordingly
 based on the reordered latent classes.}
 
-\item{nrep}{Integer controlling replication behavior:
-\itemize{
-\item If \code{par.ini = "random"}, number of random initializations.
-\item If \code{par.ini = "kmeans"}, number of K-means runs for initialization.
-\item For \code{method="Mplus"}, controls number of random starts in Mplus via \code{STARTS} option.
-\item Best solution is selected by log-likelihood/BIC across replications.
-\item Ignored for user-provided initial parameters.
-}}
+\item{starts}{Positive integer. Number of warm-up analyses to run (default: 100).
+Each analysis is initialized by the selected method and trained for at most
+\code{maxiter.warmup} iterations, producing exactly \code{starts} warm-up solutions.
+For methods supporting \code{par.ini = "kmeans"}, each outer warm-up start performs
+exactly one K-means run, so \code{starts} is also the number of K-means outputs.}
 
-\item{starts}{Number of random initializations to explore during warm-up phase (default: 100).}
+\item{maxiter.warmup}{Positive integer. Maximum number of training iterations for
+each of the \code{starts} warm-up analyses (default: 20). This limit applies only
+to warm-up and does not limit the subsequent refinement phase.}
 
-\item{maxiter.wa}{Maximum number of training iterations allowed per warm-up run. After completion,
-the top \code{nrep} solutions (by log-likelihood) are promoted to final training phase (default: 20).}
+\item{nrep}{Positive integer not exceeding \code{starts}. Number of refinement
+analyses (default: 20). The \code{nrep} warm-up solutions with the largest
+log-likelihoods are continued from their saved states until the full-training
+stopping rule is met; no new initialization occurs in this phase. The refined
+solution with the largest log-likelihood is returned as the final result.
+These three staged-training arguments are not used by \code{method = "RMixtComp"}
+or by \code{method = "Rmixmod"} with \code{control.Rmixmod$path = "Rmixmod"};
+those paths use their documented native controls instead.}
 
-\item{vis}{Logical. If \code{TRUE}, displays progress information during estimation (default: \code{TRUE}).}
+\item{vis}{Logical. If \code{TRUE}, displays carriage-return-updated \code{Warm} and
+\code{Rep} lines when the backend exposes those stages, followed by one final fit-summary
+line (default: \code{TRUE}). Each stage occupies one console line and ends with one newline.}
 
 \item{control.EM}{List of control parameters for EM algorithm:
 \describe{
@@ -78,20 +110,17 @@ the top \code{nrep} solutions (by log-likelihood) are promoted to final training
 \describe{
 \item{\code{maxiter}}{Maximum iterations for Mplus optimization (default: 2000).}
 \item{\code{tol}}{Convergence tolerance for log-likelihood difference (default: 1e-4).}
-\item{\code{files.path}}{A character string specifying the directory path where Mplus will write its intermediate files
-(e.g., \code{.inp} model input, \code{.dat} data file, \code{.out} output, and saved posterior probabilities).
-This argument is \strong{required} — if \code{NULL} (the default), the function throws an error.
-The specified directory must exist and be writable; if it does not exist, the function attempts to create it recursively.
-A unique timestamped subdirectory (e.g., \code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}) will be created within this path
-to store all run-specific files and avoid naming conflicts.
-If it is an empty string (\code{""}), the timestamped subdirectory \code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}
-will be created directly under R's current working directory (\code{\link[base]{getwd}()}).}
+\item{\code{files.path}}{A character string specifying the directory under which Mplus writes
+intermediate files, including model input, data, output, and saved posterior probabilities.
+The effective default is \code{""}. A non-empty path is created recursively when necessary
+and must be writable. Within it, the function creates a unique timestamped subdirectory named
+\code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"} to isolate all files from the current run.
+If \code{files.path = ""}, that timestamped subdirectory is created directly under R's current
+working directory, \code{\link[base]{getwd}()}. Explicit \code{NULL} is invalid.}
 \item{\code{files.clean}}{Logical. If \code{TRUE} (default), all intermediate files and the temporary working directory
-created for this run are deleted upon successful completion or error exit (via \code{on.exit()}).
-If \code{FALSE}, all generated files are retained in \code{files.path} (or the auto-generated temp dir)
-for inspection or debugging. Note: when \code{files.path = NULL}, even if \code{files.clean = FALSE},
-the temporary directory may still be cleaned up by the system later — for guaranteed persistence,
-specify a custom \code{files.path}.}
+created for the run are deleted on successful completion or error exit via \code{on.exit()}.
+If \code{FALSE}, the complete timestamped working directory is retained under \code{files.path},
+or under \code{\link[base]{getwd}()} when \code{files.path = ""}, for inspection and debugging.}
 }}
 
 \item{control.NNE}{List of control parameters for NNE algorithm:
@@ -102,20 +131,63 @@ specify a custom \code{files.path}.}
 \item{\code{d.model}}{Dimensionality of transformer encoder embeddings (default: 8).}
 \item{\code{nhead}}{Number of attention heads in transformer (default: 2).}
 \item{\code{dim.feedforward}}{Dimensionality of transformer feedforward network (default: 16).}
-\item{\code{eps}}{Small constant for numerical stability (default: 1e-8).}
-\item{\code{lambda}}{A factor for slight regularization of all parameters (default: 1e-5).}
+\item{\code{eps}}{Positive offset used in the NNE objective (default: 1e-8).}
+\item{\code{lambda}}{Coefficient of the NNE parameter penalty (default: 1e-5).}
 \item{\code{initial.temperature}}{Initial temperature for simulated annealing (default: 1000).}
 \item{\code{cooling.rate}}{Cooling rate per iteration in simulated annealing (default: 0.5).}
 \item{\code{maxiter.sa}}{Maximum iterations for simulated annealing (default: 1000).}
 \item{\code{threshold.sa}}{Minimum temperature threshold for annealing (default: 1e-10).}
 \item{\code{maxiter}}{Maximum training epochs (default: 1000).}
-\item{\code{maxiter.early}}{Patience parameter for early stopping (default: 50).}
+\item{\code{patience.early}}{Maximum consecutive iterations without improvement before early stopping (default: 100).}
 \item{\code{maxcycle}}{Maximum cycles for optimization (default: 10).}
 \item{\code{lr}}{Learning rate, controlling the step size of neural network parameter updates (default: 0.025).}
 \item{\code{scheduler.patience}}{Patience for learning rate decay (if the loss function does not improve for more than \code{patience} consecutive epochs, the learning rate will be reduced) (default: 10).}
-\item{\code{scheduler.factor}}{Learning rate decay factor; the new learning rate equals the original learning rate multiplied by \code{scheduler.factor} (default: 0.70).}
+\item{\code{scheduler.factor}}{Learning rate decay factor; the new learning rate equals the original learning rate multiplied by \code{scheduler.factor} (default: 0.80).}
 \item{\code{plot.interval}}{Interval (in epochs) for plotting training diagnostics (default: 100).}
 \item{\code{device}}{Specifies the hardware device; can be \code{"CPU"} (default) or \code{"GPU"}. If the GPU is not available, it automatically falls back to CPU.}
+}}
+
+\item{control.flexmix}{List of control parameters for flexmix SEM estimation:
+\describe{
+\item{\code{maxiter}}{Number of SEM iterations in every promoted full run (default: 1000).}
+\item{\code{minprior}}{Minimum component prior accepted by flexmix (default: 0, so LCPA does not intentionally remove requested classes).}
+\item{\code{tol}}{Relative likelihood-change threshold used by flexmix (default: 0, which enforces the fixed SEM iteration count).}
+}}
+
+\item{control.Rmixmod}{List of control parameters for Rmixmod estimation:
+\describe{
+\item{\code{path}}{Execution path: \code{"LCPA"} (default) preserves the package's
+\code{starts}/\code{maxiter.warmup}/\code{nrep} warm-up plus pure SEM procedure; \code{"Rmixmod"}
+delegates one native EM, CEM, SEM, or combined strategy and ignores those three arguments.}
+\item{\code{algorithm}, \code{nrep}, \code{method.init}, \code{starts},
+\code{maxiter.init}, \code{maxiter}, \code{tol.init}, \code{tol},
+\code{par.ini}, \code{labels.ini}}{Package-standard controls translated to the corresponding
+arguments of \code{Rmixmod::mixmodStrategy()} when \code{path="Rmixmod"}. Unspecified arguments
+retain the installed Rmixmod version's defaults. Under \code{path="LCPA"}, only
+\code{maxiter} is used, with 1000 iterations when omitted. \code{algorithm} accepts
+\code{"EM"}, \code{"CEM"}, and \code{"SEM"}, including ordered combinations supported by Rmixmod.}
+\item{\code{strategy}}{Optional pre-built Rmixmod \code{Strategy} object for
+\code{path="Rmixmod"}. When supplied, it takes precedence over the individual strategy controls.}
+}}
+
+\item{control.RMixtComp}{List of control parameters for RMixtComp SEM estimation:
+\describe{
+\item{\code{maxiter.burnin}}{Number of native SEM burn-in iterations (default: 50).}
+\item{\code{maxiter}}{Number of recorded post-burn-in SEM iterations (default: 50).}
+\item{\code{maxiter.gibbs.burnin}, \code{maxiter.gibbs}}{Numbers of burn-in and
+recorded iterations in RMixtComp's subsequent fixed-parameter Gibbs stage
+(defaults: 50 and 50).}
+\item{\code{n.init.per.class}}{Number of observations per class used by
+RMixtComp's native parameter initialization (default: 50).}
+\item{\code{maxattempts.sem}}{Maximum number of SEM attempts (default: 20).}
+\item{\code{confidence.level}, \code{stable.ratio}, \code{n.stable}}{
+Native RMixtComp SEM controls (defaults: 0.95, 0.99, and 20).}
+\item{\code{criterion}}{RMixtComp model-selection criterion: \code{"BIC"}
+(default) or \code{"ICL"}.}
+\item{\code{nrep}}{Number of native RMixtComp SEM runs for the requested number
+of classes; RMixtComp retains the run with the largest observed likelihood (default: 1).}
+\item{\code{ncores}}{Number of cores used by RMixtComp to parallelize
+\code{nrep}; must not exceed \code{nrep} (default: 1).}
 }}
 }
 \value{
@@ -125,43 +197,88 @@ An object of class \code{"LCA"} containing:
 \describe{
 \item{\code{par}}{\eqn{L \times I \times K_{\max}} array of conditional response probabilities per latent class.}
 \item{\code{P.Z}}{Vector of length \eqn{L} with latent class prior probabilities.}
+\item{\code{category.levels}}{Fixed ordered response categories for each indicator.}
 }
 }
 \item{\code{npar}}{Number of free parameters in the model. see \code{\link[LCPA]{get.npar.LCA}}}
 \item{\code{Log.Lik}}{Log-likelihood of the final model. see \code{\link[LCPA]{get.Log.Lik.LCA}}}
 \item{\code{AIC}}{Akaike Information Criterion value.}
 \item{\code{BIC}}{Bayesian Information Criterion value.}
-\item{\code{best_BIC}}{Best BIC value across \code{nrep} runs (if applicable).}
+\item{\code{best_BIC}}{Best BIC value across \code{nrep} runs when applicable;
+for native Rmixmod and RMixtComp paths, the selected native fit's BIC.}
 \item{\code{P.Z.Xn}}{\eqn{N \times L} matrix of posterior class probabilities for each observation.}
 \item{\code{P.Z}}{Vector of length \eqn{L} containing the prior probabilities/structural parameters/proportions for each latent class.}
 \item{\code{Z}}{Vector of length \eqn{N} with MAP-classified latent class memberships.}
-\item{\code{probability}}{Same as \code{params$par} (redundant storage for convenience).}
+\item{\code{probability}}{List of item-specific conditional probability
+matrices with classes in rows and observed category labels in columns.}
 \item{\code{Log.Lik.history}}{Vector tracking log-likelihood at each EM iteration.}
-\item{\code{Log.Lik.nrep}}{Vector of log-likelihoods from each replication run.}
-\item{\code{model}}{The optimal neural network model object (only for \code{method="NNE"}).
-Contains the trained transformer architecture corresponding to \code{best_loss}.
-This object can be used for further predictions or model inspection.}
-\item{\code{arguments}}{A list containing all input arguments}
+\item{\code{Log.Lik.nrep}}{Vector of log-likelihoods from each replication run.
+For native Rmixmod and RMixtComp paths, this is the selected native fit's scalar log-likelihood.}
+\item{\code{model}}{Backend model object for \code{method="NNE"},
+\code{method="Mplus"}, \code{method="flexmix"},
+\code{method="Rmixmod"}, or \code{method="RMixtComp"}, when supplied
+by that backend.}
+\item{\code{call}}{Matched function call.}
+\item{\code{arguments}}{A list containing all effective input arguments.}
 }
 }
 \description{
 This function estimates parameters of a Latent Class Analysis (LCA; Hagenaars & McCutcheon, 2002) model using
-either the Expectation-Maximization (EM) algorithm or Neural Network Estimation (NNE).
+the Expectation-Maximization (EM) algorithm, stochastic EM (SEM) through \code{flexmix}
+or \code{RMixtComp}, native EM/CEM/SEM strategies through \code{Rmixmod},
+Neural Network Estimation (NNE), or Mplus.
 It supports flexible initialization strategies and provides comprehensive model diagnostics.
 }
+\section{Random-number reproducibility}{
+
+Except for \code{method = "NNE"}, which intentionally uses its fixed backend seed,
+every stochastic estimator is driven from R's current random-number generator.
+The user only needs to call \code{set.seed()} immediately before \code{\link[LCPA]{LCA}()} to
+reproduce EM, K-means, flexmix, Rmixmod, RMixtComp, and Mplus estimation. LCPA
+automatically passes an R-derived seed to backends with independent random streams;
+no backend-specific seed setting is required.
+}
+
+\section{Notation}{
+
+Write the response matrix as
+\eqn{\mathbf{X}=(X_{ni})_{N\times I}}, where
+\eqn{n=1,2,\ldots,N} indexes participants and
+\eqn{i=1,2,\ldots,I} indexes observed indicators. The response vector for
+participant \eqn{n} is
+\eqn{\mathbf{X}_n=(X_{n1},\ldots,X_{nI})^\top}. The latent class variable
+is \eqn{Z_n\in\{1,2,\ldots,L\}}, and
+\eqn{l=1,2,\ldots,L} indexes a particular latent class. Response categories
+for indicator \eqn{i} are indexed by \eqn{q}.
+
+Under local independence, the observed-data log-likelihood is
+\deqn{\log\mathcal{L}_{\mathrm{LCA}}=
+\sum_{n=1}^N\log\left\{\sum_{l=1}^L\pi_l
+\prod_{i=1}^I P(X_{ni}=x_{ni}\mid Z_n=l)\right\}.}
+}
+
 \section{EM Algorithm}{
 
 When \code{method = "EM"}, parameters are estimated via the Expectation-Maximization algorithm, which iterates between:
 \itemize{
-\item \strong{E-step:} Compute posterior class probabilities given current parameters:
-\deqn{P(Z_n = l \mid \mathbf{X}_n) = \frac{\pi_l \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n=l)}{\sum_{k=1}^L \pi_k \prod_{i=1}^I P(X_{ni} = x_{ni} \mid Z_n=k)}}
-where \eqn{x_{ni}} is the standardized (0-based) response for person \eqn{n} on indicator \eqn{i} (see \code{\link[LCPA]{adjust.response}}).
-\item \strong{M-step:} Update parameters by maximizing expected complete-data log-likelihood:
+\item E-step: Compute posterior class probabilities given current parameters:
+\deqn{\tau_{nl}=P(Z_n=l\mid\mathbf{X}_n)=
+    \frac{\pi_l\prod_{i=1}^I
+    P(X_{ni}=x_{ni}\mid Z_n=l)}
+    {\sum_{h=1}^L\pi_h\prod_{i=1}^I
+    P(X_{ni}=x_{ni}\mid Z_n=h)}.}
+where \eqn{x_{ni}} is the standardized (0-based) response of participant
+\eqn{n} to indicator \eqn{i} (see \code{\link[LCPA]{adjust.response}}).
+\item M-step: Update parameters by maximizing expected complete-data log-likelihood:
 \itemize{
-\item Class probabilities: \eqn{\pi_l^{\text{new}} = \frac{1}{N} \sum_{n=1}^N P(Z_n = l \mid \mathbf{X}_n)}
-\item Conditional probabilities: \eqn{P(X_i = k \mid Z=l)^{\text{new}} = \frac{\sum_{n:x_{ni}=k} P(Z_n = l \mid \mathbf{X}_n)}{\sum_{n=1}^N P(Z_n = l \mid \mathbf{X}_n)}}
+\item Class probabilities: \eqn{\pi_l^{\text{new}} = \frac{1}{N}
+        \sum_{n=1}^N\tau_{nl}}
+\item Conditional probabilities:
+\eqn{P(X_i = q \mid Z=l)^{\text{new}} =
+        \frac{\sum_{n:x_{ni}=q}\tau_{nl}}
+        {\sum_{n=1}^N\tau_{nl}}}
 }
-\item \strong{Convergence}: Stops when \eqn{|\log\mathcal{L}^{(t)} - \log\mathcal{L}^{(t-1)}| < \texttt{tol}} or maximum iterations reached.
+\item Convergence: Stops when \eqn{|\log\mathcal{L}^{(t)} - \log\mathcal{L}^{(t-1)}| < \texttt{tol}} or maximum iterations reached.
 }
 }
 
@@ -172,7 +289,7 @@ that combines feedforward layers with transformer-based attention mechanisms. Th
 optimizes profile parameters and posterior probabilities through stochastic optimization enhanced
 with simulated annealing. See \code{\link[LCPA]{install_python_dependencies}}. Key components include:
 
-\strong{Architecture}:
+Architecture:
 \describe{
 \item{Input Representation}{
 Observed categorical responses are converted to 0-based integer indices per indicator (not one-hot encoded).
@@ -186,17 +303,9 @@ unnormalized logits for posterior class membership (\eqn{N \times L} matrix).
 \item{Attention Refiner (Transformer Encoder)}{
 A transformer encoder with \code{nhead} attention heads that learns latent class prior probabilities
 \eqn{\boldsymbol{\pi} = (\pi_1, \pi_2, \dots, \pi_L)} directly from observed responses.
-\itemize{
-\item Input: \code{response} matrix (\eqn{N \times I}), where \eqn{N} = observations, \eqn{I} = continuous variables.
-\item Mechanism: Self-attention dynamically weighs variable importance during profile assignment, capturing complex
-multivariate interactions.
-\item Output: Class prior vector \eqn{\boldsymbol{\pi}} computed as the mean of posteriors:
-\deqn{\pi_l = \frac{1}{N}\sum_{n=1}^N attention(\mathbf{X}_n)}
-This ensures probabilistic consistency with the mixture model framework.
-}
 }
 \item{Profile Parameter Estimation}{
-Global conditional probability parameters (\eqn{P(X_i = k \mid Z = l)}) are stored as learnable
+Global conditional probability parameters (\eqn{P(X_i = q \mid Z = l)}) are stored as learnable
 parameters \code{par} (an \eqn{L \times I \times K_{\max}} tensor). A \emph{masked softmax} is applied
 along categories to enforce:
 \itemize{
@@ -205,26 +314,6 @@ along categories to enforce:
 }
 }
 }
-
-\strong{Optimization Strategy}:
-\itemize{
-\item \strong{Hybrid Training Protocol}: Alternates between:
-\itemize{
-\item \emph{Gradient-based phase}: AdamW optimizer minimizes negative log-likelihood with weight decay regularization:
-\deqn{-\log \mathcal{L} + \lambda \|\boldsymbol{\theta}\|_2^2}
-where \eqn{\lambda} is controlled by \code{lambda} (default: 1e-5). Learning rate decays adaptively when
-loss plateaus (controlled by \code{scheduler.patience} and \code{scheduler.factor}).
-\item \emph{Simulated annealing phase}: After gradient-based early stopping (\code{maxiter.early}), parameters
-are perturbed with noise scaled by temperature:
-\deqn{\theta_{\text{new}} = \theta_{\text{current}} + \mathcal{N}(0, \theta_{\text{current}} \times \frac{T}{T_0})}
-Temperature \eqn{T} decays geometrically (\eqn{T \leftarrow T \times \text{cooling.rate}}) from
-\code{initial.temperature} until \code{threshold.sa} is reached. This escapes poor local minima.
-}
-Each full cycle (gradient descent + annealing) repeats up to \code{maxcycle} times.
-\item \strong{Model Selection}: Across \code{nrep} random restarts (using Dirichlet-distributed initializations
-or K-means), the solution with lowest BIC is retained.
-\item \strong{Diagnostics}: Training loss, annealing points, and global best solution are plotted when \code{vis=TRUE}.
-}
 }
 
 \section{Mplus}{
@@ -232,15 +321,16 @@ or K-means), the solution with lowest BIC is retained.
 When \code{method = "Mplus"}, estimation is delegated to external Mplus software.
 The function automates the entire workflow:
 
-\strong{Workflow}:
+Workflow:
 \describe{
-\item{Temporary Directory Setup}{Creates \code{inst/Mplus} to store:
+\item{Working Directory Setup}{Creates a timestamped \code{"Mplus_LCA_YYYY-MM-DD_HH-MM-SS"}
+directory under \code{control.Mplus$files.path}, or under the current working directory when that path is empty, to store:
 \itemize{
 \item Mplus input syntax (\code{.inp})
 \item Data file in Mplus format (\code{.dat})
 \item Posterior probabilities output (\code{.dat})
 }
-Files are automatically deleted after estimation unless \code{control.Mplus$clean.files = FALSE}.
+Files are automatically deleted after estimation unless \code{control.Mplus$files.clean = FALSE}.
 }
 
 \item{Syntax Generation}{Constructs Mplus syntax with:
@@ -251,7 +341,8 @@ Files are automatically deleted after estimation unless \code{control.Mplus$clea
 \describe{
 \item{\code{TYPE = mixture}}{Standard mixture modeling setup}
 \item{\code{STARTS = starts nrep}}{Random \code{starts} and final stage optimizations}
-\item{\code{STITERATIONS = maxiter.wa}}{max itertions during \code{starts}.}
+\item{\code{STSEED}}{Random-start seed drawn from R's current random-number generator}
+\item{\code{STITERATIONS = maxiter.warmup}}{max itertions during \code{starts}.}
 \item{\code{MITERATIONS = maxiter}}{Maximum EM iterations}
 \item{\code{CONVERGENCE = tol}}{Log-likelihood convergence tolerance}
 }
@@ -266,6 +357,73 @@ Files are automatically deleted after estimation unless \code{control.Mplus$clea
 }
 }
 }
+}
+
+\section{flexmix Stochastic EM}{
+
+With \code{method = "flexmix"}, each SEM iteration performs one stochastic
+classification draw from the current posterior probabilities before the M-step. LCPA runs
+exactly \code{starts} short trajectories of \code{maxiter.warmup} iterations, promotes the best
+\code{nrep} trajectories by observed log-likelihood, continues each for
+\code{control.flexmix$maxiter} SEM iterations, and retains the largest-likelihood final state
+across the promoted runs.
+This selection compares the final state returned by each flexmix SEM run; flexmix's
+\code{classify = "SEM"} does not retain the largest-likelihood state visited within a run.
+Binary indicators use \code{flexmix::FLXMCmvbinary()}. When any indicator is polytomous,
+LCPA supplies one joint categorical flexmix model driver whose M-step uses the exact
+weighted-frequency solution instead of repeatedly optimizing intercept-only multinomial
+regressions. The stochastic classification and iteration loop remain those of flexmix.
+Setting \code{control.flexmix$tol = 0} prevents likelihood-based early termination.
+Only SEM is exposed; \code{par.ini} is not used by this backend.
+}
+
+\section{Rmixmod stochastic strategies}{
+
+When \code{method = "Rmixmod"}, the model is estimated in
+\code{Rmixmod::mixmodCluster()} using the unconstrained multinomial model
+\code{"Binary_pk_Ekjh"}. Indicators are converted to factors after the package-standard zero-based recoding.
+
+With \code{path="LCPA"}, the function generates exactly \code{starts} random balanced partitions and
+runs exactly \code{maxiter.warmup} consecutive stochastic E-S-M iterations for every warm-up start.
+The best \code{nrep} warm-up classifications are then passed directly to
+independent Rmixmod SEM runs, and the finite solution with the largest final log-likelihood is
+retained. Rmixmod's internal \code{"smallEM"} and \code{"SEMMax"} initialization searches are not
+used; in particular, \code{"SEMMax"} is an initialization search rather than one consecutive SEM
+trajectory for each user-level start. \code{par.ini} is not used for this method.
+SEM stops after \code{control.Rmixmod$maxiter} iterations; an epsilon convergence
+criterion is not defined for SEM in Rmixmod. Unlike flexmix's \code{classify = "SEM"}, Rmixmod
+retains the largest-likelihood parameter state visited within each SEM run, so equal iteration
+counts do not imply identical final-state selection.
+
+With \code{path="Rmixmod"}, LCPA translates all non-\code{NULL} package-standard strategy controls
+to \code{Rmixmod::mixmodStrategy()} and runs one native \code{mixmodCluster()} call. Its
+\code{algorithm} may contain \code{"EM"}, \code{"CEM"}, \code{"SEM"}, or an ordered combination
+of these algorithms. LCPA does
+not add its outer \code{starts}, \code{maxiter.warmup}, or \code{nrep};
+\code{control.Rmixmod$nrep} controls complete
+strategy repetitions. The published strategy of Mulder et al.
+(2015) uses 200 SEM iterations followed by EM with a relative likelihood-change tolerance of
+\code{1e-5}. For reproducibility across Rmixmod versions, the example and simulation scripts
+explicitly pin the contemporaneous documented defaults: \code{smallEM}, 50 initialization tries,
+5 initialization iterations, \code{tol.init=0.001}, and a 200-iteration EM limit.
+}
+
+\section{RMixtComp Stochastic EM}{
+
+When \code{method = "RMixtComp"}, LCPA calls \code{RMixtComp::mixtCompLearn()} in
+classic, non-hierarchical learning mode with a multinomial model for every indicator.
+This integration exposes only RMixtComp's stochastic EM (SEM) algorithm; it does not
+introduce any other RMixtComp estimation algorithm. LCPA does not add its own
+\code{starts}, \code{maxiter.warmup}, or \code{nrep} stages to this backend. Each native run
+performs RMixtComp initialization, SEM burn-in, recorded SEM iterations, and then the
+fixed-parameter Gibbs burn-in and recorded Gibbs iterations. One stochastic S-step is
+performed per SEM iteration, between the E-step and M-step. Native repetition and
+parallelization are controlled only by \code{control.RMixtComp$nrep} and
+\code{control.RMixtComp$ncores}. RMixtComp's native random stream is independent of R;
+LCPA therefore passes it one integer drawn from R's current random stream. The user only
+needs an external \code{set.seed()} for reproducibility. The default algorithm controls reproduce
+\code{RMixtCompUtilities::createAlgo()} defaults (version 4.1.4 or later).
+\code{par.ini} is not used by this backend.
 }
 
 \examples{
@@ -283,12 +441,11 @@ fit.em <- LCA(response, L = 2, method = "EM", nrep = 10)
 
 # Fit 2-profile model using Mplus
 # need Mplus
-# NOTE: 'files.path' in control.Mplus is REQUIRED — function will error if not provided.
-# Example creates a timestamped subfolder (e.g., "Mplus_LCA_YYYY-MM-DD_HH-MM-SS") under './'
+# An empty 'files.path' creates a timestamped subfolder
+# (e.g., "Mplus_LCA_YYYY-MM-DD_HH-MM-SS") under the current working directory
 # to store all temporary Mplus files (.inp, .dat, .out, etc.).
 \dontrun{
-fit.mplus <- LCA(response, L = 2, method = "Mplus", nrep = 3,
-                 control.Mplus = list(files.path = ""))
+fit.mplus <- LCA(response, L = 2, method = "Mplus", nrep = 3)
 }
 
 # Fit 2-class model with neural network estimation
@@ -297,10 +454,47 @@ fit.mplus <- LCA(response, L = 2, method = "Mplus", nrep = 3,
 fit.nne <- LCA(response, L = 2, method = "NNE", nrep = 3)
 }
 
+# Fit 2-class model with flexmix SEM and LCPA warm-up/replication
+# need flexmix
+\dontrun{
+  fit.flexmix <- LCA(response, L = 2, method = "flexmix",
+                     nrep = 2, starts = 5, maxiter.warmup = 5,
+                     control.flexmix = list(maxiter = 50))
+}
+
+# Fit 2-class model with the published Rmixmod SEM-to-EM strategy
+# need Rmixmod
+\dontrun{
+  fit.rmixmod <- LCA(response, L = 2, method = "Rmixmod",
+                     control.Rmixmod = list(path = "Rmixmod",
+                                              algorithm = c("SEM", "EM"),
+                                              nrep = 1,
+                                              method.init = "smallEM",
+                                              starts = 50,
+                                              maxiter.init = 5,
+                                              tol.init = 0.001,
+                                              maxiter = c(200, 200),
+                                              tol = c(NA, 1e-5)))
+}
+
+
 }
 \references{
-Hagenaars, J. A. , & McCutcheon, A. L. (2002). Applied Latent Class Analysis. United Kingdom: Cambridge University Press.
+Biernacki, C. (2015). MixtComp software: Model-based clustering/imputation
+with mixed data, missing data and uncertain data. \emph{MISSDATA 2015}.
+\url{https://inria.hal.science/hal-01253393}
 
-McLachlan, G. J., & Peel, D. (2004). Finite Mixture Models. Wiley.
-https://books.google.com.sg/books?id=c2_fAox0DQoC
+Hagenaars, J. A., & McCutcheon, A. L. (Eds.). (2002). \emph{Applied latent class
+analysis}. Cambridge University Press.
+
+Leisch, F. (2004). FlexMix: A general framework for finite mixture models and latent
+class regression in R. \emph{Journal of Statistical Software, 11}(8), 1--18.
+\doi{10.18637/jss.v011.i08}
+
+McLachlan, G. J., & Peel, D. (2000). \emph{Finite mixture models}. John Wiley & Sons.
+
+Mulder, V. L., Lacoste, M., Martin, M. P., Richer-de-Forges, A., & Arrouays, D. (2015).
+Understanding large-extent controls of soil organic carbon storage in relation to soil depth
+and soil-landscape systems. \emph{Global Biogeochemical Cycles, 29}(8), 1210--1229.
+\doi{10.1002/2015GB005178}
 }

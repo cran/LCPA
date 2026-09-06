@@ -8,33 +8,47 @@
 #' @param N Integer; sample size.
 #' @param I Integer; number of observed indicators/items/indicators per time point.
 #' @param L Integer; number of latent classes/profiles.
-#' @param distribution Character; distribution of initial class probabilities when not using covariates or \code{params}.
-#'   Options: \code{"uniform"} (equal probabilities) or \code{"random"} (Dirichlet-distributed, default).
 #' @param times Integer; number of time points (must be \eqn{\geq 1}).
 #' @param type Character; type of latent model. \code{"LCA"} for categorical indicators (default),
 #'   \code{"LPA"} for continuous indicators.
-#' @param rate List of matrices or NULL; transition probability matrices for non-covariate mode.
-#'   Each matrix is \eqn{L \times L} with rows summing to 1. If \code{NULL} (default), matrices are
-#'   generated with 0.7 diagonal probability and uniform off-diagonals. **Ignored when \code{times=1}**.
+#' @param distribution Character; distribution of initial class probabilities when not using covariates or \code{params}.
+#'   Options: \code{"uniform"} (equal probabilities) or \code{"random"} (Dirichlet-distributed, default).
 #' @param constraint Character; covariance structure for LPA (\code{type="LPA"} only). Options:
-#'   \code{"VV"} (unstructured, default), \code{"VE"} (diagonal variance), \code{"EE"} (equal variance).
-#' @param mean.range Numeric vector; range for randomly generated class means in LPA (default: \code{c(-2, 2)}).
-#' @param covs.range Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).
+#'   \code{"UE"} and \code{"UV"} for univariate responses; \code{"E0"},
+#'   \code{"V0"}, \code{"EE"}, \code{"EV"}, \code{"VE"}, and \code{"VV"}
+#'   for multivariate responses. See \code{\link[LCPA]{sim.LPA}}. The default
+#'   is \code{"VV"}.
 #' @param poly.value Integer; number of categories for polytomous LCA indicators (default: 5).
 #' @param IQ Character; method for generating indicator discrimination in LCA. \code{"random"} (default) or fixed values.
-#' @param params List or NULL; pre-specified parameters for reproducibility (see Details).
-#' @param is.sort A logical value. If \code{TRUE} (Default), the latent classes will be ordered in descending
-#'                order according to \code{P.Z}. All other parameters will be adjusted accordingly
-#'                based on the reordered latent classes.
+#' @param mean.range Numeric vector; range for randomly generated class means in LPA (default: \code{c(-2, 2)}).
+#' @param covs.range Numeric vector; range for covariance matrix diagonals in LPA (default: \code{c(0.01, 4)}).
+#' @param params List or NULL; pre-specified measurement and initial-class parameters in the final
+#'   first-time-point class order (see Details).
+#' @param is.sort A logical value. If \code{TRUE} (default), internally generated first-time-point
+#'   classes are established in decreasing model-implied probability order. Supplied parameters
+#'   already use this final order and are never reordered; a supplied \code{beta}, \code{params$P.Z},
+#'   or \code{params$Z} must therefore imply decreasing first-time-point class proportions. If
+#'   \code{FALSE}, the supplied or generated order is retained. No later time point is reordered.
+#' @param rate List of matrices or NULL; transition probability matrices in the final class order for non-covariate mode.
+#'   Each matrix is \eqn{L \times L} with rows summing to 1. If \code{NULL} (default), matrices are
+#'   generated with 0.7 diagonal probability and uniform off-diagonals. Ignored when \code{times=1}.
 #' @param covariates List of matrices or NULL; covariate matrices for each time point. Each matrix must have
-#'   dimensions \eqn{N \times p_t} and include an intercept column (first column must be all 1s). If \code{NULL},
+#'   dimensions \eqn{N\times(U_t+1)} and include an intercept column (first
+#'   column must be all 1s). If \code{NULL},
 #'   covariate mode is disabled. See Details for automatic coefficient generation.
-#' @param beta Matrix or NULL; initial state regression coefficients of dimension \eqn{p_1 \times L}.
-#'   Columns correspond to classes 1 to \eqn{L} (last class \eqn{L} is reference and must be zero).
+#' @param ref.class Integer between 1 and \code{L}; reference class in the class order established
+#'   at the first time point. When \code{is.sort=TRUE}, this is the position after ordering the
+#'   first-time-point classes by decreasing \code{P.Z}. The same class order is retained at every
+#'   later time point.
+#' @param beta Matrix or NULL; initial state regression coefficients of dimension
+#'   \eqn{(U_1+1)\times L}
+#'   in the final first-time-point class order. Column \code{ref.class} must be zero. Supplied
+#'   coefficients determine the logits and are returned unchanged.
 #'   If \code{NULL} and covariates are used, coefficients are randomly generated from \eqn{\text{Uniform}(-1, 1)}.
 #' @param gamma List or NULL; transition regression coefficients. Must be a list of length \code{times-1}.
 #'   Each element \eqn{t} is a list of length \eqn{L} (previous state). Each sub-list contains \eqn{L} vectors
-#'   (next state), where the last vector (reference class) is always \eqn{\mathbf{0}}. **Ignored when \code{times=1}**.
+#'   (next state). The supplied coefficients refer to the class order established at the first time
+#'   point and are returned unchanged. Ignored when \code{times=1}.
 #'   If \code{NULL} and covariates are used with \code{times>=2}, coefficients are randomly generated from
 #'   \eqn{\text{Uniform}(-1, 1)} for non-reference classes.
 #'
@@ -46,10 +60,12 @@
 #'   \item{\code{par}}{Indicator parameters for LCA (if \code{type="LCA"}).}
 #'   \item{\code{means}}{Class means for LPA (if \code{type="LPA"}).}
 #'   \item{\code{covs}}{Class covariance matrices for LPA (if \code{type="LPA"}).}
+#'   \item{\code{poly.value}}{Category counts for LCA (if \code{type="LCA"}).}
 #'   \item{\code{rate}}{True transition matrices (non-covariate mode only; \code{NULL} when \code{times=1}).}
 #'   \item{\code{covariates}}{List of covariate matrices used (covariate mode only).}
 #'   \item{\code{beta}}{True initial state coefficients (covariate mode only).}
 #'   \item{\code{gamma}}{True transition coefficients (covariate mode only; \code{NULL} when \code{times=1}).}
+#'   \item{\code{ref.class}}{Reference class of the returned \code{beta} and \code{gamma} coefficients.}
 #'   \item{\code{call}}{Function call.}
 #'   \item{\code{arguments}}{Input arguments.}
 #' }
@@ -57,31 +73,44 @@
 #' @section Model Specification:
 #' \describe{
 #'   \item{Initial Class Probabilities (with covariates):}{
-#'     For observation/participant \eqn{n} at time 1, the probability of belonging to latent class \eqn{l} is:
-#'     \deqn{P(Z_{n1} = l \mid \mathbf{X}_{n1}) =
-#'       \frac{\exp(\boldsymbol{\beta}_l^\top \mathbf{X}_{n1})}
-#'            {\sum_{k=1}^L \exp(\boldsymbol{\beta}_k^\top \mathbf{X}_{n1})}}
-#'     where \eqn{\mathbf{X}_{n1} = (X_{n10}, X_{n11}, \dots, X_{n1M})^\top} is the covariate vector for observation/participant \eqn{n} at time 1,
-#'     with \eqn{X_{n10} = 1} (intercept term) and \eqn{X_{n1m}} (\eqn{m=1,\dots,M}) representing the value of the \eqn{m}-th covariate.
-#'     The coefficient vector \eqn{\boldsymbol{\beta}_l = (\beta_{l0}, \beta_{l1}, \dots, \beta_{lM})^\top} corresponds element-wise to \eqn{\mathbf{X}_{n1}},
-#'     where \eqn{\beta_{l0}} is the intercept and \eqn{\beta_{lm}} (\eqn{m \geq 1}) are regression coefficients for covariates.
-#'     Class \eqn{L} is the reference class (\eqn{\boldsymbol{\beta}_L = \mathbf{0}}).
+#'     For participant \eqn{n} at time 1, the probability of belonging to
+#'     latent class \eqn{l} is
+#'     \deqn{P(Z_{n1}=l\mid\boldsymbol{\zeta}_{n1}) =
+#'       \frac{\exp(\boldsymbol{\beta}_l^\top\boldsymbol{\zeta}_{n1})}
+#'            {\sum_{h=1}^L\exp(\boldsymbol{\beta}_h^\top
+#'            \boldsymbol{\zeta}_{n1})}.}
+#'     Here
+#'     \eqn{\boldsymbol{\zeta}_{n1}=
+#'     (1,\zeta_{n11},\ldots,\zeta_{n1U_1})^\top}; the leading 1 is the
+#'     intercept, and \eqn{u=1,\ldots,U_1} indexes observed covariates. The
+#'     coefficient vector
+#'     \eqn{\boldsymbol{\beta}_l=(\beta_{l0},\beta_{l1},\ldots,
+#'     \beta_{lU_1})^\top} has the corresponding intercept and slopes.
+#'     The class selected by \code{ref.class} is the reference class and has a zero coefficient vector.
 #'   }
 #'   \item{Transition Probabilities (with covariates and times>=2):}{
-#'     For observation/participant \eqn{n} transitioning from class \eqn{l} at time \eqn{t-1} to class \eqn{k} at time \eqn{t} (\eqn{t \geq 2}):
-#'     \deqn{P(Z_{nt} = k \mid Z_{n,t-1} = l, \mathbf{X}_{nt}) =
-#'       \frac{\exp(\boldsymbol{\gamma}_{lkt}^\top \mathbf{X}_{nt})}
-#'            {\sum_{j=1}^L \exp(\boldsymbol{\gamma}_{ljt}^\top \mathbf{X}_{nt})}}
-#'     where \eqn{\mathbf{X}_{nt} = (X_{nt0}, X_{nt1}, \dots, X_{ntM})^\top} is the covariate vector at time \eqn{t},
-#'     with \eqn{X_{nt0} = 1} (intercept) and \eqn{X_{ntm}} (\eqn{m=1,\dots,M}) as the \eqn{m}-th covariate value.
-#'     The coefficient vector \eqn{\boldsymbol{\gamma}_{lkt} = (\gamma_{lkt0}, \gamma_{lkt1}, \dots, \gamma_{lktM})^\top}
-#'     corresponds element-wise to \eqn{\mathbf{X}_{nt}}, where \eqn{\gamma_{lkt0}} is the intercept and \eqn{\gamma_{lktm}} (\eqn{m \geq 1})
-#'     are regression coefficients. Class \eqn{L} is the reference class (\eqn{\boldsymbol{\gamma}_{lLt} = \mathbf{0}} for all \eqn{l}).
+#'     For participant \eqn{n} transitioning from class \eqn{k} at time
+#'     \eqn{t-1} to class \eqn{l} at time \eqn{t} (\eqn{t\geq2}),
+#'     \deqn{P(Z_{nt}=l\mid Z_{n,t-1}=k,\boldsymbol{\zeta}_{nt}) =
+#'       \frac{\exp(\boldsymbol{\gamma}_{klt}^\top\boldsymbol{\zeta}_{nt})}
+#'            {\sum_{h=1}^L\exp(\boldsymbol{\gamma}_{kht}^\top
+#'            \boldsymbol{\zeta}_{nt})}.}
+#'     Here
+#'     \eqn{\boldsymbol{\zeta}_{nt}=
+#'     (1,\zeta_{nt1},\ldots,\zeta_{ntU_t})^\top}, and
+#'     \eqn{\boldsymbol{\gamma}_{klt}=
+#'     (\gamma_{klt0},\gamma_{klt1},\ldots,\gamma_{kltU_t})^\top} contains the
+#'     corresponding intercept and slopes. The destination class selected by
+#'     \code{ref.class} has a zero
+#'     coefficient vector for every origin class.
 #'   }
 #'   \item{Without Covariates or When times=1:}{
 #'     Initial probabilities follow a multinomial distribution with probabilities \eqn{\boldsymbol{\pi} = (\pi_1, \dots, \pi_L)}.
-#'     When \eqn{times \geq 2}, transitions follow a Markov process with fixed probabilities \eqn{\tau_{lk}^{(t)} = P(Z_t = k \mid Z_{t-1} = l)},
-#'     where \eqn{\sum_{k=1}^L \tau_{lk}^{(t)} = 1} for each \eqn{l} and \eqn{t}.
+#'     When \eqn{times \geq 2}, transitions follow a Markov process with fixed
+#'     probabilities
+#'     \eqn{\tau_{kl}^{(t)}=P(Z_{nt}=l\mid Z_{n,t-1}=k)}, where
+#'     \eqn{\sum_{l=1}^L\tau_{kl}^{(t)}=1} for each origin class \eqn{k} and
+#'     time \eqn{t}.
 #'   }
 #' }
 #'
@@ -93,8 +122,9 @@
 #'     and issues a warning.
 #'   \item When \code{covariates} is provided but \code{beta} or \code{gamma} is \code{NULL}, coefficients are
 #'     randomly generated from \eqn{\text{Uniform}(-1, 1)} (non-reference classes only).
-#'   \item The reference class (\eqn{L}) always has zero coefficients (\eqn{\boldsymbol{\beta}_L = \mathbf{0}},
-#'     \eqn{\boldsymbol{\gamma}_{l,L} = \mathbf{0}}).
+#'   \item All supplied simulation parameters use the final first-time-point class order. They are
+#'     never reordered or reparameterized. Internally generated initial coefficients are ordered and
+#'     reparameterized before they are returned. The same order is used for every transition.
 #' }
 #'
 #' Parameter Compatibility:
@@ -140,10 +170,10 @@
 #'
 #' ## Simulate beta coefficients
 #' # 3x3 matrix (last column is zero because the last category is used as reference)
-#' beta <- matrix(c( 0.8, -0.5, 0.0,
-#'                  -0.3, -0.4, 0.0,
-#'                   0.2,  0.8, 0.0,
-#'                  -0.1,  0.2, 0.0), ncol=3, byrow=TRUE)
+#' beta <- matrix(c( 1.3,  0.5, 0.0,
+#'                   0.1,  0.4, 0.0,
+#'                  -0.6, -0.8, 0.0,
+#'                  -0.3, -0.2, 0.0), ncol=3, byrow=TRUE)
 #'
 #' ## Simulate gamma coefficients (only needed when times>=2)
 #' gamma <- list(
@@ -156,6 +186,7 @@
 #' ## Simulate the data
 #' sim_custom <- sim.LTA(
 #'   N=N, I=4, L=3, times=2, type="LPA",
+#'   ref.class=3,
 #'   covariates=covariates,
 #'   beta=beta,
 #'   gamma=gamma
@@ -164,21 +195,27 @@
 #' summary(sim_custom)
 #'
 #' @export
-sim.LTA <- function(N=500, I=5, L=3, distribution="random",
-                    times=2, type="LCA", rate=NULL,
-                    constraint = "VV", mean.range = c(-2, 2), covs.range = c(0.01, 4),
-                    poly.value=5, IQ="random",
+sim.LTA <- function(N=500, I=5, L=3, times=2, type="LCA",
+                    distribution="random",
+                    constraint = "VV", poly.value=5, IQ="random",
+                    mean.range = c(-2, 2), covs.range = c(0.01, 4),
                     params=NULL, is.sort=TRUE,
-                    covariates = NULL,
-                    beta = NULL,
-                    gamma = NULL) {
+                    rate=NULL, covariates = NULL, ref.class=L,
+                    beta = NULL, gamma = NULL) {
 
   call <- match.call()
 
   if (times < 1) stop("times must be at least 1")
   if (L < 2) stop("L must be at least 2")
+  if (length(ref.class) != 1L || !is.numeric(ref.class) ||
+      !is.finite(ref.class) || ref.class != as.integer(ref.class) ||
+      ref.class < 1L || ref.class > L) {
+    stop("ref.class must be an integer between 1 and L")
+  }
+  ref.class <- as.integer(ref.class)
 
   use_covariates <- !is.null(covariates)
+  beta.supplied <- !is.null(beta)
 
   if (use_covariates) {
     if (!is.list(covariates) || length(covariates) != times) {
@@ -197,16 +234,21 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
     p1 <- ncol(covariates[[1]])
     if (is.null(beta)) {
       beta_mat <- matrix(0, p1, L)
-      beta_mat[, 1:(L-1)] <- matrix(runif(p1 * (L-1), -1, 1), p1, L-1)
+      free.classes <- setdiff(seq_len(L), ref.class)
+      beta_mat[, free.classes] <- matrix(
+        runif(p1 * (L - 1L), -1, 1), p1, L - 1L
+      )
     } else {
       if (!is.matrix(beta) || nrow(beta) != p1 || ncol(beta) != L) {
         stop(sprintf("beta must be %d x %d matrix (p1 x L)", p1, L))
       }
+      if(any(abs(beta[, ref.class]) > sqrt(.Machine$double.eps))){
+        stop("The ref.class column of beta must be zero")
+      }
       beta_mat <- beta
     }
 
-    # Modified block: Handle gamma only when times >= 2
-    gamma_list <- NULL  # Default to NULL
+    gamma_list <- NULL
     if (times >= 2) {
       gamma_list <- vector("list", times-1)
       for (t in 1:(times-1)) {
@@ -216,7 +258,7 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
           for (l in 1:L) {
             gamma_t[[l]] <- vector("list", L)
             for (k in 1:L) {
-              gamma_t[[l]][[k]] <- if (k < L) runif(pt, -1, 1) else rep(0, pt)
+              gamma_t[[l]][[k]] <- if (k != ref.class) runif(pt, -1, 1) else rep(0, pt)
             }
           }
           gamma_list[[t]] <- gamma_t
@@ -241,6 +283,12 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
                 stop(sprintf("gamma[[%d]][[%d]][[%d]] must be numeric vector of length %d",
                              t, l, k, pt))
               }
+              if(k == ref.class && any(abs(coef_vec) > sqrt(.Machine$double.eps))){
+                stop(sprintf(
+                  "gamma[[%d]][[%d]][[%d]] must be zero because ref.class=%d",
+                  t, l, k, ref.class
+                ))
+              }
               gamma_valid[[l]][[k]] <- coef_vec
             }
           }
@@ -248,12 +296,10 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
         }
       }
     } else {
-      # times == 1: Explicitly ignore gamma
       if (!is.null(gamma)) {
         warning("gamma parameter is ignored when times=1 in covariate mode")
       }
     }
-    # End modified block
 
   } else {
     if (!is.null(beta) || !is.null(gamma)) {
@@ -270,7 +316,6 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
         stop("Length of 'rate' must equal times-1")
       }
 
-      rate.accumulate <- vector("list", times-1)
       for (t in 1:(times-1)) {
         mat <- rate[[t]]
         if (!is.matrix(mat) || nrow(mat) != L || ncol(mat) != L) {
@@ -284,7 +329,6 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
           mat <- mat / row_sums
         }
         rate[[t]] <- mat
-        rate.accumulate[[t]] <- t(apply(mat, 1, cumsum))
       }
     }
   }
@@ -293,96 +337,78 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
   Zs <- vector("list", times)
   P.Zs <- vector("list", times)
 
-  if (use_covariates) {
-    X1 <- covariates[[1]]
-    prob1 <- matrix(0, N, L)
-    for (l in 1:L) {
-      eta <- X1 %*% beta_mat[, l]
-      prob1[, l] <- exp(eta)
+  position <- seq_len(L)
+  if(use_covariates){
+    P.Z.model <- mean_multinomial_logit_probability_cpp(
+      covariates[[1]], beta_mat
+    )
+    if(is.sort){
+      if(beta.supplied){
+        .simulation.require.sorted(P.Z.model, TRUE, "beta")
+      }else{
+        position <- order(P.Z.model, decreasing = TRUE)
+      }
     }
-    prob1 <- prob1 / rowSums(prob1)
-    Zs[[1]] <- apply(prob1, 1, function(p) sample(1:L, 1, prob = p))
+    Zs[[1]] <- sample_multinomial_logit_cpp(covariates[[1]], beta_mat)
+    if(!identical(position, seq_len(L))){
+      Zs[[1]] <- match(Zs[[1]], position)
+      beta_mat <- .simulation.relabel.coefficients(
+        beta_mat, position, ref.class
+      )
+    }
+  }else if(!is.null(params) && !is.null(params$Z)){
+    Zs[[1]] <- as.integer(params$Z)
+    if(length(Zs[[1]]) != N || !all(Zs[[1]] %in% seq_len(L))){
+      stop("params$Z must be length N with values in 1:L")
+    }
+    .simulation.require.sorted(
+      .class.proportions(Zs[[1]], L), is.sort, "params$Z"
+    )
+  }else{
+    if(!is.null(params) && !is.null(params$P.Z)){
+      P.Z1 <- .simulation.probability(params$P.Z, L, "params$P.Z")
+      .simulation.require.sorted(P.Z1, is.sort, "params$P.Z")
+    }else if(distribution == "uniform"){
+      P.Z1 <- rep(1 / L, L)
+    }else if(distribution == "random"){
+      P.Z1 <- as.numeric(rdirichlet(1L, rep(3, L)))
+      if(is.sort) P.Z1 <- sort(P.Z1, decreasing = TRUE)
+    }else{
+      stop("distribution must be 'uniform' or 'random'")
+    }
+    Zs[[1]] <- .simulation.sample.classes(P.Z1, N)
+  }
 
-    # When times=1, this loop is skipped automatically
-    if(times > 1){
+  P.Zs[[1]] <- .class.proportions(Zs[[1]], L)
+
+  if(times > 1){
+    if(use_covariates){
       for (t in 2:times) {
-        Z_prev <- Zs[[t-1]]
-        Z_cur <- integer(N)
-        Xt <- covariates[[t]]
-        gamma_t <- gamma_list[[t-1]]
-
-        for (n in 1:N) {
-          l_prev <- Z_prev[n]
-          eta_vec <- numeric(L)
-          for (k in 1:L) {
-            coef_vec <- gamma_t[[l_prev]][[k]]
-            eta_vec[k] <- sum(coef_vec * Xt[n, ])
-          }
-          prob_vec <- exp(eta_vec) / sum(exp(eta_vec))
-          Z_cur[n] <- sample(1:L, 1, prob = prob_vec)
-        }
-        Zs[[t]] <- Z_cur
-      }
-    }
-  } else {
-    if (!is.null(params) && !is.null(params$Z)) {
-      Zs[[1]] <- params$Z
-      if (length(Zs[[1]]) != N || !all(Zs[[1]] %in% 1:L)) {
-        stop("params$Z must be length N with values in 1:L")
-      }
-      if (use_covariates) {
-        warning("params$Z ignored in covariate mode; states generated from covariates")
+        Zs[[t]] <- sample_transition_logit_cpp(
+          Zs[[t-1]], covariates[[t]], gamma_list[[t-1]]
+        )
       }
     } else {
-      if (distribution == "uniform") {
-        P.Z1 <- rep(1/L, L)
-      } else if (distribution == "random") {
-        P.Z1 <- rgamma(L, 3); P.Z1 <- P.Z1 / sum(P.Z1)
-      } else {
-        stop("distribution must be 'uniform' or 'random'")
-      }
-      Zs[[1]] <- sample(1:L, N, replace = TRUE, prob = P.Z1)
-    }
-
-    if(times > 1){
       for (t in 2:times) {
-        Z_prev <- Zs[[t-1]]
-        Z_cur <- integer(N)
-
-        for (l in 1:L) {
-          idx <- which(Z_prev == l)
-          if (length(idx) > 0) {
-            u <- runif(length(idx))
-            breaks <- c(0, rate.accumulate[[t-1]][l, 1:(L-1)], 1)
-            Z_cur[idx] <- findInterval(u, breaks, rightmost.closed = TRUE)
-          }
-        }
-        Zs[[t]] <- Z_cur
+        Zs[[t]] <- sample_markov_cpp(Zs[[t-1]], rate[[t-1]])
       }
+    }
+
+    for (t in 2:times) {
+      P.Zs[[t]] <- .class.proportions(Zs[[t]], L)
     }
   }
 
-  for (t in 1:times) {
-    P.Zs[[t]] <- as.numeric(table(factor(Zs[[t]], levels = 1:L))) / N
-  }
-
-  if(is.sort){
-    posi <- order(P.Zs[[1]], decreasing = TRUE)
-    P.Zs[[1]]     <- P.Zs[[1]][posi]
-    Zs[[1]] <- match(Zs[[1]], posi)
-    beta <- beta[, posi]
-    if(times > 1){
-      for(t in 2:times){
-        P.Zs[[t]]     <- P.Zs[[t]][posi]
-        Zs[[t]] <- match(Zs[[t]], posi)
-        gamma.temp <- gamma
-        for(l in 1:L){
-          for(ll in 1:L){
-            gamma[[t-1]][[l]][[ll]] <- gamma.temp[[t-1]][[ posi[l] ]][[ posi[ll] ]]
-          }
-        }
-      }
-    }
+  latent.group.names <- .latent.group.names(L, type)
+  P.Zs <- lapply(P.Zs, function(P.Z){
+    names(P.Z) <- latent.group.names
+    P.Z
+  })
+  if(!use_covariates && length(rate)){
+    rate <- lapply(rate, function(rate.cur){
+      dimnames(rate.cur) <- list(latent.group.names, latent.group.names)
+      rate.cur
+    })
   }
 
   params_t1 <- params
@@ -435,13 +461,27 @@ sim.LTA <- function(N=500, I=5, L=3, distribution="random",
     covariates = if (use_covariates) covariates else NULL,
     beta = if (use_covariates) beta_mat else NULL,
     gamma = if (use_covariates && times >= 2) gamma_list else NULL,
+    ref.class = ref.class,
     call = call,
     arguments = list(
-      N = N, I = I, L = L, distribution = distribution,
-      times = times, type = type, rate = rate,
-      constraint = constraint, mean.range = mean.range, covs.range = covs.range,
-      poly.value = poly.value, IQ = IQ, params = params, is.sort=is.sort,
-      covariates = covariates, beta = beta, gamma = gamma
+      N = N,
+      I = I,
+      L = L,
+      times = times,
+      type = type,
+      distribution = distribution,
+      constraint = constraint,
+      poly.value = poly.value,
+      IQ = IQ,
+      mean.range = mean.range,
+      covs.range = covs.range,
+      params = params,
+      is.sort = is.sort,
+      rate = rate,
+      covariates = covariates,
+      ref.class = ref.class,
+      beta = beta,
+      gamma = gamma
     )
   )
 

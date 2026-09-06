@@ -6,15 +6,18 @@
 \alias{plot.LPA}
 \title{S3 Methods: plot}
 \usage{
-\method{plot}{LCA}(x, ncol = 2, ...)
+\method{plot}{LCA}(x, y = NULL, ncol = 2, ...)
 
-\method{plot}{LPA}(x, ncol = 2, ...)
+\method{plot}{LPA}(x, y = NULL, ncol = 2, ...)
 }
 \arguments{
 \item{x}{An object of one of the following classes:
 \itemize{
 \item Model objects: \code{\link[LCPA]{LCA}}, \code{\link[LCPA]{LPA}}.
 }}
+
+\item{y}{Reserved for compatibility with the base \code{\link[graphics]{plot}}
+generic. It must be \code{NULL}; specify \code{ncol} by name.}
 
 \item{ncol}{Number of columns in the multi-panel layout (default: 2).
 Controls arrangement of latent class/profile panels.}
@@ -31,7 +34,8 @@ tailored to each model type. Designed for interactive exploration, model interpr
 }
 \details{
 Each method produces a structured, visually intuitive plot optimized for its object type.
-See specific method documentation (\code{plot.LCA}, \code{plot.LPA}) for detailed parameter options.
+See \code{\link[LCPA]{plot.LCA}} and \code{\link[LCPA]{plot.LPA}} for
+detailed parameter options.
 }
 \section{Methods (by class)}{
 \itemize{

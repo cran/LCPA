@@ -4,7 +4,7 @@
 \alias{Kmeans.LCA}
 \title{Initialize LCA Parameters via K-means Clustering}
 \usage{
-Kmeans.LCA(response, L, nrep = 10)
+Kmeans.LCA(response, L, starts = 1)
 }
 \arguments{
 \item{response}{A numeric matrix of dimension \eqn{N \times I}, where \eqn{N} is the number of observations
@@ -14,8 +14,8 @@ automatically re-encoded to sequential integers starting from 1.}
 
 \item{L}{Integer specifying the number of latent classes. Must be \eqn{2 \leq L < N}.}
 
-\item{nrep}{Integer specifying the number of random starts for K-means algorithm
-(default: 10). The solution with the lowest within-cluster sum of squares is retained.}
+\item{starts}{Integer specifying the number of random starts for K-means algorithm
+(default: 1). The solution with the lowest within-cluster sum of squares is retained.}
 }
 \value{
 A list containing:
@@ -50,23 +50,16 @@ Uses Lloyd's algorithm with Euclidean distance.
 \item Parameter estimation:
 \itemize{
 \item For each cluster \eqn{l}, computes empirical response probabilities
-\eqn{P(X_i=k|Z=l)} for all indicators \eqn{i} and categories \eqn{k}.
-\item Handles singleton clusters by assigning near-deterministic probabilities
-(e.g., \eqn{1-10^{-10}} for observed category, \eqn{10^{-10}} for others).
+\eqn{P(X_i=q\mid Z=l)} for all indicators \eqn{i} and response
+categories \eqn{q}.
 }
 \item Posterior probabilities: Constructs hard-classification matrix where
-\eqn{P(Z=l|\mathbf{X}_n)=1} for the assigned cluster and 0 otherwise.
+\eqn{P(Z_n=l\mid\mathbf{X}_n)=1} for the assigned cluster and 0 otherwise.
 }
 }
 \note{
-\itemize{
-\item Requires at least one observation per cluster. If a cluster has only one observation,
-probabilities are set to avoid zero values (using \eqn{10^{-10}}) for numerical stability.
-\item Data scaling is applied internally. Variables with zero variance are automatically
-excluded from clustering.
-\item This function is primarily designed as an initialization method for \code{\link{LCA}} and not
-intended for final model estimation.
-}
+This function is primarily designed as an initialization method for
+\code{\link[LCPA]{LCA}()} and not for final model estimation.
 }
 \examples{
 # Simulate response data
@@ -74,7 +67,7 @@ set.seed(123)
 response <- matrix(sample(1:4, 200, replace = TRUE), ncol = 5)
 
 # Generate K-means initialization for 3-class LCA
-init_params <- Kmeans.LCA(response, L = 3, nrep = 5)
+init_params <- Kmeans.LCA(response, L = 3, starts = 5)
 
 # Inspect initial class probabilities
 print(init_params$params$P.Z)

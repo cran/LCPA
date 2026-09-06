@@ -1,462 +1,327 @@
 
-#' @importFrom stats cov sd kmeans
-EM.LPA <- function(response, L = 2, par.ini = NULL, constraint = "VV",
-                   nrep = 1, starts=50, maxiter.wa=100, vis = TRUE,
+#' @importFrom stats cov sd
+EM.LPA <- function(response, L = 2, par.ini = "random", constraint = "VV",
+                   starts=50, maxiter.warmup=100, nrep = 1, vis = TRUE,
                    maxiter = 2000, tol = 1e-4) {
 
   if (is.vector(response) && is.numeric(response)) response <- matrix(response, ncol = 1)
-
   if (is.data.frame(response)) response <- as.matrix(response)
-  if (!is.matrix(response)) stop("response must be matrix/data.frame/vector")
+  if (!is.matrix(response) || !is.numeric(response)) stop("response must be a numeric matrix/data.frame/vector")
+  if (any(!is.finite(response))) stop("response must not contain missing or non-finite values")
+
   N <- nrow(response)
   I <- ncol(response)
   if (N == 0) stop("empty response")
+  if (length(L) != 1 || L < 1 || L != as.integer(L) || L > N) stop("L must be an integer between 1 and nrow(response)")
+  .validate.training.stages(starts, maxiter.warmup, nrep)
+  if (maxiter < 1 || tol <= 0) stop("maxiter and tol must be positive")
   jitter = 1e-10
 
-  int_width <- ceiling(log10(N * I * L))
-  total_width <- int_width + 5
-  fmt_string_maxchg <- sprintf("%%%d.%df", total_width, 5)
+  constraint <- .validate.LPA.constraint(constraint, I)
 
-  int_width <- ceiling(log10(N * I * L)) + 1L
-  total_width <- int_width + 3
-  fmt_string_BIC <- sprintf("%%%d.%df", total_width, 2)
-
-  if (is.null(par.ini)) {
-    par.ini <- "random"
+  if (is.null(par.ini)) par.ini <- "random"
+  if (is.character(par.ini) && (length(par.ini) != 1 || !par.ini %in% c("random", "kmeans"))) {
+    stop("par.ini must be 'random', 'kmeans', or a parameter list")
+  }
+  if (!is.character(par.ini) &&
+      (!is.list(par.ini) || !all(c("means", "covs", "P.Z") %in% names(par.ini)))) {
+    stop("par.ini must contain means, covs, and P.Z")
   }
 
-  covs.global <- tryCatch({
-    cov(response)
-  }, error = function(e) diag(pmax(apply(response, 2, var, na.rm = TRUE), jitter)))
-
-  if (any(!is.finite(covs.global)) || !is.matrix(covs.global)) {
-    vars <- apply(response, 2, var, na.rm = TRUE)
-    if (any(!is.finite(vars))) vars <- rep(1, I)
-    covs.global <- diag(pmax(vars, jitter))
+  covs.global <- matrix(cov(response), nrow = I, ncol = I)
+  if (any(!is.finite(covs.global))) {
+    vars <- apply(response, 2, var)
+    vars[!is.finite(vars) | vars <= 0] <- 1
+    covs.global <- diag(vars, I)
   }
   covs.global <- (covs.global + t(covs.global)) / 2
-  eig0 <- eigen(covs.global, symmetric = TRUE)
-  if (min(eig0$values) < jitter) {
-    covs.global <- eig0$vectors %*% diag(pmax(eig0$values, jitter)) %*% t(eig0$vectors)
-    covs.global <- (covs.global + t(covs.global)) / 2
+  repair_covariance <- function(covariance, fallback = covs.global){
+    .stabilize.LPA.covariances(
+      array(covariance, dim = c(I, I, 1L)), "VV", fallback = fallback
+    )$covs[, , 1L]
   }
-  covs.global <- as.matrix(covs.global)
+  covs.global <- repair_covariance(covs.global, diag(I))
 
   npar <- get.npar.LPA(I, L, constraint)
+  expectation.step <- function(means, covs, P.Z) {
+    if (any(!is.finite(P.Z)) || any(P.Z <= 0)) return(NULL)
+    P.Z <- P.Z / sum(P.Z)
+    result <- lpa_expectation_cpp(response, means, covs, P.Z, repair = FALSE)
+    if(!isTRUE(result$valid) || !is.finite(result$Log.Lik)) return(NULL)
+    P.Z.Xn <- result$posterior
+    empty <- !is.finite(colSums(P.Z.Xn)) | colSums(P.Z.Xn) <= jitter
+    if (any(empty)) {
+      P.Z.Xn[, empty] <- pmax(P.Z.Xn[, empty, drop = FALSE], min(1e-8, 0.01 / L))
+      P.Z.Xn <- P.Z.Xn / rowSums(P.Z.Xn)
+    }
+    list(P.Z.Xn = P.Z.Xn, Log.Lik = result$Log.Lik)
+  }
 
-  results.wa <- list(params=NULL, BIC=NULL)
-  best_BIC <- Inf
+  covariance_is_pd <- function(covs) {
+    all(vapply(1:L, function(l) {
+      covs.l <- covs[, , l]
+      all(is.finite(covs.l)) &&
+        max(abs(covs.l - t(covs.l))) < 1e-8 &&
+        !is.null(tryCatch(chol(covs.l), error = function(e) NULL))
+    }, logical(1)))
+  }
 
-  run_em_once <- function(init_vals, r = 0, best_BIC = Inf, wa=FALSE) {
-    means.cur <- init_vals$means
-    covs.cur <- init_vals$covs
-    P.Z.cur <- init_vals$P.Z
+  update_constrained_covariances <- function(scatter, nk, covs.start) {
+    pairs <- which(lower.tri(matrix(TRUE, I, I), diag = TRUE), arr.ind = TRUE)
+    pair_keys <- apply(pairs, 1, function(x) paste(sort(x), collapse = ":"))
 
-    if(wa){
-      maxiter.once <- maxiter.wa
-    }else{
-      maxiter.once <- maxiter
+    if (is.character(constraint)) {
+      shared <- if (constraint == "VE") pairs[, 1] != pairs[, 2] else pairs[, 1] == pairs[, 2]
+    } else {
+      constraint_keys <- unique(vapply(constraint, function(x) {
+        paste(sort(as.integer(x)), collapse = ":")
+      }, character(1)))
+      shared <- pair_keys %in% constraint_keys
     }
 
-    if(wa){
-      nrep.once <- starts
-    }else{
-      nrep.once <- nrep
-    }
-
-    Log.Lik <- -Inf
-    Log.Lik.history <- numeric(maxiter)
-    P.Z.Xn <- matrix(1/L, nrow = N, ncol = L)
-
-    prev_means <- means.cur
-    prev_covs <- covs.cur
-    prev_P.Z <- P.Z.cur
-
-    tresponse <- t(response)
-
-    for (iter in 1:maxiter.once) {
-      logres <- matrix(NA_real_, nrow = N, ncol = L)
-
-      for (l in 1:L) {
-        covs.l <- covs.cur[,,l]
-        mean.l <- means.cur[l,]
-        lp <- logpdf_component(mean.l, covs.l, tresponse, jitter)
-        logres[,l] <- lp + log(P.Z.cur[l] + 1e-12)
-      }
-
-      rowmax <- apply(logres, 1, max)
-      nonfinite_rows <- !is.finite(rowmax)
-      if (any(nonfinite_rows)) {
-        finite_vals <- logres[is.finite(logres)]
-        if (length(finite_vals) > 0) {
-          rowmax[nonfinite_rows] <- max(finite_vals)
-        } else {
-          rowmax[nonfinite_rows] <- 0
-        }
-      }
-      exp_rel <- exp(logres - matrix(rowmax, N, L))
-      row_sums <- rowSums(exp_rel)
-      bad <- !is.finite(row_sums) | row_sums < 1e-20
-      if (any(bad)) {
-        exp_rel[bad,] <- 1/L
-        row_sums[bad] <- 1
-      }
-      P.Z.Xn <- exp_rel / row_sums
-
-      nk <- colSums(P.Z.Xn)
-      empty_clusters <- which(nk < 1e-5)
-      if (length(empty_clusters) > 0) {
-        non_empty <- setdiff(1:L, empty_clusters)
-        P.Z.Xn[, empty_clusters] <- 0
-        row_sums <- rowSums(P.Z.Xn[, non_empty, drop = FALSE])
-        row_sums[row_sums < 1e-20] <- 1
-        P.Z.Xn[, non_empty] <- P.Z.Xn[, non_empty, drop = FALSE] / row_sums
-        nk <- colSums(P.Z.Xn)
-      }
-
-      P.Z.cur <- pmax(nk / N, 1e-12)
-      P.Z.cur <- P.Z.cur / sum(P.Z.cur)
-
-      means_new <- (t(P.Z.Xn) %*% response) / matrix(nk + 1e-12, nrow = L, ncol = I)
-      nonfinite_means <- apply(means_new, 1, function(x) any(!is.finite(x)))
-      if (any(nonfinite_means)) {
-        means_new[nonfinite_means, ] <- prev_means[nonfinite_means, ]
-      }
-      means.cur <- means_new
-
-      covs.new <- array(0, dim = c(I, I, L))
-      for (l in 1:L) {
-        wc <- P.Z.Xn[, l]
-        totw <- sum(wc)
-        mean.l <- means.cur[l,]
-        dev <- sweep(response, 2, mean.l, "-")
-        WDev <- dev * wc
-        S.l <- crossprod(dev, WDev) / (totw + 1e-12)
-        diag(S.l) <- pmax(diag(S.l), jitter)
-        covs.new[,,l] <- matrix(S.l, nrow = I, ncol = I)
-      }
-
-      if(I == 1 && any(constraint %in% c("UE", "UV"))) {
-        if(constraint == "UE") {
-          var.total <- sum(nk * sapply(1:L, function(l) covs.new[,,l])) / sum(nk)
-          var.total <- pmax(var.total, jitter)
-          for(l in 1:L) {
-            covs.new[,,l] <- matrix(var.total, nrow = I, ncol = I)
-          }
-        } else if(constraint == "UV") {
-          for(l in 1:L) {
-            covs.new[,,l] <- matrix(pmax(covs.new[,,l], jitter), nrow = I, ncol = I)
-          }
-        }
-      } else if(any(constraint %in% c("E0", "V0", "EE", "VV", "VE", "EV"))) {
-        if (constraint == "E0") {
-          S.l <- array(0, dim = c(I, I))
-          covs.new <- array(0, dim = c(I, I, L))
-          totw = 0
-          for (l in 1:L) {
-            wc <- P.Z.Xn[, l]
-            totw <- totw + sum(wc)
-
-            mean.l <- means.cur[l, ]
-            dev <- sweep(response, 2, mean.l, "-")
-            WDev <- dev * wc
-            S.l <- S.l + crossprod(dev, WDev)
-          }
-          S.l <- S.l / totw
-          for (l in 1:L) diag(covs.new[, , l]) <- diag(S.l)
-        } else if (constraint == "V0") {
-          covs.new <- array(0, dim = c(I, I, L))
-          for (l in 1:L) {
-            wc <- P.Z.Xn[, l]
-            totw <- sum(wc)
-            mean.l <- means.cur[l,]
-            dev <- sweep(response, 2, mean.l, "-")
-            WDev <- dev * wc
-            S.l <- crossprod(dev, WDev) / (totw + 1e-12)
-            diag(S.l) <- pmax(diag(S.l), jitter)
-            diag(covs.new[, , l]) <- diag(S.l)
-          }
-        } else if (constraint == "EE") {
-          S.l <- array(0, dim = c(I, I))
-          covs.new <- array(0, dim = c(I, I, L))
-          totw = 0
-          for (l in 1:L) {
-            wc <- P.Z.Xn[, l]
-            totw <- totw + sum(wc)
-
-            mean.l <- means.cur[l, ]
-            dev <- sweep(response, 2, mean.l, "-")
-            WDev <- dev * wc
-            S.l <- S.l + crossprod(dev, WDev)
-          }
-          S.l <- S.l / totw
-          for (l in 1:L) covs.new[, , l] <- S.l
-        } else if (constraint == "VE" |constraint == "EV") {
-
-          S.l <- array(0, dim = c(I, I))
-          covs.EE <- covs.VV <- array(0, dim = c(I, I, L))
-          totw = 0
-          for (l in 1:L) {
-            wc <- P.Z.Xn[, l]
-            totw <- totw + sum(wc)
-
-            mean.l <- means.cur[l, ]
-            dev <- sweep(response, 2, mean.l, "-")
-            WDev <- dev * wc
-            S.l <- S.l + crossprod(dev, WDev)
-          }
-          S.l <- S.l / totw
-          for (l in 1:L) covs.EE[, , l] <- S.l
-
-          for (l in 1:L) {
-            covc <- covs.new[,,l]
-            diag(covc) <- pmax(diag(covc), jitter)
-            eigc <- eigen(covc, symmetric = TRUE)
-            if (min(eigc$values) < jitter) {
-              covc <- eigc$vectors %*% diag(pmax(eigc$values, jitter)) %*% t(eigc$vectors)
-            }
-            covs.VV[,,l] <- covc
-          }
-
-          if (constraint == "VE"){
-            for (l in 1:L) {
-              covs.new[, , l] <- covs.EE[, , l]
-              diag(covs.new[, , l]) <- diag(covs.VV[, , l])
-            }
-          }else{
-            for (l in 1:L) {
-              covs.new[, , l] <- covs.VV[, , l]
-              diag(covs.new[, , l]) <- diag(covs.EE[, , l])
-            }
-          }
-
-        } else{
-          for (l in 1:L) {
-            covc <- covs.new[,,l]
-            diag(covc) <- pmax(diag(covc), jitter)
-            eigc <- eigen(covc, symmetric = TRUE)
-            if (min(eigc$values) < jitter) {
-              covc <- eigc$vectors %*% diag(pmax(eigc$values, jitter)) %*% t(eigc$vectors)
-            }
-            covs.new[,,l] <- covc
-          }
-        }
-      }else{
-        S.l <- array(0, dim = c(I, I))
-        covs.EE <- array(0, dim = c(I, I, L))
-        totw = 0
-        for (l in 1:L) {
-          wc <- P.Z.Xn[, l]
-          totw <- totw + sum(wc)
-
-          mean.l <- means.cur[l, ]
-          dev <- sweep(response, 2, mean.l, "-")
-          WDev <- dev * wc
-          S.l <- S.l + crossprod(dev, WDev)
-        }
-        S.l <- S.l / totw
-        for (l in 1:L) covs.EE[, , l] <- S.l
-
-        for (l in 1:L) {
-          covc <- covs.new[,,l]
-          diag(covc) <- pmax(diag(covc), jitter)
-          eigc <- eigen(covc, symmetric = TRUE)
-          if (min(eigc$values) < jitter) {
-            covc <- eigc$vectors %*% diag(pmax(eigc$values, jitter)) %*% t(eigc$vectors)
-          }
-          covs.new[,,l] <- covc
-        }
-
-        for(v in constraint){
-          covs.new[v[1], v[2], ] <- covs.new[v[2], v[1], ] <- covs.EE[v[1], v[2], ]
-        }
-      }
-
-      valid_update <- TRUE
-      for (l in 1:L) {
-        try_chol <- tryCatch(chol(covs.new[,,l]), error = function(e) NULL)
-        if (is.null(try_chol)) {
-          valid_update <- FALSE
-          break
-        }
-      }
-
-      if (!valid_update) {
-        shared_mask <- matrix(FALSE, I, I)
-
-        if (is.list(constraint)) {
-          for (v in constraint) {
-            i <- v[1]; j <- v[2]
-            shared_mask[i, j] <- TRUE
-            shared_mask[j, i] <- TRUE
-          }
-        } else if (constraint %in% c("E0", "EE")) {
-          shared_mask[,] <- TRUE
-        } else if (constraint == "VE") {
-          shared_mask[lower.tri(shared_mask, diag = FALSE)] <- TRUE
-          shared_mask[upper.tri(shared_mask, diag = FALSE)] <- TRUE
-        } else if (constraint == "EV") {
-          diag(shared_mask) <- TRUE
-        } else if (constraint == "V0") {
-          shared_mask[!diag(I)] <- TRUE
-        }
-        diag_shared <- diag(shared_mask)
-        fixed_classes <- logical(L)
-        max_fix_attempts <- 100
-
-        for (attempt in 1:max_fix_attempts) {
-          for (l in 1:L) {
-            if (fixed_classes[l]) next
-
-            cov_mat <- covs.new[, , l]
-            cov_mat <- (cov_mat + t(cov_mat)) / 2
-            eig <- eigen(cov_mat, symmetric = TRUE, only.values = TRUE)
-            min_eig <- min(eig$values)
-
-            if (min_eig > jitter) {
-              fixed_classes[l] <- TRUE
-              covs.new[, , l] <- cov_mat
-              next
-            }
-
-            perturbation <- matrix(0, I, I)
-            nonshared_vars <- which(!diag_shared)
-            if (length(nonshared_vars) > 0) {
-              required_increase <- abs(min_eig) + jitter
-              var_increase <- rep(required_increase / length(nonshared_vars), length(nonshared_vars))
-              diag(perturbation)[nonshared_vars] <- var_increase
-            }
-
-            if (min_eig <= jitter && length(nonshared_vars) == 0) {
-              nonshared_offdiag <- which(!shared_mask & !diag(I), arr.ind = TRUE)
-              if (nrow(nonshared_offdiag) > 0) {
-                upper_idx <- nonshared_offdiag[nonshared_offdiag[,1] < nonshared_offdiag[,2], , drop = FALSE]
-                if (nrow(upper_idx) > 0) {
-                  perturbation[upper_idx] <- runif(nrow(upper_idx), -1e-4, 1e-4)
-                  perturbation[upper_idx[,2], upper_idx[,1]] <- perturbation[upper_idx]
-                }
-              }
-            }
-
-            cov_mat <- cov_mat + perturbation
-            cov_mat <- (cov_mat + t(cov_mat)) / 2
-
-            eig <- eigen(cov_mat, symmetric = TRUE, only.values = TRUE)
-            if (min(eig$values) > jitter) {
-              fixed_classes[l] <- TRUE
-              covs.new[, , l] <- cov_mat
-            }
-          }
-
-          if (all(fixed_classes)) break
-
-          if (attempt == max_fix_attempts) {
-            for (l in which(!fixed_classes)) {
-              cov_mat <- covs.new[, , l]
-              cov_mat <- (cov_mat + t(cov_mat)) / 2
-              eig <- eigen(cov_mat, symmetric = TRUE)
-              new_vals <- pmax(eig$values, jitter)
-              cov_new <- eig$vectors %*% diag(new_vals) %*% t(eig$vectors)
-              cov_new <- (cov_new + t(cov_new)) / 2
-
-              for (i in 1:I) {
-                for (j in 1:I) {
-                  if (shared_mask[i, j]) {
-                    cov_new[i, j] <- cov_mat[i, j]
-                  }
-                }
-              }
-              covs.new[, , l] <- cov_new
-            }
-          }
-        }
-
-        valid_update <- TRUE
-        for (l in 1:L) {
-          try_chol <- tryCatch(chol(covs.new[, , l]), error = function(e) NULL)
-          if (is.null(try_chol)) {
-            valid_update <- FALSE
-            break
-          }
-        }
-
-        if (!valid_update) {
-          covs.new <- prev_covs
-          means.cur <- prev_means
-          P.Z.cur <- prev_P.Z
-        } else {
-          covs.cur <- covs.new
-          prev_means <- means.cur
-          prev_covs <- covs.new
-          prev_P.Z <- P.Z.cur
-        }
+    param_index <- matrix(0L, nrow = nrow(pairs), ncol = L)
+    ntheta <- 0L
+    for (p in 1:nrow(pairs)) {
+      if (shared[p]) {
+        ntheta <- ntheta + 1L
+        param_index[p, ] <- ntheta
       } else {
-        covs.cur <- covs.new
-        prev_means <- means.cur
-        prev_covs <- covs.new
-        prev_P.Z <- P.Z.cur
+        param_index[p, ] <- ntheta + seq_len(L)
+        ntheta <- ntheta + L
       }
+    }
 
-      mx <- rowmax
-      ll <- sum(mx + log(rowSums(exp(logres - mx))))
-      if (!is.finite(ll)) {
-        ll <- Log.Lik - 1e5
+    make_covs <- function(theta) {
+      covs <- array(0, dim = c(I, I, L))
+      for (p in 1:nrow(pairs)) {
+        i <- pairs[p, 1]
+        j <- pairs[p, 2]
+        for (l in 1:L) covs[i, j, l] <- covs[j, i, l] <- theta[param_index[p, l]]
       }
+      covs
+    }
 
-      Log.Lik.history[iter] <- ll
-      maxchg <- abs(ll - Log.Lik)
-      AIC <- -2 * ll + 2 * npar
-      BIC <- -2 * ll + npar * log(N)
-
-      if (BIC < best_BIC){
-        best_BIC <- BIC
-      }
-
-      if (vis) {
-        if(vis && iter > 1 && r){
-          if(wa){
-            cat('\rWarm', paste0(sprintf("%2d", r), "/", sprintf("%2d", nrep.once)), '| Iter =', sprintf("%4d", iter),
-                '  \u0394Log.Lik =', sprintf(fmt_string_maxchg, maxchg),
-                '  BIC =', sprintf(fmt_string_BIC, BIC), '  Best_BIC =', sprintf(fmt_string_BIC, best_BIC))
-          }else{
-            cat('\rRep ', paste0(sprintf("%2d", r), "/", sprintf("%2d", nrep.once)), '| Iter =', sprintf("%4d", iter),
-                '  \u0394Log.Lik =', sprintf(fmt_string_maxchg, maxchg),
-                '  BIC =', sprintf(fmt_string_BIC, BIC), '  Best_BIC =', sprintf(fmt_string_BIC, best_BIC))
-          }
-
-        }else if(vis && iter > 1){
-          cat('\rIter =', sprintf("%4d", iter), '  \u0394Log.Lik =', sprintf(fmt_string_maxchg, maxchg),
-              '  BIC =', sprintf(fmt_string_BIC, BIC))
+    make_theta <- function(covs) {
+      theta <- numeric(ntheta)
+      for (p in 1:nrow(pairs)) {
+        i <- pairs[p, 1]
+        j <- pairs[p, 2]
+        if (shared[p]) {
+          theta[param_index[p, 1]] <- sum(nk * covs[i, j, ]) / sum(nk)
+        } else {
+          theta[param_index[p, ]] <- covs[i, j, ]
         }
       }
+      theta
+    }
 
-      if (maxchg < tol) {
-        Log.Lik.history <- Log.Lik.history[1:iter]
+    objective <- function(theta) {
+      covs <- make_covs(theta)
+      value <- 0
+      for (l in 1:L) {
+        R <- tryCatch(chol(covs[, , l]), error = function(e) NULL)
+        if (is.null(R)) return(.Machine$double.xmax^0.25)
+        inv <- chol2inv(R)
+        value <- value + nk[l] * 2 * sum(log(diag(R))) + sum(scatter[, , l] * inv)
+      }
+      value / 2
+    }
+
+    gradient <- function(theta) {
+      covs <- make_covs(theta)
+      grad <- numeric(ntheta)
+      for (l in 1:L) {
+        R <- tryCatch(chol(covs[, , l]), error = function(e) NULL)
+        if (is.null(R)) return(rep(0, ntheta))
+        inv <- chol2inv(R)
+        G <- (nk[l] * inv - inv %*% scatter[, , l] %*% inv) / 2
+        for (p in 1:nrow(pairs)) {
+          i <- pairs[p, 1]
+          j <- pairs[p, 2]
+          value <- if (i == j) G[i, j] else 2 * G[i, j]
+          idx <- param_index[p, l]
+          grad[idx] <- grad[idx] + value
+        }
+      }
+      grad
+    }
+
+    unconstrained <- array(0, dim = c(I, I, L))
+    safe <- array(0, dim = c(I, I, L))
+    for (l in 1:L) unconstrained[, , l] <- scatter[, , l] / nk[l]
+
+    for (i in 1:I) {
+      p <- which(pairs[, 1] == i & pairs[, 2] == i)
+      values <- unconstrained[i, i, ]
+      if (shared[p]) values[] <- sum(scatter[i, i, ]) / sum(nk)
+      if (any(!is.finite(values))) values <- covs.start[i, i, ]
+      values[values <= 0] <- covs.start[i, i, ][values <= 0]
+      if (shared[p]) values[] <- sum(nk * values) / sum(nk)
+      safe[i, i, ] <- values
+    }
+
+    theta_candidates <- list(make_theta(covs.start), make_theta(unconstrained), make_theta(safe))
+    valid_candidates <- vapply(theta_candidates, function(theta) covariance_is_pd(make_covs(theta)), logical(1))
+    if (!any(valid_candidates)) return(NULL)
+    theta_candidates <- theta_candidates[valid_candidates]
+    objective_values <- vapply(theta_candidates, objective, numeric(1))
+    theta.start <- theta_candidates[[which.min(objective_values)]]
+    objective.start <- min(objective_values)
+
+    fit <- tryCatch(
+      stats::optim(
+        theta.start,
+        objective,
+        gradient,
+        method = "BFGS",
+        control = list(maxit = 100, reltol = min(tol / 10, 1e-8))
+      ),
+      error = function(e) NULL
+    )
+
+    if (is.null(fit)) return(make_covs(theta.start))
+    covs.fit <- make_covs(fit$par)
+    if (!covariance_is_pd(covs.fit) ||
+        objective(fit$par) > objective.start + 1e-8 * (1 + abs(objective.start))) {
+      return(make_covs(theta.start))
+    }
+    covs.fit
+  }
+
+  update_covariances <- function(scatter, nk, covs.start) {
+    pooled <- apply(scatter, c(1, 2), sum) / sum(nk)
+
+    if (I == 1) {
+      shared <- if (is.character(constraint)) {
+        constraint %in% c("UE", "E0", "EE", "EV")
+      } else {
+        any(vapply(constraint, function(x) all(as.integer(x) == 1L), logical(1)))
+      }
+      values <- if (shared) rep(pooled[1, 1], L) else scatter[1, 1, ] / nk
+      if (any(!is.finite(values))) values <- rep(covs.global[1, 1], L)
+      covs <- array(values, dim = c(1, 1, L))
+      for (l in 1:L) covs[, , l] <- repair_covariance(covs[, , l])
+      return(covs)
+    }
+
+    covs <- array(0, dim = c(I, I, L))
+    if (is.character(constraint) && constraint == "E0") {
+      for (l in 1:L) covs[, , l] <- repair_covariance(diag(diag(pooled), I))
+    } else if (is.character(constraint) && constraint == "V0") {
+      for (l in 1:L){
+        covariance <- diag(diag(scatter[, , l]) / nk[l], I)
+        covs[, , l] <- repair_covariance(covariance)
+      }
+    } else if (is.character(constraint) && constraint == "EE") {
+      pooled <- repair_covariance(pooled)
+      for (l in 1:L) covs[, , l] <- pooled
+    } else if (is.character(constraint) && constraint == "VV") {
+      for (l in 1:L) covs[, , l] <- repair_covariance(scatter[, , l] / nk[l])
+    } else {
+      return(update_constrained_covariances(scatter, nk, covs.start))
+    }
+
+    if (!covariance_is_pd(covs)) return(NULL)
+    covs
+  }
+
+  run.EM <- function(par.ini.current, r = 0, best_BIC = Inf, warmup=FALSE) {
+    iteration.progress.state <- .new.progress.state()
+    means.cur <- as.matrix(par.ini.current$means)
+    covs.cur <- par.ini.current$covs
+    P.Z.cur <- as.numeric(par.ini.current$P.Z)
+
+    if (length(dim(means.cur)) != 2 || any(dim(means.cur) != c(L, I))) stop("initial means must be an L x I matrix")
+    if (any(!is.finite(means.cur))) stop("initial means must be finite")
+    if (length(dim(covs.cur)) != 3 || any(dim(covs.cur) != c(I, I, L))) stop("initial covs must be an I x I x L array")
+    if (length(P.Z.cur) != L || any(!is.finite(P.Z.cur)) || any(P.Z.cur <= 0)) {
+      stop("initial P.Z must contain L positive probabilities")
+    }
+    P.Z.cur <- P.Z.cur / sum(P.Z.cur)
+    for (l in 1:L) covs.cur[, , l] <- repair_covariance(covs.cur[, , l])
+
+    maxiter.current <- if (warmup) maxiter.warmup else maxiter
+    Log.Lik.history <- numeric(maxiter.current)
+
+    estep.cur <- expectation.step(means.cur, covs.cur, P.Z.cur)
+    if (is.null(estep.cur)) {
+      return(list(
+        params = list(means = means.cur, covs = covs.cur, P.Z = P.Z.cur),
+        npar = npar, Log.Lik = -Inf, AIC = Inf, BIC = Inf, best_BIC = best_BIC,
+        P.Z.Xn = matrix(1 / L, N, L), P.Z = P.Z.cur,
+        Z = rep(1L, N), Log.Lik.history = -Inf
+      ))
+    }
+
+    Log.Lik <- estep.cur$Log.Lik
+    P.Z.Xn <- estep.cur$P.Z.Xn
+    AIC <- -2 * Log.Lik + 2 * npar
+    BIC <- -2 * Log.Lik + npar * log(N)
+    iter <- 0L
+
+    for (iter in 1:maxiter.current) {
+      nk <- colSums(P.Z.Xn)
+      if (any(!is.finite(nk)) || any(nk <= jitter)) {
         break
       }
 
-      Log.Lik <- ll
+      P.Z.new <- nk / N
+      means.new <- sweep(t(P.Z.Xn) %*% response, 1, nk, "/")
 
-      if (iter == maxiter.once && vis && r == 0) {
-        message('\nMaximum number of iterations reached; convergence may not have been achieved\n')
+      scatter <- array(0, dim = c(I, I, L))
+      for (l in 1:L) {
+        dev <- sweep(response, 2, means.new[l, ], "-")
+        scatter[, , l] <- crossprod(dev, dev * P.Z.Xn[, l])
+      }
+
+      covs.new <- update_covariances(scatter, nk, covs.cur)
+      if (is.null(covs.new)) {
+        break
+      }
+
+      estep.new <- expectation.step(means.new, covs.new, P.Z.new)
+      if (is.null(estep.new)) {
+        break
+      }
+
+      ll <- estep.new$Log.Lik
+      maxchg <- abs(ll - Log.Lik)
+      means.cur <- means.new
+      covs.cur <- covs.new
+      P.Z.cur <- P.Z.new
+      P.Z.Xn <- estep.new$P.Z.Xn
+      Log.Lik <- ll
+      Log.Lik.history[iter] <- ll
+      AIC <- -2 * ll + 2 * npar
+      BIC <- -2 * ll + npar * log(N)
+
+      if (BIC < best_BIC) best_BIC <- BIC
+
+      if (vis && iter > 1 && r == 0) {
+        .print.iteration.progress(
+          iter, maxchg, BIC,
+          progress.prefix = .estimation.output.prefix(),
+          progress.state = iteration.progress.state
+        )
+      }
+
+      if (maxchg < tol) break
+      if (iter == maxiter.current && vis && r == 0) {
+        message(
+          '\n', .estimation.output.prefix(),
+          'Maximum number of iterations reached; convergence may not have been achieved\n'
+        )
       }
     }
 
-    colnames(P.Z.Xn) <- paste0("Class ", 1:L)
-    rownames(means.cur) <- paste0("Class ", 1:L)
-
-    P.Z.Xn[is.na(P.Z.Xn)] <- 1/L
-    P.Z.Xn[P.Z.Xn < 1e-20] <- 1e-20
-    row_sums <- rowSums(P.Z.Xn)
-    row_sums[row_sums < 1e-20] <- 1
-    P.Z.Xn <- P.Z.Xn / row_sums
-
-    Z <- apply(P.Z.Xn, 1, which.max)
+    colnames(P.Z.Xn) <- .latent.group.names(L, "LPA")
+    rownames(means.cur) <- .latent.group.names(L, "LPA")
+    Z <- max.col(P.Z.Xn, ties.method = "first")
 
     P.Z.cur <- as.table(P.Z.cur)
-    names(P.Z.cur) <- paste0("Class ", 1:L)
+    names(P.Z.cur) <- .latent.group.names(L, "LPA")
 
-    res <- list(
+    list(
       params = list(means = means.cur, covs = covs.cur, P.Z = P.Z.cur),
       npar = npar,
       Log.Lik = Log.Lik,
@@ -466,164 +331,83 @@ EM.LPA <- function(response, L = 2, par.ini = NULL, constraint = "VV",
       P.Z.Xn = P.Z.Xn,
       P.Z = P.Z.cur,
       Z = Z,
-      Log.Lik.history = Log.Lik.history[1:iter]
+      Log.Lik.history = Log.Lik.history[seq_len(iter)]
     )
-
-    return(res)
   }
 
-  if(starts >= 1 && any(par.ini %in% c("random", "kmeans"))){
-    for (s in 1:starts) {
-      if (par.ini == "random") {
-        means_init <- matrix(rnorm(L * I, mean = mean(response), sd = sd(as.vector(response))), nrow = L, ncol = I)
-        P.Z_init <- rep(1/L, L)
-        covs_init <- array(0, dim = c(I, I, L))
-        for (l in 1:L) {
-          # covs_init[,,l] <- covs.global
-          covs_init[,,l] <- diag(I)
-        }
-        init_vals <- list(means = means_init, covs = covs_init, P.Z = P.Z_init)
-      } else {
-        kmeans_attempts <- 0
-        while (kmeans_attempts < 5) {
-          try_kmeans <- tryCatch({
-            kmeans(response, centers = L, nstart = 1, iter.max = 500)
-          }, error = function(e) NULL)
-          if (!is.null(try_kmeans)) break
-          kmeans_attempts <- kmeans_attempts + 1
-        }
-
-        if (is.null(try_kmeans)) {
-          cluster_assignments <- sample(1:L, N, replace = TRUE)
-          means_init <- matrix(apply(response, 2, mean), nrow = L, ncol = I, byrow = TRUE)
-          P.Z_init <- rep(1/L, L)
-        } else {
-          kmeans.obj <- try_kmeans
-          means_init <- matrix(kmeans.obj$centers, nrow = L, ncol = I)
-          P.Z_init <- pmax(kmeans.obj$size / N, 1e-12)
-          P.Z_init <- P.Z_init / sum(P.Z_init)
-          cluster_assignments <- kmeans.obj$cluster
-        }
-
-        covs_init <- array(0, dim = c(I, I, L))
-        for (l in 1:L) {
-          idx <- which(cluster_assignments == l)
-          if (length(idx) > 1) {
-            covc <- cov(response[idx,,drop=FALSE])
-            covc <- (covc + t(covc))/2
-            diag(covc) <- pmax(diag(covc), jitter)
-            covs_init[,,l] <- covc
-          } else {
-            covs_init[,,l] <- covs.global
-          }
-        }
-        init_vals <- list(means = means_init, covs = covs_init, P.Z = P.Z_init)
-      }
-
-      res <- run_em_once(init_vals, s, best_BIC, wa=TRUE)
-      best_BIC <- res$best_BIC
-
-      if(length(results.wa$BIC) < nrep){
-        results.wa$params[[length(results.wa$BIC)+1]] <- res$params
-        results.wa$BIC <- c(results.wa$BIC, res$BIC)
-      }else{
-        BIC.wa.posi <- which.max(results.wa$BIC)
-        BIC.wa <- max(results.wa$BIC)
-        if(BIC.wa > res$BIC){
-          results.wa$params[[BIC.wa.posi]] <- res$params
-          results.wa$BIC[[BIC.wa.posi]] <- res$BIC
-        }
-      }
+  make_initial_values <- function() {
+    if (!is.character(par.ini)) {
+      return(par.ini)
     }
+    if (par.ini == "random") {
+      sd.response <- sd(as.vector(response))
+      if (!is.finite(sd.response) || sd.response <= 0) sd.response <- 1
+      means_init <- matrix(rnorm(L * I, mean = mean(response), sd = sd.response), nrow = L, ncol = I)
+      P.Z_init <- rep(1 / L, L)
+      covs_init <- array(0, dim = c(I, I, L))
+      for (l in 1:L) covs_init[, , l] <- covs.global
+      return(list(means = means_init, covs = covs_init, P.Z = P.Z_init))
+    }
+
+    Kmeans.LPA(response, L, constraint = constraint, starts = 1)$params
+  }
+
+  best_BIC <- Inf
+  warmup.params <- vector("list", starts)
+  warmup.Log.Lik <- rep(-Inf, starts)
+  warmup.progress.state <- .new.progress.state()
+  for (s in seq_len(starts)) {
+    res.warmup <- run.EM(make_initial_values(), s, best_BIC, warmup=TRUE)
+    best_BIC <- res.warmup$best_BIC
+    warmup.params[[s]] <- res.warmup$params
+    warmup.Log.Lik[s] <- res.warmup$Log.Lik
     if(vis){
-      cat("\n")
+      .print.estimation.progress(
+        "Warm", s, starts, res.warmup$Log.Lik,
+        algorithm = "EM",
+        iterations = length(res.warmup$Log.Lik.history),
+        progress.state = warmup.progress.state
+      )
     }
   }
+  if(vis) .end.estimation.progress()
 
-  if (is.null(results.wa$BIC) && nrep >= 1 && any(par.ini %in% c("random", "kmeans"))) {
-    results <- NULL
-    Log.Lik.nrep <- numeric(nrep)
-    best_BIC <- Inf
-
-    for (r in 1:nrep) {
-      if (par.ini == "random") {
-        means_init <- matrix(rnorm(L * I, mean = mean(response), sd = sd(as.vector(response))), nrow = L, ncol = I)
-        P.Z_init <- rep(1/L, L)
-        covs_init <- array(0, dim = c(I, I, L))
-        for (l in 1:L) {
-          covs_init[,,l] <- diag(I)
-        }
-        init_vals <- list(means = means_init, covs = covs_init, P.Z = P.Z_init)
-      } else {
-        kmeans_attempts <- 0
-        while (kmeans_attempts < 5) {
-          try_kmeans <- tryCatch({
-            kmeans(response, centers = L, nstart = 1, iter.max = 500)
-          }, error = function(e) NULL)
-          if (!is.null(try_kmeans)) break
-          kmeans_attempts <- kmeans_attempts + 1
-        }
-
-        if (is.null(try_kmeans)) {
-          cluster_assignments <- sample(1:L, N, replace = TRUE)
-          means_init <- matrix(apply(response, 2, mean), nrow = L, ncol = I, byrow = TRUE)
-          P.Z_init <- rep(1/L, L)
-        } else {
-          kmeans.obj <- try_kmeans
-          means_init <- matrix(kmeans.obj$centers, nrow = L, ncol = I)
-          P.Z_init <- pmax(kmeans.obj$size / N, 1e-12)
-          P.Z_init <- P.Z_init / sum(P.Z_init)
-          cluster_assignments <- kmeans.obj$cluster
-        }
-
-        covs_init <- array(0, dim = c(I, I, L))
-        for (l in 1:L) {
-          idx <- which(cluster_assignments == l)
-          if (length(idx) > 1) {
-            covc <- cov(response[idx,,drop=FALSE])
-            covc <- (covc + t(covc))/2
-            diag(covc) <- pmax(diag(covc), jitter)
-            covs_init[,,l] <- covc
-          } else {
-            covs_init[,,l] <- covs.global
-          }
-        }
-        init_vals <- list(means = means_init, covs = covs_init, P.Z = P.Z_init)
-      }
-
-      res <- run_em_once(init_vals, r, best_BIC, wa=FALSE)
-      results[[r]] <- res
-      Log.Lik.nrep[r] <- res$Log.Lik
-
-      best_BIC <- res$best_BIC
-    }
-
-    best_idx <- which.max(Log.Lik.nrep)
-    res <- results[[best_idx]]
-    res$Log.Lik.nrep <- Log.Lik.nrep
-
-  }else if(!is.null(results.wa$BIC) && nrep >= 1 && any(par.ini %in% c("random", "kmeans"))){
-    results <- NULL
-    Log.Lik.nrep <- numeric(nrep)
-    best_BIC <- Inf
-
-    for(r in 1:nrep){
-      res <- run_em_once(results.wa$params[[r]], r, best_BIC, wa=FALSE)
-      results[[r]] <- res
-      Log.Lik.nrep[r] <- res$Log.Lik
-
-      best_BIC <- res$best_BIC
-    }
-    best_idx <- which.max(Log.Lik.nrep)
-    res <- results[[best_idx]]
-    res$Log.Lik.nrep <- Log.Lik.nrep
-
-  } else {
-    init_vals <- list(means = par.ini$means, covs = par.ini$covs, P.Z = par.ini$P.Z)
-    res <- run_em_once(init_vals, 0, Inf, wa=FALSE)
-    res$Log.Lik.nrep <- res$Log.Lik
+  warmup.position <- order(warmup.Log.Lik, decreasing = TRUE)
+  warmup.position <- warmup.position[is.finite(warmup.Log.Lik[warmup.position])]
+  if(length(warmup.position) < nrep){
+    stop(
+      "EM warm-up produced only ", length(warmup.position),
+      " finite LPA solutions from ", starts, " starts; nrep = ", nrep, "."
+    )
   }
+  warmup.position <- warmup.position[seq_len(nrep)]
 
-  if (vis) cat("\n\n")
+  results <- vector("list", nrep)
+  Log.Lik.nrep <- rep(-Inf, nrep)
+  best.Log.Lik <- -Inf
+  replication.progress.state <- .new.progress.state()
+  for (r in seq_len(nrep)) {
+    par.ini.current <- warmup.params[[warmup.position[r]]]
+    results[[r]] <- run.EM(par.ini.current, r, best_BIC, warmup=FALSE)
+    Log.Lik.nrep[r] <- results[[r]]$Log.Lik
+    best_BIC <- results[[r]]$best_BIC
+    best.Log.Lik <- max(best.Log.Lik, Log.Lik.nrep[r])
+    if(vis){
+      .print.estimation.progress(
+        "Rep", r, nrep, Log.Lik.nrep[r], best.Log.Lik,
+        progress.state = replication.progress.state
+      )
+    }
+  }
+  if(vis) .end.estimation.progress()
+
+  if (!any(is.finite(Log.Lik.nrep))) {
+    stop("all EM refinements failed because a class became empty or a covariance matrix became singular")
+  }
+  best_idx <- which.max(Log.Lik.nrep)
+  res <- results[[best_idx]]
+  res$Log.Lik.nrep <- Log.Lik.nrep
+
+  if (vis) .print.estimation.summary("EM", res$Log.Lik, res$BIC)
   return(res)
 }

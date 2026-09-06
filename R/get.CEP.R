@@ -1,97 +1,207 @@
 #' Compute Classification Error Probability (CEP) Matrices
 #'
-#' Computes the Classification Error Probability (CEP) matrices (Liang et al., 2023) used in the bias-corrected
-#' three-step estimation of Latent Class/Profile Analysis with Covariates.
+#' Computes classification error probability (CEP) matrices for bias-corrected
+#' three-step latent class/profile and latent transition models with covariates.
 #'
-#' @param P.Z.Xns A list of length \eqn{T} (number of time points). Each element is an
-#'   \eqn{N \times L} matrix of posterior probabilities
-#'   \eqn{P(Z_{it} = l \mid X_i)} from the first-step model.
+#' The CEP matrix describes the relationship between the latent class and the
+#' modal class assignment obtained from posterior class-membership probabilities.
+#'
+#' @param P.Z.Xns A list of length \eqn{T}, where \eqn{T} is the number of time
+#'   points. Each element must be an \eqn{N \times L} matrix of posterior
+#'   class-membership probabilities
+#'   \eqn{\tau_{ntl}=P(Z_{nt}=l\mid\mathbf{X}_{nt})}, with:
 #'   \itemize{
-#'     \item Rows correspond to individuals (\eqn{i = 1, \dots, N});
-#'     \item Columns correspond to latent classes (\eqn{l = 1, \dots, L});
-#'     \item Each row must sum to 1.
+#'     \item rows corresponding to participants (\eqn{n=1,\ldots,N});
+#'     \item columns corresponding to latent classes (\eqn{l = 1, \ldots, L});
+#'     \item each row expected to sum to 1.
 #'   }
-#'   The list must be ordered chronologically (e.g., time 1 to \eqn{T}).
-#' @param time.cross Logical. If \code{TRUE} (default), returns a list where every element
-#'   is the same pooled CEP matrix (averaged across all time points). If \code{FALSE},
-#'   returns time-specific CEP matrices.
+#'   All matrices are expected to have identical dimensions and to be ordered
+#'   chronologically.
 #'
-#' @return A named list of length \eqn{T}. Each element is an \eqn{L \times L} matrix:
+#' @param CEP.time.cross Logical. If \code{FALSE}, a separate CEP matrix is estimated
+#'   for each time point. If \code{TRUE} (default), posterior-weighted
+#'   classification information is pooled across all time points to estimate a
+#'   single time-invariant CEP matrix, which is then returned for every time point.
+#'
+#' @return A named list of length \eqn{T}. Each element is an \eqn{L \times L}
+#'   CEP matrix whose:
 #'   \itemize{
-#'     \item Row \eqn{l}: true latent class;
-#'     \item Column \eqn{l'}: individuals assigned to class \eqn{l'};
-#'     \item Entry \eqn{(l, l')}: estimated
-#'           \eqn{P(\text{assigned class} = l' \mid \text{true class} = l)}.
+#'     \item rows index the latent ("true") class;
+#'     \item columns index the modal ("assigned" or "predicted") class;
+#'     \item entry \eqn{(l,k)} estimates
+#'       \eqn{P(\widehat{Z}_{nt}=k\mid Z_{nt}=l)}.
 #'   }
 #'
-#'   When \code{time.cross = TRUE}, all matrices in the list are identical.
-#'   Names are \code{"t1"}, \code{"t2"}, \dots, \code{"tT"}.
+#'   Thus, each row is a conditional probability distribution over modal
+#'   assignments given a latent class and sums to 1 up to numerical precision.
+#'   Column sums are not constrained to equal 1.
+#'
+#'   When \code{CEP.time.cross = TRUE}, all elements of the returned list contain
+#'   the same pooled CEP matrix.
+#'
+#'   List elements are named \code{"t1"}, \code{"t2"}, ..., \code{"tT"}.
 #'
 #' @details
-#' The CEP matrix at time \eqn{t} gives the probability that an individual truly belongs
-#' to latent class \eqn{l'} given that they were assigned (via modal assignment)
-#' to class \eqn{l} at time \eqn{t}.
+#' For participant \eqn{n} at time \eqn{t}, the modal class assignment is
+#' defined as
 #'
-#' Formally, for time point \eqn{t}:
 #' \deqn{
-#' \mathrm{CEP}_t(l, l') =
-#' P(Z_t = l \mid \hat{Z}_t = l')
+#' \widehat{Z}_{nt}
+#' =
+#' \arg\max_l \tau_{ntl}.
+#' }
+#'
+#' For time point \eqn{t}, the CEP matrix is estimated as
+#'
+#' \deqn{
+#' \mathrm{CEP}_t(l,k)
+#' =
+#' P(\widehat{Z}_{nt}=k\mid Z_{nt}=l)
 #' =
 #' \frac{
-#'   \sum_{i:\,\hat{z}_{it} = l'}
-#'   P(Z_{it} = l \mid X_i)
+#'   \sum_{n=1}^{N}
+#'   \mathbb{1}(\widehat{Z}_{nt}=k)
+#'   \tau_{ntl}
 #' }{
-#'   N \, \hat{\pi}_{tl}
-#' }
-#' }
-#'
-#' where:
-#' \itemize{
-#'   \item \eqn{Z_{it}} is the true latent class of individual \eqn{i} at time \eqn{t};
-#'   \item \eqn{P(Z_{it} = l \mid X_i)} is the posterior probability from the first-step model;
-#'   \item \eqn{\hat{z}_{it} = \arg\max_l P(Z_{it} = l' \mid X_i)}
-#'         is the modal (most likely) assigned class;
-#'   \item \eqn{\hat{\pi}_{tl} = \frac{1}{N} \sum_{i=1}^N I(\hat{z}_{it} = l)}
-#'         is the observed proportion assigned to class \eqn{l} at time \eqn{t};
-#'   \item \eqn{N} is the total sample size.
+#'   \sum_{n=1}^{N}\tau_{ntl}
+#' }.
 #' }
 #'
-#' If \code{time.cross = TRUE} (default), a single pooled CEP matrix is computed by
-#' aggregating counts across all time points. This assumes the classification error
-#' structure is invariant over time (i.e., measurement invariance), as in
-#' Liang et al. (2023). The same pooled matrix is then returned for every time point.
+#' Equivalently, defining the posterior-weighted class prevalence as
+#'
+#' \deqn{
+#' \hat{\pi}_{tl}
+#' =
+#' \frac{1}{N}
+#' \sum_{n=1}^{N}
+#' \tau_{ntl},
+#' }
+#'
+#' the estimator can be written as
+#'
+#' \deqn{
+#' \mathrm{CEP}_t(l,k)
+#' =
+#' \frac{
+#'   \sum_{n=1}^{N}
+#'   \mathbb{1}(\widehat{Z}_{nt}=k)
+#'   \tau_{ntl}
+#' }{
+#'   N\hat{\pi}_{tl}
+#' }.
+#' }
+#'
+#' The resulting matrix is oriented as
+#'
+#' \deqn{
+#' \mathrm{CEP}_t[\mathrm{true},\mathrm{assigned}],
+#' }
+#'
+#' so that, in the Step-3 likelihood, the probability associated with an observed
+#' modal assignment \eqn{\widehat{Z}_{nt}} under candidate latent class
+#' \eqn{l} is
+#' obtained from
+#'
+#' \deqn{
+#' \mathrm{CEP}_t(l,\widehat{Z}_{nt}).
+#' }
+#'
+#' In other words, the column corresponding to the participant's observed modal
+#' assignment is selected, and the entries across rows give the corresponding
+#' classification probabilities under the candidate latent classes.
+#'
+#' If \code{CEP.time.cross = FALSE}, the above estimator is computed separately for
+#' each time point.
+#'
+#' If \code{CEP.time.cross = TRUE}, the numerator and denominator are pooled across
+#' time points before normalization:
+#'
+#' \deqn{
+#' \mathrm{CEP}_{\mathrm{pool}}(l,k)
+#' =
+#' \frac{
+#'   \sum_{t=1}^{T}\sum_{n=1}^{N}
+#'   \mathbb{1}(\widehat{Z}_{nt}=k)
+#'   \tau_{ntl}
+#' }{
+#'   \sum_{t=1}^{T}\sum_{n=1}^{N}
+#'   \tau_{ntl}
+#' }.
+#' }
+#'
+#' Therefore, the pooled CEP is not the simple arithmetic mean of the
+#' time-specific CEP matrices. Rather, it is equivalent to a class-specific
+#' posterior-mass-weighted combination of the time-specific matrices.
+#'
+#' Using a common pooled CEP across time assumes that the classification-error
+#' mechanism
+#'
+#' \deqn{
+#' P(\widehat{Z}_{nt}=k\mid Z_{nt}=l)
+#' }
+#'
+#' is sufficiently stable across time for a common CEP matrix to be appropriate.
+#' This classification-error invariance assumption is conceptually related to,
+#' but is not equivalent to, longitudinal measurement invariance.
 #'
 #' @note
 #' \itemize{
-#'   \item Assumes complete data (no missing values in posterior matrices).
-#'   \item All matrices in \code{P.Z.Xns} must have identical dimensions
-#'         (same \eqn{N} and \eqn{L}).
-#'   \item Assignment is based on modal class (\code{which.max}).
-#'   \item If no individual is assigned to a class at a time point,
-#'         division by zero may occur.
+#'   \item The function assumes complete posterior-probability matrices; missing
+#'     values are not explicitly handled.
+#'   \item All elements of \code{P.Z.Xns} are expected to have the same numbers
+#'     of individuals and latent classes.
+#'   \item Posterior-probability rows are expected to sum to 1; this condition is
+#'     not explicitly checked by the function.
+#'   \item Modal assignment is obtained using \code{which.max()}. If two or more
+#'     classes have exactly equal maximum posterior probabilities,
+#'     \code{which.max()} selects the first maximum.
+#'   \item If a latent class has zero posterior-weighted prevalence, the CEP for
+#'     that class is undefined and division by zero may occur.
 #' }
-
 #'
 #' @references
-#' Liang, Q., la Torre, J. d., & Law, N. (2023). Latent Transition Cognitive Diagnosis Model With Covariates: A Three-Step Approach. Journal of Educational and Behavioral Statistics, 48(6), 690-718. https://doi.org/10.3102/10769986231163320
+#' Liang, Q., de la Torre, J., & Law, N. (2023). Latent transition cognitive
+#' diagnosis model with covariates: A three-step approach. *Journal of
+#' Educational and Behavioral Statistics, 48*(6), 690--718.
+#' \doi{10.3102/10769986231163320}
 #'
 #' @examples
-#' # Simulate posterior probabilities for 2 time points, 3 classes, 100 individuals
+#' # Simulate posterior probabilities for two time points,
+#' # three latent classes, and 100 individuals
 #' set.seed(123)
-#' N <- 100; L <- 3; times <- 2
-#' P.Z.Xns <- replicate(times,
-#'   t(apply(matrix(runif(N * L), N, L), 1, function(x) x / sum(x))),
-#'   simplify = FALSE)
+#' N <- 100
+#' L <- 3
+#' times <- 2
 #'
-#' # Compute time-specific CEP matrices
-#' cep_time_specific <- get.CEP(P.Z.Xns, time.cross = FALSE)
+#' P.Z.Xns <- replicate(
+#'   times,
+#'   t(apply(
+#'     matrix(runif(N * L), N, L),
+#'     1,
+#'     function(x) x / sum(x)
+#'   )),
+#'   simplify = FALSE
+#' )
 #'
-#' # Compute time-invariant (pooled) CEP matrix
-#' cep_pooled <- get.CEP(P.Z.Xns, time.cross = TRUE)
+#' # Time-specific CEP matrices
+#' cep_time_specific <- get.CEP(
+#'   P.Z.Xns,
+#'   CEP.time.cross = FALSE
+#' )
+#'
+#' # Pooled CEP matrix used at all time points
+#' cep_pooled <- get.CEP(
+#'   P.Z.Xns,
+#'   CEP.time.cross = TRUE
+#' )
+#'
+#' # Under the [true class, assigned class] orientation,
+#' # rows should sum to one
+#' rowSums(cep_time_specific[[1]])
 #'
 #' @export
-#'
-get.CEP <- function(P.Z.Xns, time.cross=TRUE){
+
+get.CEP <- function(P.Z.Xns, CEP.time.cross=TRUE){
 
   if(inherits(P.Z.Xns, "list")){
     times <- length(P.Z.Xns)
@@ -99,32 +209,30 @@ get.CEP <- function(P.Z.Xns, time.cross=TRUE){
     stop("P.Z.Xns must be a list of length 'times', each element being an N (number of observations) by L (number of latent classes) matrix!")
   }
 
-  N <- nrow(P.Z.Xns[[1]])
+  if(any(!vapply(P.Z.Xns, is.matrix, logical(1)))){
+    stop("Every element of P.Z.Xns must be a matrix")
+  }
   L <- ncol(P.Z.Xns[[1]])
-
-  Zs <- P.Zs <- list()
-  for(t in 1:times){
-    Zs[[t]] <- apply(P.Z.Xns[[t]], 1, which.max)
-    P.Zs[[t]] <- colSums(P.Z.Xns[[t]]) / N
+  if(L < 1L || any(vapply(P.Z.Xns, ncol, integer(1)) != L) ||
+     any(vapply(P.Z.Xns, function(x) any(!is.finite(x)), logical(1)))){
+    stop("Every element of P.Z.Xns must be a finite matrix with the same number of classes")
   }
 
-  CEP <- list()
+  CEP <- vector("list", times)
   CEP.sum <- matrix(0, L, L)
-  P.Zs.sum <- rep(0, L)
+  class.mass.sum <- numeric(L)
   for(t in 1:times){
-    CEP.cur <- matrix(0, L, L)
-    for(l in 1:L){
-      for(ll in 1:L){
-        CEP.cur[l, ll] <- sum(P.Z.Xns[[t]][Zs[[t]] == l, ll])
-      }
+    counts <- classification_error_counts_cpp(P.Z.Xns[[t]])
+    if(any(counts$class.mass <= 0)){
+      stop("CEP is undefined for a class with zero posterior mass")
     }
-    CEP[[t]] <- CEP.cur / (N * matrix(P.Zs[[t]], L, L, byrow = FALSE))
-    CEP.sum <- CEP.sum + CEP.cur
-    P.Zs.sum <- P.Zs.sum + P.Zs[[t]]
+    CEP[[t]] <- sweep(counts$count, 1L, counts$class.mass, "/")
+    CEP.sum <- CEP.sum + counts$count
+    class.mass.sum <- class.mass.sum + counts$class.mass
   }
 
-  if(time.cross){
-    CEP.ave <- CEP.sum / (N*P.Zs.sum)
+  if(CEP.time.cross){
+    CEP.ave <- sweep(CEP.sum, 1L, class.mass.sum, "/")
     for(t in 1:times){
       CEP[[t]] <- CEP.ave
     }

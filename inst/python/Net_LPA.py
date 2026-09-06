@@ -15,8 +15,15 @@ import warnings
 import copy
 from torch.distributions import Dirichlet
 import random
-import os
 import sys
+import importlib.util
+
+def _print_progress(output, previous_width):
+    print(
+        f"\r{output}{' ' * max(0, previous_width - len(output))}",
+        end="", flush=True
+    )
+    return len(output)
 
 class LPAnet(nn.Module):
     def __init__(self, response, L=5, par_ini=None, constraint="VV",
@@ -35,6 +42,16 @@ class LPAnet(nn.Module):
         self.eps = max(eps, 1e-6)
         self.use_attention = use_attention
         self.shared_mask = None
+
+        tril_idx = torch.tril_indices(self.I, self.I, offset=0, device=self.device)
+        self.register_buffer('_tril_idx', tril_idx, persistent=False)
+        self.register_buffer('_tril_diag_mask', tril_idx[0] == tril_idx[1], persistent=False)
+        self.register_buffer('_diag_indices', torch.arange(self.I, device=self.device), persistent=False)
+        self.register_buffer(
+            '_eye',
+            torch.eye(self.I, device=self.device, dtype=self.response.dtype),
+            persistent=False
+        )
         
         self._init_shared_mask()
         
@@ -70,7 +87,10 @@ class LPAnet(nn.Module):
             self.P_Z_init = torch.from_numpy(np.asarray(par_ini["P.Z"], dtype=np.float32)).float().to(self.device).squeeze()
 
         elif par_ini == "kmeans":
-            _, covs_np, means_np, P_Z_np = self.kmeans_classify(self.response, self.response, self.L, constraint=self.constraint)
+            _, covs_np, means_np, P_Z_np = self.kmeans_classify(
+                self.response, self.response, self.L, starts=1,
+                constraint=self.constraint
+            )
 
             means_raw = torch.from_numpy(means_np).float().to(self.device)
             means_raw = torch.atanh(torch.clamp(means_raw, min=-1.99, max=1.99)/2.0)
@@ -238,18 +258,17 @@ class LPAnet(nn.Module):
         device = raw_covs.device
         dtype = raw_covs.dtype
 
-        tril_idx = torch.tril_indices(I, I, offset=0, device=device)
-        diag_mask = (tril_idx[0] == tril_idx[1])
+        tril_idx = self._tril_idx
+        diag_mask = self._tril_diag_mask
         off_diag_mask = ~diag_mask
 
         tril_vals = raw_covs[tril_idx[0], tril_idx[1]].T.clone()
         
-        if diag_mask.any():
-            diag_vals = tril_vals[:, diag_mask]
-            diag_pos = torch.clamp(F.softplus(diag_vals), min=0.01, max=3.99)
-            tril_vals[:, diag_mask] = diag_pos
+        diag_vals = tril_vals[:, diag_mask]
+        diag_pos = torch.clamp(F.softplus(diag_vals), min=0.01, max=3.99)
+        tril_vals[:, diag_mask] = diag_pos
         
-        if off_diag_mask.any():
+        if I > 1:
             off_diag_vals = tril_vals[:, off_diag_mask]
             off_diag_transformed = torch.tanh(off_diag_vals) * 4.0
             tril_vals[:, off_diag_mask] = off_diag_transformed
@@ -267,8 +286,8 @@ class LPAnet(nn.Module):
         device = target_covs.device
         dtype = target_covs.dtype
     
-        tril_idx = torch.tril_indices(I, I, offset=0, device=device)
-        diag_mask = (tril_idx[0] == tril_idx[1])
+        tril_idx = self._tril_idx
+        diag_mask = self._tril_diag_mask
         off_diag_mask = ~diag_mask
     
         covs_Lfirst = target_covs.permute(2, 0, 1)
@@ -303,7 +322,7 @@ class LPAnet(nn.Module):
         return raw_covs
 
     @staticmethod
-    def kmeans_classify(features, Y, L, max_attempts=5, nstart=1, eps=1e-4, random_state=None, constraint="VV"):
+    def kmeans_classify(features, Y, L, maxattempts=5, starts=1, eps=1e-4, random_state=None, constraint="VV"):
         features_np = features.detach().cpu().numpy()
         Y_np = Y.detach().cpu().numpy()
         mean = np.mean(Y_np, axis=0)
@@ -315,11 +334,11 @@ class LPAnet(nn.Module):
         kmeans_attempts = 0
         kmeans_result = None
         cluster_assignments = None
-        while kmeans_attempts < max_attempts:
+        while kmeans_attempts < maxattempts:
             try:
                 kmeans = KMeans(
                     n_clusters=L, 
-                    n_init=nstart, 
+                    n_init=starts,
                     max_iter=500, 
                     algorithm='lloyd'
                 )
@@ -329,8 +348,8 @@ class LPAnet(nn.Module):
                 break
             except Exception as e:
                 kmeans_attempts += 1
-                if kmeans_attempts == max_attempts:
-                    warnings.warn(f"KMeans failed after {max_attempts} attempts: {str(e)}")
+                if kmeans_attempts == maxattempts:
+                    warnings.warn(f"KMeans failed after {maxattempts} attempts: {str(e)}")
         
         if kmeans_result is None:
             rng = np.random.default_rng(random_state)
@@ -430,16 +449,25 @@ class LPAnet(nn.Module):
             covs_constrained = diag_vals.view(1, 1, L)
             return covs_constrained
         
-        covs_constrained = covs.clone()
-        pooled_cov = covs.mean(dim=2)
-        pooled_cov = (pooled_cov + pooled_cov.T) * 0.5
-        
         if constraint == "E": 
             constraint = "EE"
         elif constraint == "V":
             constraint = "VV"
         
-        diag_indices = torch.arange(I, device=device)
+        if constraint == "VV":
+            return covs
+        
+        diag_indices = self._diag_indices
+        if constraint == "V0":
+            class_diags = torch.diagonal(covs, dim1=0, dim2=1)
+            class_diags = torch.clamp(class_diags, min=eps)
+            covs_constrained = torch.zeros_like(covs)
+            covs_constrained[diag_indices, diag_indices, :] = class_diags.T
+            return covs_constrained
+
+        pooled_cov = covs.mean(dim=2)
+        pooled_cov = (pooled_cov + pooled_cov.T) * 0.5
+
         if constraint == "E0":
             diag_vals = torch.diagonal(pooled_cov)
             diag_vals = torch.clamp(diag_vals, min=eps)
@@ -447,20 +475,8 @@ class LPAnet(nn.Module):
             covs_constrained = D.unsqueeze(-1).expand(I, I, L).clone()
             return covs_constrained
         
-        if constraint == "V0":
-            class_diags = torch.diagonal(covs, dim1=0, dim2=1)
-            class_diags = torch.clamp(class_diags, min=eps)
-            covs_constrained = torch.zeros_like(covs)
-            covs_constrained[diag_indices, diag_indices, :] = class_diags.T
-            return covs_constrained
-        
-        off_diag_mask = ~torch.eye(I, dtype=torch.bool, device=device)
-        
         if constraint == "EE":
             covs_constrained = pooled_cov.unsqueeze(-1).expand(I, I, L).clone()
-            return covs_constrained
-        
-        if constraint == "VV":
             return covs_constrained
         
         if constraint == "VE":
@@ -486,8 +502,9 @@ class LPAnet(nn.Module):
                     if i < I and j < I:
                         covs_constrained[i, j, :] = pooled_cov[i, j]
                         covs_constrained[j, i, :] = pooled_cov[i, j]
+            return covs_constrained
 
-        return covs_constrained
+        return covs.clone()
     
     def _ensure_positive_definite(self, covs):
         I, I2, L = covs.shape
@@ -506,7 +523,8 @@ class LPAnet(nn.Module):
             return torch.diag(safe_diag)
         
         has_non_shared = torch.any(non_shared_mask)
-        identity = torch.eye(I, device=device, dtype=dtype).unsqueeze(-1) * (eps * 100)
+        eye = self._eye
+        identity = eye.unsqueeze(-1) * (eps * 100)
         covs_pd = torch.where(has_non_shared, covs_pd, covs + identity)
         
         if not has_non_shared.item():
@@ -517,15 +535,13 @@ class LPAnet(nn.Module):
             Sigma = 0.5 * (Sigma + Sigma.T)
             
             jitter = eps * 10
-            Sigma_jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
+            Sigma_jittered = Sigma + eye * jitter
             
             try:
-                lmat, applied_jitter = self.optimized_cholesky_constrained(Sigma_jittered.clone(), non_shared_mask)
+                lmat, applied_jitter = self.optimized_cholesky_constrained(Sigma_jittered, non_shared_mask)
                 candidate = lmat @ lmat.T
-                is_pd = self._is_positive_definite(candidate, eps * 0.1)
-                if is_pd:
-                    covs_pd[:, :, l] = candidate
-                    continue
+                covs_pd[:, :, l] = candidate
+                continue
             except Exception:
                 pass 
             
@@ -578,7 +594,7 @@ class LPAnet(nn.Module):
         if not has_non_shared.item():
             for jitter_scale in [1.0, 10.0, 100.0]:
                 jitter = eps * jitter_scale
-                jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
+                jittered = Sigma + self._eye * jitter
                 try:
                     L = torch.linalg.cholesky(jittered)
                     return L, jitter
@@ -591,7 +607,7 @@ class LPAnet(nn.Module):
         
         for jitter_scale in [1.0, 10.0, 100.0]:
             jitter = eps * jitter_scale
-            jittered = Sigma + torch.eye(I, device=device, dtype=dtype) * jitter
+            jittered = Sigma + self._eye * jitter
             try:
                 L = torch.linalg.cholesky(jittered)
                 return L, jitter
@@ -646,16 +662,21 @@ class LPAnet(nn.Module):
         eps = max(getattr(self, 'eps', 1e-6), 1e-5)
         covs_batch = covs_constrained.permute(2, 0, 1)  
         dev_batch_T = dev.permute(1, 2, 0)
-        eye = torch.eye(I, device=device).expand(L_dev, I, I)
-        covs_batch = covs_batch + eps * 10 * eye
-        try:
-            chol_batch = torch.linalg.cholesky(covs_batch)
-        except RuntimeError:
-            covs_batch = covs_batch + (eps * 100) * eye
-            chol_batch = torch.linalg.cholesky(covs_batch)
-        diag_chol = torch.diagonal(chol_batch, dim1=1, dim2=2)
+        if I == 1 or self.constraint in ["E0", "V0"]:
+            variances = torch.diagonal(covs_batch, dim1=1, dim2=2) + eps * 10
+            diag_chol = torch.sqrt(variances)
+            y = dev_batch_T / diag_chol.unsqueeze(2)
+        else:
+            eye = self._eye.expand(L_dev, I, I)
+            covs_batch = covs_batch + eps * 10 * eye
+            try:
+                chol_batch = torch.linalg.cholesky(covs_batch)
+            except RuntimeError:
+                covs_batch = covs_batch + (eps * 100) * eye
+                chol_batch = torch.linalg.cholesky(covs_batch)
+            diag_chol = torch.diagonal(chol_batch, dim1=1, dim2=2)
+            y = torch.linalg.solve_triangular(chol_batch, dev_batch_T, upper=False)
         logdet = 2.0 * torch.sum(torch.log(diag_chol), dim=1)
-        y = torch.linalg.solve_triangular(chol_batch, dev_batch_T, upper=False)
         quad = torch.sum(y**2, dim=1)
         const_term = -0.5 * I * math.log(2 * math.pi)
         log_pdfs = const_term - 0.5 * (logdet.unsqueeze(1) + quad)
@@ -669,7 +690,7 @@ class LPAnet(nn.Module):
         
         dev = self.response.unsqueeze(1) - means.unsqueeze(0)
         log_pdfs = self.compute_log_pdf(dev, covs_constrained)
-        log_pz = torch.log(P_Z.repeat(self.N, 1) + eps)
+        log_pz = torch.log(P_Z + eps)
         log_joint = log_pdfs + log_pz
 
         row_max = torch.max(log_joint, dim=1, keepdim=True).values
@@ -698,7 +719,7 @@ class LPAnet(nn.Module):
 
         dev = self.response.unsqueeze(1) - means.unsqueeze(0)
         log_pdfs = self.compute_log_pdf(dev, covs)
-        log_pz = torch.log(P_Z.unsqueeze(0).repeat(self.N, 1) + self.eps)
+        log_pz = torch.log(P_Z.unsqueeze(0) + self.eps)
 
         log_joint = log_pdfs + log_pz
         log_norm = torch.logsumexp(log_joint, dim=1, keepdim=True)
@@ -730,11 +751,12 @@ class LPAnet(nn.Module):
         logits = self.network(x_feat)
         
         if self.use_attention:
-            logits_embed = self.embed_proj(logits)
-            logits_embed = logits_embed.unsqueeze(1)
-            logits_attn = self.attn_layer(logits_embed)
-            logits_attn = logits_attn.squeeze(1)
+            logits_embed = self.embed_proj(logits).unsqueeze(1)
+            logits_attn = self.attn_layer(logits_embed).squeeze(1)
             logits_mapped = self.output_proj(logits_attn)
+            # logits_embed = self.embed_proj(logits).unsqueeze(0)
+            # logits_attn = self.attn_layer(logits_embed).squeeze(0)
+            # logits_mapped = self.output_proj(logits_attn)
         else:
             logits_mapped = logits
 
@@ -773,6 +795,7 @@ def simulated_annealing_optimization_LPA(LPAnet_model, response, par_ini=None, c
         best_covs = covs.clone()
     
         temperature = initial_temperature
+        progress_width = 0
     
         P_Z, means, covs = LPAnet_model()
         best_loss, best_ll = LPAnet_model.loss(P_Z, means, covs )
@@ -813,14 +836,12 @@ def simulated_annealing_optimization_LPA(LPAnet_model, response, par_ini=None, c
             temperature *= cooling_rate
     
             if vis:
-                print(
-                        f"Iter = {iteration:{int(math.log10(abs(maxiter))) + 1}}, ", 
-                        f"Loss: {-loss_value:{int(math.log10(abs(N*I))) + 3}.2f}, ", 
-                        f"BIC:  {2*loss_value+np.log(N)*LPAnet_model.npar:{int(math.log10(abs(N*I))) + 3}.5f}, ", 
-                        f"bets BIC: {2*best_ll+np.log(N)*LPAnet_model.npar:{int(math.log10(abs(N*I))) + 3}.5f}, ", 
-                        f"Temperature: {temperature:{int(math.log10(abs(temperature))) + 1}.5f}", 
-                        end='\r'
-                    )
+                progress_width = _print_progress(
+                    f"Iter = {iteration} | Loss = {-loss_value:.5f} | "
+                    f"BIC = {2*loss_value+np.log(N)*LPAnet_model.npar:.2f} | "
+                    f"Best BIC = {2*best_ll+np.log(N)*LPAnet_model.npar:.2f} | "
+                    f"Temperature = {temperature:.5f}", progress_width
+                )
                     
             if temperature < threshold_sa:
                 break
@@ -831,42 +852,36 @@ def simulated_annealing_optimization_LPA(LPAnet_model, response, par_ini=None, c
         covs.data.copy_(best_covs)
     
         if vis:
-            print("\n")
+            print()
         return LPAnet_model, best_network_params, best_means, best_covs
 
 def NN_LPA(response,
            L=5,
-           par_ini=None,
+           par_ini="random",
            constraint="VV", 
-           nrep=2, 
-           starts=50, 
-           maxiter_wa=20, 
+           nrep=20, 
+           starts=100, 
+           maxiter_warmup=20,
            vis=True,
            hidden_layers=[32],
            activation_function='tanh', use_attention=True, 
-           d_model=None, nhead=None, dim_feedforward=None, eps=1e-6, Lambda=1e-5, 
-           initial_temperature=2000,
-           cooling_rate=0.95,
-           maxiter_sa=2000,
-           threshold_sa=1e-5,
-           maxiter=2000,
-           maxiter_early=10,
-           maxcycle=10, 
+           d_model=None, nhead=None, dim_feedforward=None, eps=1e-6, lambda_=1e-5,
+           initial_temperature=1000,
+           cooling_rate=0.5,
+           maxiter_sa=1000,
+           threshold_sa=1e-10,
+           maxiter=1000,
+           patience_early=100,
+           maxcycle=20, 
            lr = 0.025, 
            scheduler_patience = 10, 
-           scheduler_factor = 0.70, 
-           plot_interval=10, 
-           device="CPU"):
-    
-    os.environ["TORCH_COMPILE_DISABLE"] = "1"
-    os.environ["TORCHDYNAMO_DISABLE"] = "1"
-    os.environ["TORCHINDUCTOR_DISABLE_REPRODUCIBILITY"] = "1"
-    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE"] = "1"
-    os.environ["TORCHINDUCTOR_MAX_AUTOTUNE_GEMM"] = "1"
-    os.environ["TORCH_COMPILE_DEBUG"] = "0"
+           scheduler_factor = 0.80, 
+           plot_interval=200,
+           device="CPU",
+           output_prefix=""):
     
     is_windows = sys.platform.startswith('win')
-    use_compile = not is_windows
+    use_compile = not is_windows and importlib.util.find_spec('triton') is not None
     
     seed = 56756765
     torch.manual_seed(seed)
@@ -904,11 +919,13 @@ def NN_LPA(response,
     L = int(L)
     maxiter_sa = int(maxiter_sa)
     maxiter = int(maxiter)
-    maxiter_early = int(maxiter_early)
+    patience_early = int(patience_early)
     scheduler_patience = int(scheduler_patience)
     maxcycle = int(maxcycle)
     starts = int(starts)
-    maxiter_wa = int(maxiter_wa)
+    maxiter_warmup = int(maxiter_warmup)
+    if starts < nrep or nrep < 1 or maxiter_warmup < 1:
+        raise ValueError("starts must be >= nrep >= 1 and maxiter_warmup must be >= 1")
     if device == "GPU":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -920,6 +937,7 @@ def NN_LPA(response,
         response_tensor = torch.tensor(response, dtype=torch.float32).to(device)
     
     best_models = []
+    warm_progress_width = 0
     
     if starts > 0:
         for s in range(starts):
@@ -956,21 +974,18 @@ def NN_LPA(response,
                     {'params': LPAnet_warmup.means, 'lr': lr},
                     {'params': LPAnet_warmup.covs, 'lr': lr}
                 ],
-                weight_decay=Lambda
+                weight_decay=lambda_
             )
             
-            scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
-            
             best_ll = -float('inf')
-            for epoch in range(maxiter_wa):
-                optimizer.zero_grad()
+            for epoch in range(maxiter_warmup):
+                optimizer.zero_grad(set_to_none=True)
                 if device.type == 'cuda':
                     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=True):
                         P_Z, means, covs = LPAnet_warmup()
                         loss, loss_ll = LPAnet_warmup.loss(P_Z, means, covs)
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    loss.backward()
+                    optimizer.step()
                 else:
                     P_Z, means, covs = LPAnet_warmup()
                     loss, loss_ll = LPAnet_warmup.loss(P_Z, means, covs)
@@ -980,7 +995,13 @@ def NN_LPA(response,
                 current_ll = -loss.item() 
                 if current_ll > best_ll:
                     best_ll = current_ll
-                    best_state = {k: v.cpu() for k, v in LPAnet_warmup.state_dict().items()}
+                    if device.type == 'cuda':
+                        best_state = {
+                            k: v.detach().clone()
+                            for k, v in LPAnet_warmup.state_dict().items()
+                        }
+                    else:
+                        best_state = {k: v.cpu() for k, v in LPAnet_warmup.state_dict().items()}
             
             if len(best_models) < nrep:
                 best_models.append((best_ll, best_state))
@@ -990,23 +1011,20 @@ def NN_LPA(response,
                     best_models[min_idx] = (best_ll, best_state)
             
             if vis:
-                current_min_ll = min(model[0] for model in best_models)
-                print(f"Warm {s+1}/{starts} | Best log-likelihood: {best_ll:.4f} | "
-                      f"Min in top {nrep}: {current_min_ll:.4f}", end='\r')
+                warm_progress_width = _print_progress(
+                    f"{output_prefix}Warm {s+1}/{starts} | NNE iterations = {maxiter_warmup} | "
+                    f"Log-likelihood = {best_ll:.5f}", warm_progress_width
+                )
             
             del LPAnet_warmup, optimizer
-            if device.type == 'cuda':
-                torch.cuda.empty_cache()
         
         best_models.sort(key=lambda x: x[0], reverse=True)
         
-        if device.type == 'cuda':
-            torch.cuda.empty_cache()
     else:
         best_models = []
     
-    if vis & starts > 0:
-       print("\n\n")
+    if vis and starts > 0:
+        print()
     
     if nrep <= 5:
         colors = plt.cm.tab10(np.linspace(0, 1, nrep))
@@ -1050,6 +1068,7 @@ def NN_LPA(response,
         fig.canvas.draw()
         plt.pause(0.001)
 
+    replication_progress_width = 0
     for rep in range(nrep):
         current_seed = seed + starts + rep
         torch.manual_seed(current_seed)
@@ -1060,7 +1079,7 @@ def NN_LPA(response,
         
         LPAnet_model = LPAnet(response=response_tensor,
                              L=L,
-                             par_ini=par_ini,
+                             par_ini=None,
                              constraint=constraint,
                              hidden_layers=hidden_layers,
                              activation_function=activation_function, 
@@ -1076,8 +1095,7 @@ def NN_LPA(response,
                 dynamic=True
             )
         
-        if starts > 0 and rep < len(best_models):
-            LPAnet_model.load_state_dict(best_models[rep][1])
+        LPAnet_model.load_state_dict(best_models[rep][1])
         
         log_records = []
         local_step = 0
@@ -1116,33 +1134,29 @@ def NN_LPA(response,
                 {'params': means, 'lr': lr},
                 {'params': covs, 'lr': lr}
             ],
-            weight_decay=Lambda
+            weight_decay=lambda_
         )
         scheduler = ReduceLROnPlateau(optimizer, 'min', patience=scheduler_patience, factor=scheduler_factor)
-        
-        scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
         
         while improved and cycle < maxcycle:
             cycle += 1
 
             patience = 0
             for epoch in range(maxiter):
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 if device.type == 'cuda':
                     with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=True):
                         P_Z, means, covs = LPAnet_model()
                         loss, loss_ll = LPAnet_model.loss(P_Z, means, covs)
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    loss.backward()
+                    optimizer.step()
                 else:
                     P_Z, means, covs = LPAnet_model()
                     loss, loss_ll = LPAnet_model.loss(P_Z, means, covs)
                     loss.backward()
                     optimizer.step()
-                scheduler.step(loss.item())
-
                 cur_loss = loss.item()
+                scheduler.step(cur_loss)
                 cur_ll = -cur_loss
                 local_step += 1
                 log_records.append((local_step, cur_loss))
@@ -1180,16 +1194,13 @@ def NN_LPA(response,
                         LPAnet_model.load_state_dict(best_model_state)
 
                 if vis and local_step % 50 == 0:
-                    print(
-                        f"Rep  {rep+1}/{nrep} | Iter = {local_step:{int(math.log10(abs(maxcycle*maxiter))) + 1}}, ", 
-                        f"Loss: {cur_loss:{int(math.log10(abs(N*I))) + 3}.2f}, ", 
-                        f"BIC: {-2*cur_ll+np.log(N)*LPAnet_model.npar:{int(math.log10(abs(N*I))) + 3}.5f}, ", 
-                        f"Best BIC: {-2*global_best_ll+np.log(N)*LPAnet_model.npar:{int(math.log10(abs(N*I))) + 3}.5f}, ", 
-                        f"Patience: {patience:3d}, Cycle: {cycle:{int(math.log10(abs(maxcycle))) + 1}}", 
-                        end='\r'
+                    best_log_lik = max(Log_Lik_nrep + [best_ll])
+                    replication_progress_width = _print_progress(
+                        f"{output_prefix}Rep {rep+1}/{nrep} | Log-likelihood = {cur_ll:.5f} | "
+                        f"Best = {best_log_lik:.5f}", replication_progress_width
                     )
 
-                if patience >= maxiter_early:
+                if patience >= patience_early:
                     break
 
             if best_model_state is not None:
@@ -1270,7 +1281,15 @@ def NN_LPA(response,
             best_overall_loss = best_loss
             best_rep_index = rep
         
-        Log_Lik_nrep.append(-2*ll + np.log(N)*LPAnet_model.npar)
+        Log_Lik_nrep.append(ll)
+        if vis:
+            replication_progress_width = _print_progress(
+                f"{output_prefix}Rep {rep+1}/{nrep} | Log-likelihood = {ll:.5f} | "
+                f"Best = {max(Log_Lik_nrep):.5f}", replication_progress_width
+            )
+
+    if vis:
+        print()
         
     final_result = all_results[best_rep_index]
     final_result['Log.Lik.nrep'] = Log_Lik_nrep
@@ -1304,6 +1323,9 @@ def NN_LPA(response,
         plt.ioff()
         plt.show()
         
-        print("\n")
+        print(
+            f"{output_prefix}NNE: Log-likelihood = {final_result['Log.Lik']:.5f} | "
+            f"BIC = {final_result['BIC']:.2f}"
+        )
 
     return final_result
